@@ -1,0 +1,37 @@
+{% extends "admin/base_site.html" %}
+{% block content %}
+<h1>{{ title }}</h1>
+<p>규격: {{ char.lsl|default:"-" }} ~ {{ char.usl|default:"-" }} {{ char.unit }}</p>
+{% if error %}
+  <p class="errornote">{{ error }}</p>
+{% else %}
+<p>부분군 크기 n={{ res.n }} · 부분군 {{ res.points|length }}개 ·
+   X̄̄={{ res.limits.cl|floatformat:4 }} · R̄={{ res.limits.r_cl|floatformat:4 }} ·
+   σ(R̄/d2)={{ res.sigma|floatformat:4 }} ·
+   <strong>Cpk={% if res.cpk is None %}-{% else %}{{ res.cpk|floatformat:2 }}{% endif %}</strong></p>
+
+<svg viewBox="0 0 {{ W }} {{ H }}" width="100%" style="max-width:{{ W }}px" role="img" aria-label="X-bar 관리도">
+  {% for name, ly in lines %}
+    <line x1="30" x2="{{ W|add:'-30' }}" y1="{{ ly }}" y2="{{ ly }}" stroke="{% if name == 'CL' %}#417690{% else %}#ba2121{% endif %}" stroke-dasharray="{% if name == 'CL' %}0{% else %}4 4{% endif %}"/>
+    <text x="{{ W|add:'-28' }}" y="{{ ly }}" font-size="11" fill="currentColor">{{ name }}</text>
+  {% endfor %}
+  <polyline points="{{ polyline }}" fill="none" stroke="currentColor"/>
+  {% for p in res.points %}<circle cx="{{ p.x }}" cy="{{ p.y }}" r="{% if p.alarms %}5{% else %}3{% endif %}" fill="{% if p.alarms %}#ba2121{% else %}currentColor{% endif %}"/>{% endfor %}
+</svg>
+
+<table>
+  <thead><tr><th>#</th><th>검사(LOT)</th><th>X̄</th><th>R</th><th>경보</th></tr></thead>
+  <tbody>
+  {% for p in res.points %}
+    <tr>
+      <td>{{ forloop.counter }}</td>
+      <td>{{ p.label.lot }} · {{ p.label.inspected_at|date:"Y-m-d H:i" }}</td>
+      <td>{{ p.xbar|floatformat:4 }}</td>
+      <td>{{ p.r|floatformat:4 }}</td>
+      <td>{% if p.alarms %}<strong style="color:#ba2121">{{ p.alarms|join:", " }}</strong> · <a href="{{ p.nc_url }}">부적합 등록</a>{% endif %}</td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,53 @@
+{% extends "admin/base_site.html" %}
+{% block content %}
+<h1>내 할 일</h1>
+<p>
+  <a href="{% url 'admin:index' %}">전체 메뉴</a> ·
+  <a href="{% url 'trace' %}">LOT 추적</a> ·
+  <a href="{% url 'import' %}">엑셀 일괄 등록</a> ·
+  보류 중인 LOT <strong>{{ held_lots }}</strong>개
+</p>
+
+<h2>8D 기한 임박·초과 (2일 이내)</h2>
+<table>
+  <thead><tr><th>클레임</th><th>LOT</th><th>현재 단계</th><th>기한</th></tr></thead>
+  <tbody>
+  {% for c in claims %}
+    <tr>
+      <td><a href="{% url 'admin:qms_customerclaim_change' c.pk %}">{{ c }}</a></td>
+      <td>{{ c.lot }}</td>
+      <td>{{ c.current_step }}</td>
+      <td>{{ c.due_label }} {{ c.due|date:"Y-m-d H:i" }}{% if c.overdue %} <strong style="color:#ba2121">초과</strong>{% endif %}</td>
+    </tr>
+  {% empty %}<tr><td colspan="4">없음</td></tr>{% endfor %}
+  </tbody>
+</table>
+
+<h2>SCAR 회신 기한 임박·초과</h2>
+<table>
+  <thead><tr><th>SCAR</th><th>협력사</th><th>회신 기한</th></tr></thead>
+  <tbody>
+  {% for s in scars %}
+    <tr><td><a href="{% url 'admin:qms_scar_change' s.pk %}">{{ s.number }}</a></td><td>{{ s.supplier }}</td><td>{{ s.response_due|date:"Y-m-d" }}</td></tr>
+  {% empty %}<tr><td colspan="3">없음</td></tr>{% endfor %}
+  </tbody>
+</table>
+
+<h2>열린 부적합 (MRB 처분 대기)</h2>
+<table>
+  <thead><tr><th>부적합</th><th>내용</th><th>발견</th></tr></thead>
+  <tbody>
+  {% for nc in open_ncs %}
+    <tr><td><a href="{% url 'admin:core_nonconformance_change' nc.pk %}">{{ nc }}</a></td><td>{{ nc.description|truncatechars:60 }}</td><td>{{ nc.detected_at|date:"Y-m-d" }}</td></tr>
+  {% empty %}<tr><td colspan="3">없음</td></tr>{% endfor %}
+  </tbody>
+</table>
+
+{% if pending_specs or pending_docs %}
+<h2>승인 대기</h2>
+<ul>
+  {% for s in pending_specs %}<li><a href="{% url 'approve' 'qms' 'inspectionspec' s.pk %}">검사기준 {{ s }}</a></li>{% endfor %}
+  {% for d in pending_docs %}<li><a href="{% url 'approve' 'qms' 'documentrevision' d.pk %}">문서 {{ d }}</a></li>{% endfor %}
+</ul>
+{% endif %}
+{% endblock %}

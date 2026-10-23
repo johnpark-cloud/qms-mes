@@ -1,0 +1,16 @@
+<table>
+  <thead><tr><th>LOT</th><th>품번</th><th>보류</th><th>계보 미등록</th><th>출하</th></tr></thead>
+  <tbody>
+  {% for l in lots %}
+    <tr>
+      <td><a href="?lot={{ l.number|urlencode }}">{{ l.number }}</a></td>
+      <td>{{ l.item }}</td>
+      <td>{% if l.on_hold %}보류{% endif %}</td>
+      <td>{% if l.lineage_gap %}계보 미등록 — 추가 확인 필요{% endif %}</td>
+      <td>{% for s in l.shipments.all %}{{ s.customer }} {{ s.shipped_at|date:"Y-m-d" }}{% if not forloop.last %}, {% endif %}{% endfor %}</td>
+    </tr>
+  {% empty %}
+    <tr><td colspan="5">없음</td></tr>
+  {% endfor %}
+  </tbody>
+</table>

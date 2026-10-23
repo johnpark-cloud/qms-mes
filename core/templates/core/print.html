@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<title>{{ title }} {{ obj }}</title>
+<style>
+  body { font-family: "Malgun Gothic", sans-serif; margin: 24px; color: #000; background: #fff; }
+  table { border-collapse: collapse; width: 100%; }
+  th, td { border: 1px solid #555; padding: 6px 8px; vertical-align: top; text-align: left; white-space: pre-wrap; }
+  th { width: 25%; background: #eee; }
+  @media print { button { display: none; } }
+</style>
+</head>
+<body>
+<button onclick="window.print()">인쇄 / PDF로 저장</button>
+<h1>{{ title }}: {{ obj }}</h1>
+<table>
+  {% for label, value in rows %}<tr><th>{{ label }}</th><td>{{ value }}</td></tr>{% endfor %}
+</table>
+<p>출력 일시: {% now "Y-m-d H:i" %} · 출력자: {{ request.user.username }}</p>
+</body>
+</html>

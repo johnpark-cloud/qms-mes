@@ -1,0 +1,12 @@
+{% extends "admin/base_site.html" %}
+{% block content %}
+<h1>승인 서명</h1>
+<p><strong>{{ obj }}</strong>을(를) 승인합니다. 승인 후에는 수정할 수 없고, 바꾸려면 새 개정을 만들어야 합니다.</p>
+{% if error %}<p class="errornote">{{ error }}</p>{% endif %}
+<form method="post">{% csrf_token %}
+  <label for="password">{{ request.user.username }} 비밀번호</label>
+  <input type="password" id="password" name="password" autofocus required>
+  <button type="submit">승인</button>
+  <a href="{{ back }}">취소</a>
+</form>
+{% endblock %}

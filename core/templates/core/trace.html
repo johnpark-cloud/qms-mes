@@ -1,0 +1,20 @@
+{% extends "admin/base_site.html" %}
+{% block title %}LOT 추적{% endblock %}
+{% block content %}
+<h1>LOT 추적</h1>
+<form method="get">
+  <label for="lot">LOT/시리얼 번호</label>
+  <input id="lot" name="lot" value="{{ number }}" autofocus>
+  <button type="submit">조회</button>
+</form>
+
+{% if number and not lot %}<p>{{ number }}: 등록되지 않은 LOT입니다.</p>{% endif %}
+
+{% if lot %}
+<h2>{{ lot }} · {{ lot.item }}{% if lot.on_hold %} · <strong>보류 중</strong>{% endif %}{% if lot.lineage_gap %} · 계보 미등록{% endif %}</h2>
+<h3>상위 계보 (투입 자재)</h3>
+{% include "core/lot_table.html" with lots=ancestors %}
+<h3>하위 계보 (영향 범위)</h3>
+{% include "core/lot_table.html" with lots=descendants %}
+{% endif %}
+{% endblock %}

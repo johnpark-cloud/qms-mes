@@ -1,0 +1,9 @@
+{% extends "admin/change_form.html" %}
+{% block submit_buttons_bottom %}
+{{ block.super }}
+{% if show_finalize %}
+<div class="submit-row">
+  <input type="submit" name="_finalize" value="저장하고 판정하기 (판정 후 수정 불가)">
+</div>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,17 @@
+{% extends "admin/base_site.html" %}
+{% block content %}
+<h1>엑셀 일괄 등록</h1>
+<p>회사 양식의 열 이름은 <a href="{% url 'admin:core_importprofile_changelist' %}">엑셀 가져오기 설정</a>에서 지정합니다. 한 행이라도 오류가 있으면 아무것도 등록되지 않습니다.</p>
+<form method="post" enctype="multipart/form-data">{% csrf_token %}
+  {{ form.as_p }}
+  <button type="submit">등록</button>
+</form>
+{% if result %}
+  {% if result.errors %}
+    <p class="errornote">오류 {{ result.errors|length }}건, 등록하지 않았습니다.</p>
+    <ul>{% for e in result.errors %}<li>{{ e }}</li>{% endfor %}</ul>
+  {% else %}
+    <p>{{ result.count }}건 등록(갱신)했습니다.</p>
+  {% endif %}
+{% endif %}
+{% endblock %}

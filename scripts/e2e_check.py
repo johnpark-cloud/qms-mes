@@ -1,0 +1,145 @@
+﻿"""관리 화면에 실제 HTTP 요청을 보내 인터록을 끝까지 확인한다 (임시 DB 사용)."""
+import http.cookiejar, os, re, subprocess, sys, tempfile, time, urllib.error, urllib.parse, urllib.request
+
+PROJ = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+PY = os.path.join(PROJ, '.venv', 'Scripts', 'python.exe')
+BASE = 'http://127.0.0.1:8765'
+env = dict(os.environ, QMS_DATA_DIR=tempfile.mkdtemp(), DJANGO_SUPERUSER_PASSWORD='e2e-pass-123')
+
+def manage(*args, **kw):
+    return subprocess.run([PY, 'manage.py', *args], cwd=PROJ, env=env, check=True, capture_output=True, **kw)
+
+manage('migrate')
+manage('createsuperuser', '--noinput', '--username', 'mrb', '--email', 'mrb@example.com')
+server = subprocess.Popen([PY, 'manage.py', 'runserver', '8765', '--noreload'], cwd=PROJ, env=env,
+                          stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+jar = http.cookiejar.CookieJar()
+opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(jar))
+
+class NoRedirect(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, *a, **k):
+        return None
+post_opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(jar), NoRedirect)
+
+def get(path):
+    return opener.open(BASE + path).read().decode()
+
+def post(path, data):
+    get(path)  # CSRF 쿠키 확보
+    token = next(c.value for c in jar if c.name == 'csrftoken')
+    body = urllib.parse.urlencode({'csrfmiddlewaretoken': token, **data}).encode()
+    try:
+        r = post_opener.open(BASE + path, body)
+        return r.status, r.read().decode()
+    except urllib.error.HTTPError as e:
+        return e.code, e.read().decode()
+
+def errors(html):
+    return re.findall(r'<ul class="errorlist[^"]*"[^>]*>(.*?)</ul>', html, re.S)
+
+results = []
+def check(name, ok, detail=''):
+    results.append(ok)
+    print(('PASS' if ok else 'FAIL'), name, detail)
+
+now = {'_0': '2026-10-23', '_1': '09:00:00'}
+def dt(field):
+    return {field + k: v for k, v in now.items()}
+
+no_inline = {'parent_links-TOTAL_FORMS': 0, 'parent_links-INITIAL_FORMS': 0,
+             'parent_links-MIN_NUM_FORMS': 0, 'parent_links-MAX_NUM_FORMS': 1000}
+def with_input(parent_id):
+    return {**no_inline, 'parent_links-TOTAL_FORMS': 1, 'parent_links-0-parent': parent_id, 'parent_links-0-qty': 1}
+
+try:
+    for _ in range(50):
+        try:
+            get('/admin/login/'); break
+        except Exception:
+            time.sleep(0.3)
+    s, _ = post('/admin/login/?next=/admin/', {'username': 'mrb', 'password': 'e2e-pass-123', 'next': '/admin/'})
+    check('로그인', s == 302)
+
+    bom = {'bom_lines-TOTAL_FORMS': 0, 'bom_lines-INITIAL_FORMS': 0, 'bom_lines-MIN_NUM_FORMS': 0, 'bom_lines-MAX_NUM_FORMS': 1000}
+    s, html = post('/admin/core/item/add/', {'code': 'R1', 'name': '양극재', 'item_type': 'RAW', **bom})
+    check('품번 R1(원자재) 등록', s == 302, errors(html) or re.findall(r'ManagementForm[^<]*', html))
+    s, _ = post('/admin/core/item/add/', {'code': 'C1', 'name': '셀', 'item_type': 'FIN', **bom})
+    check('품번 C1(완제품) 등록', s == 302)
+
+    s, _ = post('/admin/core/lot/add/', {'number': 'RAW-1', 'item': 1, 'qty': 100, **dt('created_at'), **no_inline})
+    check('LOT RAW-1 등록', s == 302)
+    s, _ = post('/admin/core/lot/add/', {'number': 'CELL-A', 'item': 2, 'qty': 1, **dt('created_at'), **with_input(1)})
+    check('LOT CELL-A 등록 (투입: RAW-1)', s == 302)
+    s, _ = post('/admin/core/lot/add/', {'number': 'CELL-Z', 'item': 2, 'qty': 1, **dt('created_at'), **no_inline})
+    check('LOT CELL-Z 등록 (무관한 LOT, 계보 없음)', s == 302)
+
+    s, _ = post('/admin/core/nonconformance/add/', {'lot': 1, 'description': '이물 혼입', **dt('detected_at')})
+    check('부적합 등록 (RAW-1)', s == 302)
+
+    html = get('/trace/?lot=CELL-A')
+    check('추적: CELL-A 자동 보류됨', '보류 중' in html)
+    check('추적: 상위 계보에 RAW-1 표시', 'RAW-1' in html)
+    html = get('/trace/?lot=CELL-Z')
+    check('추적: 무관한 CELL-Z는 보류 아님', '보류 중' not in html)
+    check('추적: CELL-Z는 계보 미등록 표시', '계보 미등록' in html)
+
+    s, html = post('/admin/core/shipment/add/', {'lot': 2, 'customer': 'A사', 'qty': 1, **dt('shipped_at')})
+    check('출하 차단 (보류된 CELL-A)', s == 200 and '보류 중' in html, errors(html))
+    s, html = post('/admin/core/lot/add/', {'number': 'MOD-1', 'item': 2, 'qty': 1, **dt('created_at'), **with_input(2)})
+    check('투입 차단 (보류된 CELL-A를 MOD-1에 투입)', s == 200 and '보류 중' in html, errors(html))
+    s, _ = post('/admin/core/shipment/add/', {'lot': 3, 'customer': 'A사', 'qty': 1, **dt('shipped_at')})
+    check('무관한 CELL-Z는 출하 가능', s == 302)
+
+    nc = {'lot': 1, 'description': '이물 혼입', **dt('detected_at'), 'password': 'e2e-pass-123'}
+    s, html = post('/admin/core/nonconformance/1/change/', {**nc, 'disposition': 'CONCESSION', 'password': 'wrong',
+                                                            'customer_approval_ref': 'CA-001'})
+    check('MRB 비밀번호 틀림 → 거부', s == 200 and '비밀번호' in html, errors(html))
+    s, html = post('/admin/core/nonconformance/1/change/', {**nc, 'disposition': 'CONCESSION'})
+    check('특채인데 고객 승인번호 없음 → 거부', s == 200 and '고객 승인' in html, errors(html))
+    s, html = post('/admin/core/nonconformance/1/change/', {**nc, 'disposition': 'REWORK'})
+    check('재작업인데 재검사 미합격 → 거부', s == 200 and '재검사' in html, errors(html))
+    s, html = post('/admin/core/nonconformance/1/change/', {**nc, 'disposition': 'CONCESSION', 'customer_approval_ref': 'CA-001'})
+    check('특채 + 고객 승인번호 → 처분 저장', s == 302, errors(html))
+
+    check('추적: CELL-A 보류 해제됨', '보류 중' not in get('/trace/?lot=CELL-A'))
+    s, _ = post('/admin/core/shipment/add/', {'lot': 2, 'customer': 'A사', 'qty': 1, **dt('shipped_at')})
+    check('보류 해제 후 CELL-A 출하 가능', s == 302)
+
+    html = get('/admin/core/nonconformance/1/history/')
+    check('변경 이력 기록됨', 'CONCESSION' in html or '특채' in html)
+
+    # 검사기준 작성 → 승인 서명 → 검사 → 판정(불합격) → 부적합·보류 자동
+    s, html = post('/admin/qms/inspectionspec/add/', {
+        'item': 1, 'inspection_type': 'INCOMING', 'revision': 1, 'sampling': 'n=1', 'note': '',
+        'characteristics-TOTAL_FORMS': 1, 'characteristics-INITIAL_FORMS': 0, 'characteristics-MIN_NUM_FORMS': 0,
+        'characteristics-MAX_NUM_FORMS': 1000, 'characteristics-0-name': '두께',
+        'characteristics-0-lsl': '9.5', 'characteristics-0-usl': '10.5', 'characteristics-0-unit': 'mm'})
+    check('검사기준 등록 (두께 9.5~10.5)', s == 302, errors(html))
+    s, html = post('/admin/qms/inspection/add/', {'lot': 1, 'spec': 1, **dt('inspected_at'), **{
+        'measurements-TOTAL_FORMS': 0, 'measurements-INITIAL_FORMS': 0,
+        'measurements-MIN_NUM_FORMS': 0, 'measurements-MAX_NUM_FORMS': 1000}})
+    check('미승인 기준으로 검사 → 거부', s == 200, errors(html))
+    s, _ = post('/approve/qms/inspectionspec/1/', {'password': 'wrong'})
+    check('승인 서명: 비밀번호 틀림 → 미승인', s == 200)
+    s, _ = post('/approve/qms/inspectionspec/1/', {'password': 'e2e-pass-123'})
+    check('승인 서명: 비밀번호 맞음 → 승인', s == 302)
+    s, html = post('/admin/qms/inspection/add/', {'lot': 1, 'spec': 1, **dt('inspected_at'), **{
+        'measurements-TOTAL_FORMS': 1, 'measurements-INITIAL_FORMS': 0, 'measurements-MIN_NUM_FORMS': 0,
+        'measurements-MAX_NUM_FORMS': 1000, 'measurements-0-characteristic': 1, 'measurements-0-value': '11.2',
+        'measurements-0-ok': 'unknown'}})
+    check('검사 등록 (RAW-1 두께 11.2)', s == 302, errors(html))
+    s, html = post('/admin/qms/inspection/1/change/', {'_finalize': '1', **{
+        'measurements-TOTAL_FORMS': 1, 'measurements-INITIAL_FORMS': 1, 'measurements-MIN_NUM_FORMS': 0,
+        'measurements-MAX_NUM_FORMS': 1000, 'measurements-0-id': 1, 'measurements-0-inspection': 1,
+        'measurements-0-characteristic': 1, 'measurements-0-value': '11.2', 'measurements-0-ok': 'unknown'}})
+    check('판정하기', s == 302, errors(html))
+    html = get('/trace/?lot=CELL-A')
+    check('불합격 → 부적합 자동 등록, CELL-A 다시 보류', '보류 중' in html)
+    check('내 할 일에 열린 부적합 표시', 'RAW-1' in get('/todo/'))
+    check('SPC 화면 열림', 'SPC' in get('/spc/1/'))
+finally:
+    server.terminate()
+
+print(f'\n{sum(results)}/{len(results)} 통과')
+sys.exit(0 if all(results) else 1)
+
