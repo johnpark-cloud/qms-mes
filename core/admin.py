@@ -156,7 +156,8 @@ class HoldAdmin(SimpleHistoryAdmin):
 
 
 @admin.register(Shipment)
-class ShipmentAdmin(SimpleHistoryAdmin):
+class ShipmentAdmin(ReportLinksMixin, SimpleHistoryAdmin):
     list_display = ['lot', 'customer', 'qty', 'shipped_at']
     search_fields = ['lot__number', 'customer']
     autocomplete_fields = ['lot']
+    readonly_fields = ['report_links']  # 인쇄 = 출하성적서, 고객 엑셀 양식은 매핑 {"A10": "coa_rows"}

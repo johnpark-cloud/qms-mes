@@ -1,0 +1,11 @@
+{% if error %}
+  <p class="banner ng">저장하지 않았습니다: {{ error }}</p>
+  <p><button type="button" hx-get="{% url 'inspect_lot' %}?lot={{ lot.number|urlencode }}" hx-target="#step">다시 입력</button></p>
+{% elif insp.result == 'PASS' and not insp.nonconformance %}
+  <p class="banner ok">{{ lot.number }} 합격</p>
+{% else %}
+  <p class="banner ng">{{ lot.number }} {{ insp.get_result_display }} → {{ insp.nonconformance }} 등록, LOT과 하위 계보 보류</p>
+  <p>{{ insp.nonconformance.description }}</p>
+{% endif %}
+{% if insp %}<p><a href="{% url 'admin:qms_inspection_change' insp.pk %}">검사 기록 보기</a></p>{% endif %}
+<script>document.getElementById('lot').value = ''; document.getElementById('lot').focus();</script>

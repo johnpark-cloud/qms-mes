@@ -1,0 +1,15 @@
+{% if not lot %}
+  <p class="banner ng">LOT "{{ number }}"을(를) 찾을 수 없습니다.</p>
+{% else %}
+  <p><strong>{{ lot.number }}</strong> · {{ lot.item }}
+    {% if lot.on_hold %}<span class="ng">· 보류 중 (재검사 결과는 MRB 처분 근거가 됩니다)</span>{% endif %}</p>
+  {% if specs %}
+    <div class="choices">
+      {% for s in specs %}
+        <button type="button" hx-get="{% url 'inspect_form' lot.pk s.pk %}" hx-target="#step">{{ s.get_inspection_type_display }} (Rev.{{ s.revision }})</button>
+      {% endfor %}
+    </div>
+  {% else %}
+    <p class="banner ng">이 품번에 승인된 검사기준이 없습니다. 품질팀에 요청하세요.</p>
+  {% endif %}
+{% endif %}

@@ -263,6 +263,23 @@ class Shipment(models.Model):
     def __str__(self):
         return f'{self.lot} → {self.customer}'
 
+    COA_HEADER = ['검사항목', '특별특성', 'LSL', 'USL', '단위', '측정값', '판정']
+
+    def coa_rows(self):
+        """출하성적서 표: 이 LOT의 최신 합격 출하검사(없으면 공정검사) 항목별 결과. 엑셀 매핑 예: {"A10": "coa_rows"}"""
+        for itype in ('OUTGOING', 'PROCESS'):
+            insp = self.lot.inspections.filter(result='PASS', spec__inspection_type=itype).order_by('-inspected_at').first()
+            if insp:
+                break
+        else:
+            return []
+        rows = []
+        for m in insp.measurements.select_related('characteristic').order_by('characteristic_id', 'pk'):
+            c = m.characteristic
+            value = m.value if c.is_variable else ('OK' if m.ok else 'NG')
+            rows.append([c.name, c.special or None, c.lsl, c.usl, c.unit or None, value, '합격' if m.passed else '불합격'])
+        return rows
+
     def clean(self):
         if self.lot_id and self._state.adding:
             self.lot.assert_usable('출하')

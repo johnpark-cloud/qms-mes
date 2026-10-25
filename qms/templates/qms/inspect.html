@@ -1,0 +1,29 @@
+{% extends "admin/base_site.html" %}
+{% load static %}
+{% block extrahead %}
+<script src="{% static 'htmx.min.js' %}"></script>
+<style>
+  .insp { font-size: 1.25rem; max-width: 760px; }
+  .insp input, .insp select, .insp button { font-size: 1.4rem; padding: .5rem .75rem; min-height: 3rem; }
+  .insp input[name=lot] { width: 100%; box-sizing: border-box; }
+  .insp table { width: 100%; }
+  .insp td, .insp th { padding: .5rem; vertical-align: middle; }
+  .insp .ok { color: #1a7f37; font-weight: bold; }
+  .insp .ng { color: #ba2121; font-weight: bold; }
+  .insp .banner { padding: 1rem; border-radius: 6px; margin: 1rem 0; font-size: 1.5rem; font-weight: bold; }
+  .insp .banner.ok { background: #e6f4ea; }
+  .insp .banner.ng { background: #fde8e8; }
+  .insp .choices button { margin: 0 .5rem .5rem 0; }
+</style>
+{% endblock %}
+{% block content %}
+<div class="insp" hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'>
+  <h1>검사 입력</h1>
+  <form hx-get="{% url 'inspect_lot' %}" hx-target="#step" autocomplete="off">
+    <label for="lot">LOT 번호 (바코드 스캔 또는 입력 후 Enter)</label>
+    <input id="lot" name="lot" autofocus required>
+  </form>
+  <div id="step"></div>
+  <p><a href="{% url 'todo' %}">내 할 일</a> · <a href="{% url 'admin:qms_inspection_changelist' %}">검사 기록 전체</a></p>
+</div>
+{% endblock %}

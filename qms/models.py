@@ -546,9 +546,16 @@ class ExcelTemplate(models.Model):
             for attr in path.split('.'):
                 value = getattr(value, attr, None) if value is not None else None
                 value = value() if callable(value) else value
+            ws = wb[sheet] if sheet else wb.active
+            if isinstance(value, list):  # 표(예: coa_rows)는 지정 셀부터 오른쪽·아래로 채운다
+                top = ws[ref]
+                for i, row in enumerate(value):
+                    for j, v in enumerate(row):
+                        ws.cell(row=top.row + i, column=top.column + j, value=v)
+                continue
             if isinstance(value, datetime.datetime):
                 value = timezone.localtime(value).replace(tzinfo=None)  # 엑셀은 시간대를 저장하지 못한다
-            (wb[sheet] if sheet else wb.active)[ref] = '' if value is None else value
+            ws[ref] = '' if value is None else value
         out = BytesIO()
         wb.save(out)
         return out.getvalue()

@@ -18,6 +18,11 @@ urlpatterns = [
     path('print/<str:app_label>/<str:model_name>/<int:pk>/', core_views.print_view, name='print'),
     path('report/<int:template_id>/<int:pk>/', qms_views.excel_report, name='excel_report'),
     path('spc/<int:char_id>/', qms_views.spc_view, name='spc'),
+    path('inspect/', qms_views.inspect_home, name='inspect'),
+    path('inspect/lot/', qms_views.inspect_lot, name='inspect_lot'),
+    path('inspect/<int:lot_id>/<int:spec_id>/', qms_views.inspect_form, name='inspect_form'),
+    path('inspect/<int:lot_id>/<int:spec_id>/submit/', qms_views.inspect_submit, name='inspect_submit'),
+    path('inspect/check/<int:char_id>/', qms_views.inspect_check, name='inspect_check'),
     # 문서 원본은 로그인한 사용자에게만 (DEBUG=0 사내망 서비스에서도 동작)
     re_path(r'^media/(?P<path>.*)$', staff_member_required(serve), {'document_root': settings.MEDIA_ROOT}),
 ]

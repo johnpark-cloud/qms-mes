@@ -1,0 +1,33 @@
+<p><strong>{{ lot.number }}</strong> · {{ spec }}{% if spec.sampling %} · 샘플링 {{ spec.sampling }}{% endif %}</p>
+<form hx-post="{% url 'inspect_submit' lot.pk spec.pk %}" hx-target="#step" autocomplete="off">
+  {% if gauges %}
+  <p><label for="gauge">계측기</label>
+    <select id="gauge" name="gauge">
+      <option value="">(선택 안 함)</option>
+      {% for g in gauges %}<option value="{{ g.pk }}">{{ g }} · 교정 ~{{ g.next_due|date:"Y-m-d" }}</option>{% endfor %}
+    </select></p>
+  {% endif %}
+  <table>
+    <thead><tr><th>항목</th><th>규격</th><th>측정값</th><th>판정</th></tr></thead>
+    <tbody>
+    {% for c in chars %}
+      <tr>
+        <td><label for="c{{ c.pk }}">{{ c.name }}</label>{% if c.special %} <strong>[{{ c.special }}]</strong>{% endif %}</td>
+        <td>{% if c.is_variable %}{{ c.lsl|default:"-" }} ~ {{ c.usl|default:"-" }} {{ c.unit }}{% else %}OK/NG{% endif %}</td>
+        <td>
+          {% if c.is_variable %}
+            <input id="c{{ c.pk }}" name="c{{ c.pk }}" inputmode="decimal" required size="8"
+                   hx-post="{% url 'inspect_check' c.pk %}" hx-trigger="input changed delay:300ms" hx-target="#r{{ c.pk }}">
+          {% else %}
+            <select id="c{{ c.pk }}" name="c{{ c.pk }}" required hx-post="{% url 'inspect_check' c.pk %}" hx-trigger="change" hx-target="#r{{ c.pk }}">
+              <option value="">-</option><option>OK</option><option>NG</option>
+            </select>
+          {% endif %}
+        </td>
+        <td id="r{{ c.pk }}" aria-live="polite"></td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  <p><button type="submit">판정</button></p>
+</form>

@@ -239,6 +239,27 @@ class QmsTest(TestCase):
         self.assertEqual((out['B1'].value, out['B2'].value), ('CL-9', 'CELL-1'))
         self.assertIsInstance(out['B3'].value, datetime.datetime)
 
+    def test_coa(self):
+        out_spec = InspectionSpec.objects.create(item=self.raw_item, inspection_type=InspectionSpec.OUTGOING)
+        cap = Characteristic.objects.create(spec=out_spec, name='수분', usl=Decimal('200'), unit='ppm', special='SC')
+        approve(out_spec, self.lead)
+        self.inspect('10.0')  # 수입검사 합격 (출하검사가 있으면 그것을 쓴다)
+        insp = Inspection.objects.create(lot=self.raw, spec=out_spec)
+        Measurement.objects.create(inspection=insp, characteristic=cap, value=Decimal('150'))
+        insp.finalize()
+        ship = Shipment.objects.create(lot=self.raw, customer='A사', qty=1)
+        self.assertEqual(ship.coa_rows(), [['수분', 'SC', None, Decimal('200'), 'ppm', Decimal('150'), '합격']])
+        wb = Workbook()
+        buf = BytesIO()
+        wb.save(buf)
+        tpl = ExcelTemplate.objects.create(name='A사 COA', target=ContentType.objects.get_for_model(Shipment),
+                                           file=SimpleUploadedFile('coa.xlsx', buf.getvalue()),
+                                           mapping={'B1': 'lot.number', 'A3': 'coa_rows'})
+        ws = load_workbook(BytesIO(tpl.fill(ship))).active
+        self.assertEqual([ws['B1'].value, ws['A3'].value, ws['F3'].value, ws['G3'].value], ['RAW-1', '수분', 150, '합격'])
+        self.client.force_login(self.lead)
+        self.assertContains(self.client.get(f'/print/core/shipment/{ship.pk}/'), '출하성적서')
+
     # 자동수집
     def test_collect_csv(self):
         path = Path(tempfile.mkdtemp()) / 'm.csv'
@@ -285,6 +306,27 @@ class QmsTest(TestCase):
         from django.conf import settings
         self.assertNotIn('django-insecure', settings.SECRET_KEY)
         self.assertNotIn('django-insecure', (Path(settings.BASE_DIR) / 'config' / 'settings.py').read_text('utf-8'))
+
+    # 검사원 입력 화면
+    def test_inspector_screen_flow(self):
+        clerk = User.objects.create_user('clerk', password='pw-clerk-123', is_staff=True)
+        clerk.groups.add(Group.objects.get(name='검사원'))
+        self.client.force_login(clerk)
+        self.assertContains(self.client.get('/inspect/lot/?lot=RAW-1'), f'/inspect/{self.raw.pk}/{self.spec.pk}/')
+        self.assertContains(self.client.get('/inspect/lot/?lot=NOPE'), '찾을 수 없습니다')
+        self.assertContains(self.client.post(f'/inspect/check/{self.thk.pk}/', {f'c{self.thk.pk}': '11'}), '규격 이탈')
+        url = f'/inspect/{self.raw.pk}/{self.spec.pk}/submit/'
+        r = self.client.post(url, {f'c{self.thk.pk}': '10.0'})  # 외관 누락 → 아무것도 저장 안 됨
+        self.assertContains(r, '값을 입력하세요')
+        self.assertFalse(Inspection.objects.exists())
+        r = self.client.post(url, {f'c{self.thk.pk}': '11.0', f'c{self.look.pk}': 'OK'})
+        self.assertContains(r, '하위 계보 보류')
+        insp = Inspection.objects.get()
+        self.assertEqual((insp.result, insp.inspector), (Inspection.FAIL, clerk))
+        self.assertTrue(self.cell.on_hold)
+        outsider = User.objects.create_user('viewer', password='x', is_staff=True)
+        self.client.force_login(outsider)
+        self.assertEqual(self.client.get('/inspect/').status_code, 403)
 
     # 화면 · 승인 서명
     def test_approve_requires_password(self):

@@ -83,4 +83,7 @@ def print_view(request, app_label, model_name, pk):
     for f in model._meta.concrete_fields:
         value = getattr(obj, f'get_{f.name}_display', lambda: getattr(obj, f.name))()
         rows.append((f.verbose_name, '' if value is None else value))
-    return render(request, 'core/print.html', {'obj': obj, 'rows': rows, 'title': model._meta.verbose_name})
+    ctx = {'obj': obj, 'rows': rows, 'title': model._meta.verbose_name}
+    if hasattr(obj, 'coa_rows'):  # 출하 = 출하성적서
+        ctx.update(title='출하성적서', coa_header=obj.COA_HEADER, coa=obj.coa_rows())
+    return render(request, 'core/print.html', ctx)

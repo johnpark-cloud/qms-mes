@@ -1,18 +1,21 @@
 import datetime
+from decimal import Decimal, InvalidOperation
 from urllib.parse import urlencode
 
 from django.contrib.admin.views.decorators import staff_member_required
-from django.core.exceptions import PermissionDenied
+from django.core.exceptions import PermissionDenied, ValidationError
+from django.db import transaction
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, render
 from django.urls import reverse
 from django.utils import timezone
+from django.utils.html import format_html
 
-from core.models import Hold, Nonconformance, is_approver
+from core.models import Hold, Lot, Nonconformance, is_approver
 
 from . import spc
 from .models import (ChangeRequest, Characteristic, ControlPlan, CustomerClaim, DocumentRevision, ExcelTemplate, Gauge,
-                     InspectionSpec, Scar)
+                     Inspection, InspectionSpec, Measurement, Scar)
 
 
 @staff_member_required
@@ -76,6 +79,83 @@ def _recent_spc_alarms(now):
         if last['alarms']:
             out.append({'char': c, 'lot': last['label'].lot, 'alarms': last['alarms']})
     return out
+
+
+# ---------- 검사원 전용 입력 화면 (htmx: 화면 일부만 서버에서 다시 그린다) ----------
+
+def _can_inspect(request):
+    if not request.user.has_perm('qms.add_inspection'):
+        raise PermissionDenied
+
+
+@staff_member_required
+def inspect_home(request):
+    _can_inspect(request)
+    return render(request, 'qms/inspect.html', {'title': '검사 입력'})
+
+
+@staff_member_required
+def inspect_lot(request):
+    """LOT 스캔 → 품번·보류 상태와 검사할 수 있는 검사구분(승인된 현재 기준)."""
+    _can_inspect(request)
+    lot = Lot.objects.filter(number=request.GET.get('lot', '').strip()).select_related('item').first()
+    specs = [s for t, _ in InspectionSpec.TYPES if (s := InspectionSpec.current(lot.item, t))] if lot else []
+    return render(request, 'qms/inspect_lot.html', {'lot': lot, 'specs': specs, 'number': request.GET.get('lot', '')})
+
+
+@staff_member_required
+def inspect_form(request, lot_id, spec_id):
+    _can_inspect(request)
+    lot, spec = get_object_or_404(Lot, pk=lot_id), get_object_or_404(InspectionSpec, pk=spec_id, approved_at__isnull=False)
+    gauges = [g for g in Gauge.objects.filter(active=True) if g.usable_on(timezone.localdate())]
+    return render(request, 'qms/inspect_form.html', {'lot': lot, 'spec': spec, 'chars': spec.characteristics.all(),
+                                                     'gauges': gauges})
+
+
+def _measurement(char, raw):
+    """입력칸 값 → 저장 전 측정값. 계량형은 숫자, 계수형은 OK/NG."""
+    if char.is_variable:
+        try:
+            return Measurement(characteristic=char, value=Decimal(raw.strip()))
+        except (InvalidOperation, AttributeError):
+            return None
+    return Measurement(characteristic=char, ok={'OK': True, 'NG': False}.get(raw)) if raw in ('OK', 'NG') else None
+
+
+@staff_member_required
+def inspect_check(request, char_id):
+    """값을 입력하는 즉시 항목별 합부를 보여준다 (저장하지 않음)."""
+    _can_inspect(request)
+    char = get_object_or_404(Characteristic, pk=char_id)
+    m = _measurement(char, request.POST.get(f'c{char.pk}', ''))
+    if m is None:
+        return HttpResponse('')
+    return HttpResponse(format_html('<span class="{}">{}</span>', 'ok' if m.passed else 'ng', '합격' if m.passed else '규격 이탈'))
+
+
+@staff_member_required
+def inspect_submit(request, lot_id, spec_id):
+    """판정: 검사·측정값을 만들고 finalize()로 판정한다. 하나라도 거부되면 전부 되돌린다."""
+    _can_inspect(request)
+    if request.method != 'POST':
+        raise PermissionDenied
+    lot, spec = get_object_or_404(Lot, pk=lot_id), get_object_or_404(InspectionSpec, pk=spec_id)
+    gauge = Gauge.objects.filter(pk=request.POST.get('gauge') or None).first()
+    error = None
+    try:
+        with transaction.atomic():
+            insp = Inspection.objects.create(lot=lot, spec=spec, inspector=request.user)
+            for char in spec.characteristics.all():
+                m = _measurement(char, request.POST.get(f'c{char.pk}', ''))
+                if m is None:
+                    raise ValidationError(f'{char.name}: 값을 입력하세요.')
+                m.inspection = insp
+                m.gauge = gauge if char.is_variable else None
+                m.save()
+            insp.finalize()
+    except ValidationError as e:
+        error, insp = ' '.join(e.messages), None
+    return render(request, 'qms/inspect_result.html', {'insp': insp, 'error': error, 'lot': lot})
 
 
 @staff_member_required
