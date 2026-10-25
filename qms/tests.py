@@ -17,10 +17,11 @@ from openpyxl import Workbook, load_workbook
 from core.importer import run_import
 from core.models import ImportProfile, Item, Lot, LotLink, Nonconformance, Shipment, WorkOrder
 
-from . import spc
+from . import kpi, spc
 from .management.commands.collect import ingest
 from .models import (ChangeRequest, Characteristic, ControlPlan, ControlPlanLine, CustomerClaim, ExcelTemplate, Gauge,
-                     Inspection, InspectionSpec, Measurement, Qualification)
+                     Inspection, InspectionSpec, Measurement, Qualification, Scar)
+from .similar import similar
 
 TMP_MEDIA = tempfile.mkdtemp()
 
@@ -306,6 +307,50 @@ class QmsTest(TestCase):
         from django.conf import settings
         self.assertNotIn('django-insecure', settings.SECRET_KEY)
         self.assertNotIn('django-insecure', (Path(settings.BASE_DIR) / 'config' / 'settings.py').read_text('utf-8'))
+
+    # KPI · 협력사 · 재발 방지
+    def test_kpi_and_suppliers(self):
+        self.raw.supplier = 'B소재'
+        self.raw.qty = 1000
+        self.raw.save()
+        Shipment.objects.create(lot=self.cell, customer='A사', qty=2000)
+        claim = CustomerClaim.objects.create(number='CL-1', customer='A사', lot=self.cell, description='x', defect_qty=4)
+        Nonconformance.objects.filter(pk=claim.nonconformance_id).update(defect_type='용량', defect_qty=4, cost=30000)
+        self.inspect('11.0').nonconformance  # 수입검사 불합격 → 부적합
+        Nonconformance.objects.filter(lot=self.raw).update(defect_type='치수', defect_qty=10, cost=5000)
+        self.inspect('10.0')  # 같은 LOT 재검사 합격은 직행률에 들어가지 않는다
+        Scar.objects.create(number='S-1', supplier='B소재', lot=self.raw, request='개선', response_due=timezone.localdate() - datetime.timedelta(days=1))
+
+        this_month = kpi.monthly(1)[0]
+        self.assertEqual(this_month['ppm'], 4 / 2000 * 1e6)
+        self.assertEqual(this_month['fpy'], 0.0)  # (RAW-1, 수입검사)의 첫 판정이 불합격
+        self.assertEqual(this_month['copq'], 35000)
+        self.assertEqual([p['defect_type'] for p in kpi.pareto(1)], ['치수', '용량'])
+        b = next(r for r in kpi.suppliers(1) if r['name'] == 'B소재')
+        self.assertEqual((b['inspections'], b['fail_rate'], b['ppm'], b['scars'], b['scar_on_time']),
+                         (2, 50.0, 10 / 1000 * 1e6, 1, 0.0))
+        self.client.force_login(self.lead)
+        self.assertContains(self.client.get('/kpi/?months=3'), '치수')
+        self.assertContains(self.client.get('/suppliers/'), 'B소재')
+
+    def test_similar_past_cases(self):
+        old = CustomerClaim.objects.create(number='CL-OLD', customer='A사', lot=self.cell, description='셀 용량 미달 불량',
+                                           **{f: '완료' for f, _ in CustomerClaim.STEPS})
+        old.d4_root_cause = '전해액 주입량 부족'
+        old.closed_at = timezone.now()
+        old.save()
+        nc = old.nonconformance
+        nc.disposition, nc.approved_by, nc.customer_approval_ref = Nonconformance.CONCESSION, self.lead, 'CA-1'
+        nc.save()
+        unrelated = Nonconformance.objects.create(lot=Lot.objects.create(number='X', item=Item.objects.create(
+            code='Z', name='z', item_type=Item.RAW)), description='포장 파손')
+        unrelated.disposition, unrelated.approved_by, unrelated.customer_approval_ref = Nonconformance.CONCESSION, self.lead, 'C'
+        unrelated.save()
+        new = Nonconformance.objects.create(lot=self.cell, description='용량 미달 발생')
+        found = similar(new)
+        self.assertEqual([p for _, p, _ in found], [nc])
+        self.client.force_login(self.lead)
+        self.assertContains(self.client.get(f'/admin/core/nonconformance/{new.pk}/change/'), '전해액 주입량 부족')
 
     # 검사원 입력 화면
     def test_inspector_screen_flow(self):

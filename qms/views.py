@@ -13,7 +13,7 @@ from django.utils.html import format_html
 
 from core.models import Hold, Lot, Nonconformance, is_approver
 
-from . import spc
+from . import kpi, spc
 from .models import (ChangeRequest, Characteristic, ControlPlan, CustomerClaim, DocumentRevision, ExcelTemplate, Gauge,
                      Inspection, InspectionSpec, Measurement, Scar)
 
@@ -79,6 +79,32 @@ def _recent_spc_alarms(now):
         if last['alarms']:
             out.append({'char': c, 'lot': last['label'].lot, 'alarms': last['alarms']})
     return out
+
+
+def _months(request):
+    try:
+        return min(max(int(request.GET.get('months', 6)), 1), 36)
+    except ValueError:
+        return 6
+
+
+@staff_member_required
+def kpi_view(request):
+    months = _months(request)
+    rows = kpi.monthly(months)
+    for key in ('ppm', 'copq'):  # 막대 길이(%)는 기간 내 최댓값 기준
+        top = max((float(r[key] or 0) for r in rows), default=0) or 1
+        for r in rows:
+            r[f'{key}_bar'] = float(r[key] or 0) / top * 100
+    return render(request, 'qms/kpi.html', {'title': '품질 KPI', 'months': months, 'rows': rows,
+                                             'pareto': kpi.pareto(months)})
+
+
+@staff_member_required
+def suppliers_view(request):
+    months = _months(request)
+    return render(request, 'qms/suppliers.html', {'title': '협력사 성적표', 'months': months,
+                                                   'rows': kpi.suppliers(months)})
 
 
 # ---------- 검사원 전용 입력 화면 (htmx: 화면 일부만 서버에서 다시 그린다) ----------

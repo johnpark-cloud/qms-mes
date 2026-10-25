@@ -4,6 +4,8 @@
 <p>
   <a href="{% url 'admin:index' %}">전체 메뉴</a> ·
   <a href="{% url 'inspect' %}">검사 입력</a> ·
+  <a href="{% url 'kpi' %}">품질 KPI</a> ·
+  <a href="{% url 'suppliers' %}">협력사 성적표</a> ·
   <a href="{% url 'trace' %}">LOT 추적</a> ·
   <a href="{% url 'import' %}">엑셀 일괄 등록</a> ·
   보류 중인 LOT <strong>{{ held_lots }}</strong>개

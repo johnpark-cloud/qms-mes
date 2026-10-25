@@ -12,6 +12,7 @@ from core.admin import ApprovalAdminMixin, ReportLinksMixin
 from .models import (AuditChecklist, AuditItem, ChangeRequest, Characteristic, ControlPlan, ControlPlanLine,
                      CustomerClaim, CustomerRule, Document, DocumentRevision, Evidence, ExcelTemplate, Gauge, Inspection,
                      InspectionSpec, Measurement, Qualification, Scar)
+from .similar import similar_html
 
 
 class LockedWhenApprovedInline(admin.TabularInline):
@@ -215,13 +216,19 @@ class CustomerClaimAdmin(ReportLinksMixin, SimpleHistoryAdmin):
     list_display = ['number', 'customer', 'lot', 'received_at', 'current_step', 'containment_due', 'corrective_due', 'closed_at']
     search_fields = ['number', 'customer', 'lot__number']
     autocomplete_fields = ['lot']
-    readonly_fields = ['nonconformance', 'trace_link', 'containment_due', 'corrective_due', 'current_step', 'report_links']
+    readonly_fields = ['nonconformance', 'trace_link', 'containment_due', 'corrective_due', 'current_step', 'report_links',
+                       'similar_cases']
     fieldsets = [
         (None, {'fields': ['number', 'customer', 'lot', 'description', 'defect_qty', 'received_at', 'nonconformance',
                            'trace_link', 'containment_due', 'corrective_due', 'current_step', 'report_links']}),
+        ('재발 방지', {'fields': ['similar_cases']}),
         ('8D', {'fields': [f for f, _ in CustomerClaim.STEPS]}),
         ('종결', {'fields': ['closed_at']}),
     ]
+
+    @admin.display(description='유사 과거 사례')
+    def similar_cases(self, obj):
+        return similar_html(obj) if obj.pk else '저장 후 표시됩니다.'
 
     @admin.display(description='영향 범위')
     def trace_link(self, obj):

@@ -133,7 +133,12 @@ class NonconformanceAdmin(ReportLinksMixin, SimpleHistoryAdmin):
 
     def get_readonly_fields(self, request, obj=None):
         locked = ['lot', 'description', 'detected_at', 'disposition', 'customer_approval_ref'] if obj and obj.closed_at else []
-        return locked + ['approved_by', 'closed_at', 'report_links']
+        return locked + ['approved_by', 'closed_at', 'report_links', 'similar_cases']
+
+    @admin.display(description='유사 과거 사례')
+    def similar_cases(self, obj):
+        from qms.similar import similar_html  # 재발 방지 검색은 qms 앱 기능
+        return similar_html(obj) if obj.pk else '저장 후 표시됩니다.'
 
     def get_form(self, request, obj=None, **kwargs):
         return type('Form', (super().get_form(request, obj, **kwargs),), {'user': request.user})

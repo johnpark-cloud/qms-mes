@@ -34,6 +34,17 @@ def post(path, data):
     except urllib.error.HTTPError as e:
         return e.code, e.read().decode()
 
+def post_only(path, data):
+    """GET이 없는 주소(htmx 판정 등)용: 이미 받은 CSRF 쿠키로 바로 POST."""
+    token = next(c.value for c in jar if c.name == 'csrftoken')
+    body = urllib.parse.urlencode(data).encode()
+    req = urllib.request.Request(BASE + path, body, headers={'X-CSRFToken': token, 'HX-Request': 'true'})
+    try:
+        r = post_opener.open(req)
+        return r.status, r.read().decode()
+    except urllib.error.HTTPError as e:
+        return e.code, e.read().decode()
+
 def errors(html):
     return re.findall(r'<ul class="errorlist[^"]*"[^>]*>(.*?)</ul>', html, re.S)
 
@@ -138,6 +149,45 @@ try:
     check('불합격 → 부적합 자동 등록, CELL-A 다시 보류', '보류 중' in html)
     check('내 할 일에 열린 부적합 표시', 'RAW-1' in get('/todo/'))
     check('SPC 화면 열림', 'SPC' in get('/spc/1/'))
+
+    # 검사원 입력 화면 + 계측기 교정 인터록
+    check('검사 입력 화면이 동봉된 htmx를 불러옴', 'htmx.min.js' in get('/inspect/') and 'htmx' in get('/static/htmx.min.js'))
+    check('LOT 스캔 → 수입검사 선택지 표시', '수입검사' in get('/inspect/lot/?lot=RAW-1'))
+    gauge = {'name': '마이크로미터', 'interval_days': 365, 'active': 'on'}
+    s, html = post('/admin/qms/gauge/add/', {**gauge, 'number': 'MC-OLD', 'last_calibrated': '2024-01-01'})
+    check('계측기 등록 (교정 만료)', s == 302, errors(html))
+    s, html = post('/admin/qms/gauge/add/', {**gauge, 'number': 'MC-NEW', 'last_calibrated': '2026-10-01'})
+    check('계측기 등록 (교정 유효)', s == 302, errors(html))
+    s, html = post_only('/inspect/1/1/submit/', {'c1': '10.0', 'gauge': 1})
+    check('교정 만료 계측기로 판정 → 거부, 저장 안 됨', '교정 기한' in html and '저장하지 않았습니다' in html)
+    s, html = post_only('/inspect/1/1/submit/', {'c1': '10.0', 'gauge': 2})
+    check('유효 계측기로 판정 → 합격', 'RAW-1 합격' in html, html[:200])
+
+    # 4M 변경: 승인 후 초품 합격 전 출하 차단
+    s, html = post('/admin/qms/changerequest/add/', {
+        'number': '4M-1', 'item': 2, 'category': 'MACHINE', 'description': '조립 설비 교체',
+        'customer_notice': 'on', 'customer_approval_ref': 'CA-4M', **dt('effective_at')})
+    check('4M 변경 등록', s == 302, errors(html))
+    s, _ = post('/approve/qms/changerequest/1/', {'password': 'e2e-pass-123'})
+    check('4M 변경 승인 서명', s == 302)
+    s, html = post('/admin/core/shipment/add/', {'lot': 3, 'customer': 'A사', 'qty': 1, **dt('shipped_at')})
+    check('초품 전 CELL-Z 출하 차단', s == 200 and '초품' in html, errors(html))
+    s, html = post('/admin/qms/inspectionspec/add/', {
+        'item': 2, 'inspection_type': 'OUTGOING', 'revision': 1, 'sampling': '', 'note': '',
+        'characteristics-TOTAL_FORMS': 1, 'characteristics-INITIAL_FORMS': 0, 'characteristics-MIN_NUM_FORMS': 0,
+        'characteristics-MAX_NUM_FORMS': 1000, 'characteristics-0-name': '용량',
+        'characteristics-0-lsl': '95', 'characteristics-0-usl': '105', 'characteristics-0-special': 'CC'})
+    check('셀 출하검사 기준 등록', s == 302, errors(html))
+    post('/approve/qms/inspectionspec/2/', {'password': 'e2e-pass-123'})
+    s, html = post_only('/inspect/3/2/submit/', {'c2': '100'})
+    check('CELL-Z 초품 검사 합격', 'CELL-Z 합격' in html, html[:200])
+    s, html = post('/admin/core/shipment/add/', {'lot': 3, 'customer': 'A사', 'qty': 1, **dt('shipped_at')})
+    check('초품 합격 후 CELL-Z 출하 가능', s == 302, errors(html))
+    check('출하성적서에 용량 결과', '용량' in get('/print/core/shipment/3/'))
+
+    # 대시보드
+    check('품질 KPI 화면 (불량유형 파레토)', '이물' in get('/kpi/'))
+    check('협력사 성적표 화면', '협력사 성적표' in get('/suppliers/'))
 finally:
     server.terminate()
 
