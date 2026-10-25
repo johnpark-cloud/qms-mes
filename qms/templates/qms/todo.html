@@ -43,11 +43,34 @@
   </tbody>
 </table>
 
-{% if pending_specs or pending_docs %}
+{% if first_articles %}
+<h2>4M 변경 초품 미확인 (출하 차단 중)</h2>
+<ul>
+  {% for c in first_articles %}<li><a href="{% url 'admin:qms_changerequest_change' c.pk %}">{{ c }}</a> · 적용 {{ c.effective_at|date:"Y-m-d H:i" }}</li>{% endfor %}
+</ul>
+{% endif %}
+
+{% if gauges %}
+<h2>계측기 교정 임박·초과 (14일 이내)</h2>
+<ul>
+  {% for g in gauges %}<li><a href="{% url 'admin:qms_gauge_change' g.pk %}">{{ g }}</a> · 교정 기한 {{ g.next_due|date:"Y-m-d" }}{% if g.next_due < today %} <strong style="color:#ba2121">초과</strong>{% endif %}</li>{% endfor %}
+</ul>
+{% endif %}
+
+{% if spc_alarms %}
+<h2>SPC 경보 (최근 7일)</h2>
+<ul>
+  {% for a in spc_alarms %}<li><a href="{% url 'spc' a.char.pk %}">{{ a.char.spec.item.code }} {{ a.char.name }}</a> · {{ a.lot }} · {{ a.alarms|join:", " }}</li>{% endfor %}
+</ul>
+{% endif %}
+
+{% if pending_specs or pending_docs or pending_plans or pending_changes %}
 <h2>승인 대기</h2>
 <ul>
   {% for s in pending_specs %}<li><a href="{% url 'approve' 'qms' 'inspectionspec' s.pk %}">검사기준 {{ s }}</a></li>{% endfor %}
   {% for d in pending_docs %}<li><a href="{% url 'approve' 'qms' 'documentrevision' d.pk %}">문서 {{ d }}</a></li>{% endfor %}
+  {% for p in pending_plans %}<li><a href="{% url 'approve' 'qms' 'controlplan' p.pk %}">{{ p }}</a></li>{% endfor %}
+  {% for c in pending_changes %}<li><a href="{% url 'approve' 'qms' 'changerequest' c.pk %}">4M 변경 {{ c }}</a></li>{% endfor %}
 </ul>
 {% endif %}
 {% endblock %}

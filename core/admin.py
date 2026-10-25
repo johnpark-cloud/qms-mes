@@ -91,8 +91,8 @@ class ParentLinkInline(admin.TabularInline):
 
 @admin.register(Lot)
 class LotAdmin(SimpleHistoryAdmin):
-    list_display = ['number', 'item', 'work_order', 'qty', 'is_hold', 'is_gap', 'created_at']
-    search_fields = ['number', 'item__code']
+    list_display = ['number', 'item', 'work_order', 'qty', 'supplier', 'is_hold', 'is_gap', 'created_at']
+    search_fields = ['number', 'item__code', 'supplier']
     autocomplete_fields = ['item', 'work_order']
     inlines = [ParentLinkInline]
 
@@ -126,8 +126,8 @@ class NonconformanceForm(forms.ModelForm):
 @admin.register(Nonconformance)
 class NonconformanceAdmin(ReportLinksMixin, SimpleHistoryAdmin):
     form = NonconformanceForm
-    list_display = ['__str__', 'lot', 'detected_at', 'disposition', 'approved_by', 'closed_at']
-    list_filter = ['disposition']
+    list_display = ['__str__', 'lot', 'defect_type', 'detected_at', 'disposition', 'approved_by', 'closed_at']
+    list_filter = ['disposition', 'defect_type']
     search_fields = ['lot__number', 'description']
     autocomplete_fields = ['lot']
 

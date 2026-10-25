@@ -9,8 +9,9 @@ from simple_history.admin import SimpleHistoryAdmin
 
 from core.admin import ApprovalAdminMixin, ReportLinksMixin
 
-from .models import (AuditChecklist, AuditItem, Characteristic, CustomerClaim, CustomerRule, Document,
-                     DocumentRevision, Evidence, ExcelTemplate, Inspection, InspectionSpec, Measurement, Scar)
+from .models import (AuditChecklist, AuditItem, ChangeRequest, Characteristic, ControlPlan, ControlPlanLine,
+                     CustomerClaim, CustomerRule, Document, DocumentRevision, Evidence, ExcelTemplate, Gauge, Inspection,
+                     InspectionSpec, Measurement, Qualification, Scar)
 
 
 class LockedWhenApprovedInline(admin.TabularInline):
@@ -58,7 +59,8 @@ class InspectionSpecAdmin(ApprovalAdminMixin, SimpleHistoryAdmin):
                 new = InspectionSpec.objects.create(item=spec.item, inspection_type=spec.inspection_type,
                                                     revision=top + 1, sampling=spec.sampling, note=spec.note)
                 for c in items:
-                    Characteristic.objects.create(spec=new, name=c.name, lsl=c.lsl, usl=c.usl, unit=c.unit)
+                    Characteristic.objects.create(spec=new, name=c.name, lsl=c.lsl, usl=c.usl, unit=c.unit,
+                                                  special=c.special, plan_line=c.plan_line)
         self.message_user(request, '새 개정을 만들었습니다. 내용을 고친 뒤 승인 서명하세요.')
 
 
@@ -131,6 +133,78 @@ class InspectionAdmin(ReportLinksMixin, SimpleHistoryAdmin):
     change_form_template = 'qms/inspection_change_form.html'
 
 
+@admin.register(Gauge)
+class GaugeAdmin(SimpleHistoryAdmin):
+    list_display = ['number', 'name', 'last_calibrated', 'next_due', 'active']
+    list_filter = ['active']
+    search_fields = ['number', 'name']
+
+
+@admin.register(Qualification)
+class QualificationAdmin(SimpleHistoryAdmin):
+    list_display = ['user', 'inspection_type', 'valid_until', 'basis']
+    list_filter = ['inspection_type']
+
+
+class ControlPlanLineInline(LockedWhenApprovedInline):
+    model = ControlPlanLine
+    extra = 1
+    readonly_fields = ['action_priority']
+    fields = ['process', 'characteristic', 'special', 'lsl', 'usl', 'unit', 'method', 'sampling', 'inspection_type',
+              'reaction', 'failure_mode', 'severity', 'occurrence', 'detection', 'action_priority']
+
+
+@admin.register(ControlPlan)
+class ControlPlanAdmin(ApprovalAdminMixin, SimpleHistoryAdmin):
+    list_display = ['item', 'stage', 'revision', 'is_approved']
+    list_filter = ['stage']
+    search_fields = ['item__code']
+    autocomplete_fields = ['item']
+    inlines = [ControlPlanLineInline]
+    actions = ['make_specs']
+
+    @admin.action(description='승인된 관리계획서로 검사기준 초안 만들기')
+    def make_specs(self, request, queryset):
+        made = []
+        with transaction.atomic():
+            for plan in queryset:
+                if not plan.is_approved:
+                    self.message_user(request, f'{plan}: 승인 후에 만들 수 있습니다.', messages.ERROR)
+                    continue
+                for itype, _ in InspectionSpec.TYPES:
+                    lines = plan.lines.filter(inspection_type=itype)
+                    if not lines:
+                        continue
+                    top = InspectionSpec.objects.filter(item=plan.item, inspection_type=itype).aggregate(m=Max('revision'))['m']
+                    spec = InspectionSpec.objects.create(item=plan.item, inspection_type=itype, revision=(top or 0) + 1,
+                                                         sampling=', '.join(sorted({l.sampling for l in lines if l.sampling})),
+                                                         note=f'{plan}에서 생성')
+                    for l in lines:
+                        Characteristic.objects.create(spec=spec, name=l.characteristic, lsl=l.lsl, usl=l.usl, unit=l.unit,
+                                                      special=l.special, plan_line=l)
+                    made.append(str(spec))
+        if made:
+            self.message_user(request, f'검사기준 초안: {", ".join(made)}. 확인 후 승인 서명하세요.')
+
+
+@admin.register(ChangeRequest)
+class ChangeRequestAdmin(ApprovalAdminMixin, SimpleHistoryAdmin):
+    list_display = ['number', 'item', 'category', 'effective_at', 'is_approved', 'first_article_state']
+    list_filter = ['category']
+    search_fields = ['number', 'item__code']
+    autocomplete_fields = ['item']
+
+    @admin.display(description='초품 검사')
+    def first_article_state(self, obj):
+        fa = obj.first_article if obj.pk else None
+        if fa:
+            return format_html('<a href="{}">{} 합격</a>', reverse('admin:qms_inspection_change', args=[fa.pk]), fa)
+        return format_html('<strong style="color:#ba2121">미확인 (출하 차단)</strong>') if obj.is_approved else '-'
+
+    def get_readonly_fields(self, request, obj=None):
+        return super().get_readonly_fields(request, obj) + ['first_article_state']
+
+
 @admin.register(CustomerRule)
 class CustomerRuleAdmin(SimpleHistoryAdmin):
     list_display = ['customer', 'containment_hours', 'corrective_days']
@@ -143,7 +217,7 @@ class CustomerClaimAdmin(ReportLinksMixin, SimpleHistoryAdmin):
     autocomplete_fields = ['lot']
     readonly_fields = ['nonconformance', 'trace_link', 'containment_due', 'corrective_due', 'current_step', 'report_links']
     fieldsets = [
-        (None, {'fields': ['number', 'customer', 'lot', 'description', 'received_at', 'nonconformance',
+        (None, {'fields': ['number', 'customer', 'lot', 'description', 'defect_qty', 'received_at', 'nonconformance',
                            'trace_link', 'containment_due', 'corrective_due', 'current_step', 'report_links']}),
         ('8D', {'fields': [f for f, _ in CustomerClaim.STEPS]}),
         ('종결', {'fields': ['closed_at']}),

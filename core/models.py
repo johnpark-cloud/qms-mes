@@ -1,3 +1,4 @@
+from django.apps import apps
 from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.db import models, transaction
@@ -115,6 +116,7 @@ class Lot(models.Model):
                                    related_name='lots', verbose_name='작업지시')
     is_serial = models.BooleanField('시리얼', default=False)
     qty = models.DecimalField('수량', max_digits=12, decimal_places=3, default=1)
+    supplier = models.CharField('협력사', max_length=100, blank=True, help_text='구매 자재 LOT이면 입력 (협력사 성적표에 사용)')
     created_at = models.DateTimeField('생성', default=timezone.now)
     history = HistoricalRecords()
 
@@ -190,6 +192,10 @@ class Nonconformance(models.Model):
     lot = models.ForeignKey(Lot, on_delete=models.PROTECT, related_name='nonconformances', verbose_name='LOT')
     description = models.TextField('부적합 내용')
     detected_at = models.DateTimeField('발견 일시', default=timezone.now)
+    defect_type = models.CharField('불량유형', max_length=100, blank=True, help_text='예: 치수, 이물, 외관, 용량 (파레토 집계 단위)')
+    defect_qty = models.DecimalField('불량 수량', max_digits=12, decimal_places=3, default=0)
+    cost = models.DecimalField('실패비용(원)', max_digits=14, decimal_places=0, default=0,
+                               help_text='폐기·재작업·선별·운송 등 이 부적합으로 든 비용')
     disposition = models.CharField('처분', max_length=10, choices=DISPOSITIONS, blank=True)
     customer_approval_ref = models.CharField('고객 특채 승인 문서번호', max_length=100, blank=True)
     approved_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, null=True, blank=True,
@@ -260,6 +266,10 @@ class Shipment(models.Model):
     def clean(self):
         if self.lot_id and self._state.adding:
             self.lot.assert_usable('출하')
+            # 4M 변경 후 초품 합격 전에는 출하 금지 (qms 앱이 정의, core는 qms를 import하지 않는다)
+            waiting = apps.get_model('qms', 'ChangeRequest').awaiting_first_article(self.lot.item)
+            if waiting:
+                raise ValidationError(f'4M 변경 {", ".join(c.number for c in waiting)}의 초품 검사 합격 전이라 출하할 수 없습니다.')
 
     def save(self, *args, **kwargs):
         self.clean()

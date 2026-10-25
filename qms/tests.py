@@ -15,11 +15,12 @@ from django.utils import timezone
 from openpyxl import Workbook, load_workbook
 
 from core.importer import run_import
-from core.models import ImportProfile, Item, Lot, LotLink, Nonconformance, WorkOrder
+from core.models import ImportProfile, Item, Lot, LotLink, Nonconformance, Shipment, WorkOrder
 
 from . import spc
 from .management.commands.collect import ingest
-from .models import Characteristic, CustomerClaim, ExcelTemplate, Inspection, InspectionSpec, Measurement
+from .models import (ChangeRequest, Characteristic, ControlPlan, ControlPlanLine, CustomerClaim, ExcelTemplate, Gauge,
+                     Inspection, InspectionSpec, Measurement, Qualification)
 
 TMP_MEDIA = tempfile.mkdtemp()
 
@@ -103,17 +104,103 @@ class QmsTest(TestCase):
     # SPC
     def test_xbar_r(self):
         groups = [(i, [10, 10.2, 9.8]) for i in range(8)] + [(8, [12, 12, 12])]
-        res = spc.xbar_r(groups, lsl=9, usl=11)
+        res = spc.control_chart(groups, lsl=9, usl=11)
         self.assertEqual(res['n'], 3)
         self.assertIn('관리한계 이탈', res['points'][-1]['alarms'])
         self.assertIsNotNone(res['cpk'])
         with self.assertRaises(ValueError):
-            spc.xbar_r([(0, [1]), (1, [2])])
+            spc.control_chart([(0, [1, 2]), (1, [2])])  # 부분군 크기가 섞이면 안 된다
 
     def test_nine_points_one_side(self):
         groups = [(i, [9, 9.2]) for i in range(5)] + [(i, [10, 10.1]) for i in range(5, 14)]
-        res = spc.xbar_r(groups)
+        res = spc.control_chart(groups)
         self.assertIn('중심선 한쪽 연속 9점', res['points'][-1]['alarms'])
+
+    def test_i_mr(self):
+        res = spc.control_chart([(i, [v]) for i, v in enumerate([10, 10.2, 9.8, 10.1, 9.9, 13])])
+        self.assertEqual(res['kind'], 'I-MR')
+        self.assertIsNone(res['points'][0]['r'])
+        self.assertAlmostEqual(res['points'][1]['r'], 0.2)
+        mrbar = (0.2 + 0.4 + 0.3 + 0.2 + 3.1) / 5
+        self.assertAlmostEqual(res['limits']['ucl'], (10 + 10.2 + 9.8 + 10.1 + 9.9 + 13) / 6 + 2.66 * mrbar)
+        self.assertIn('범위(R) 이탈', res['points'][-1]['alarms'])
+
+    def test_special_characteristic_alarm_creates_nc(self):
+        spec = InspectionSpec.objects.create(item=self.raw_item, inspection_type=InspectionSpec.PROCESS)
+        cc = Characteristic.objects.create(spec=spec, name='용량', lsl=0, usl=100, special='CC')
+        approve(spec, self.lead)
+
+        def run(v):
+            insp = Inspection.objects.create(lot=self.raw, spec=spec)
+            Measurement.objects.create(inspection=insp, characteristic=cc, value=Decimal(v))
+            insp.finalize()
+            return insp
+        for v in ('50', '50.5', '49.5', '50.2', '49.8', '50'):
+            self.assertIsNone(run(v).nonconformance)
+        insp = run('70')  # 규격 안이지만 관리한계 밖
+        self.assertEqual(insp.result, Inspection.PASS)
+        self.assertIn('SPC 경보', insp.nonconformance.description)
+        self.assertTrue(self.cell.on_hold)
+
+    # 계측기 · 자격
+    def test_expired_gauge_rejected(self):
+        g = Gauge.objects.create(number='MC-01', name='마이크로미터', interval_days=365,
+                                 last_calibrated=timezone.localdate() - datetime.timedelta(days=400))
+        insp = Inspection.objects.create(lot=self.raw, spec=self.spec)
+        with self.assertRaises(ValidationError):
+            Measurement.objects.create(inspection=insp, characteristic=self.thk, value=10, gauge=g)
+        g.last_calibrated = timezone.localdate()
+        g.save()
+        Measurement.objects.create(inspection=insp, characteristic=self.thk, value=10, gauge=g)
+
+    def test_qualification_enforced_once_registered(self):
+        self.inspect('10.0')  # 자격 기록이 없으면 누구나 판정
+        Qualification.objects.create(user=self.lead, inspection_type=InspectionSpec.INCOMING,
+                                     valid_until=timezone.localdate() + datetime.timedelta(days=30), basis='교육')
+        insp = Inspection.objects.create(lot=self.raw, spec=self.spec)
+        Measurement.objects.create(inspection=insp, characteristic=self.thk, value=10)
+        Measurement.objects.create(inspection=insp, characteristic=self.look, ok=True)
+        with self.assertRaises(ValidationError):
+            insp.finalize()  # 검사자 미지정
+        insp.inspector = self.lead
+        insp.save()
+        insp.finalize()
+        self.assertEqual(insp.result, Inspection.PASS)
+
+    # 관리계획서 · 4M
+    def test_control_plan_makes_specs(self):
+        plan = ControlPlan.objects.create(item=self.cell_item)
+        ControlPlanLine.objects.create(plan=plan, characteristic='용량', special='CC', lsl=95, usl=105,
+                                       inspection_type=InspectionSpec.OUTGOING, severity=9, occurrence=4, detection=3)
+        ControlPlanLine.objects.create(plan=plan, characteristic='온도', inspection_type='')
+        self.client.force_login(self.lead)
+        url = '/admin/qms/controlplan/'
+        self.client.post(url, {'action': 'make_specs', '_selected_action': [plan.pk]})
+        self.assertFalse(InspectionSpec.objects.filter(item=self.cell_item).exists())  # 미승인은 거부
+        approve(plan, self.lead)
+        self.assertEqual(plan.lines.first().action_priority, 'H')
+        self.client.post(url, {'action': 'make_specs', '_selected_action': [plan.pk]})
+        spec = InspectionSpec.objects.get(item=self.cell_item)
+        self.assertEqual(spec.inspection_type, InspectionSpec.OUTGOING)
+        self.assertEqual([(c.name, c.special) for c in spec.characteristics.all()], [('용량', 'CC')])
+        self.assertFalse(spec.is_approved)
+
+    def test_4m_change_blocks_shipment_until_first_article(self):
+        cr = ChangeRequest.objects.create(number='4M-1', item=self.raw_item, category='MATERIAL', description='원료 협력사 변경',
+                                          effective_at=timezone.now() - datetime.timedelta(hours=1))
+        self.client.force_login(self.lead)
+        self.client.post(f'/approve/qms/changerequest/{cr.pk}/', {'password': 'pw-lead-123'})
+        cr.refresh_from_db()
+        self.assertFalse(cr.is_approved)  # 고객 승인번호 없음
+        cr.customer_approval_ref = 'CA-9'
+        cr.save()
+        self.client.post(f'/approve/qms/changerequest/{cr.pk}/', {'password': 'pw-lead-123'})
+        cr.refresh_from_db()
+        self.assertTrue(cr.is_approved)
+        with self.assertRaises(ValidationError):
+            Shipment.objects.create(lot=self.raw, customer='A사', qty=1)
+        self.inspect('10.0')  # 초품 합격
+        Shipment.objects.create(lot=self.raw, customer='A사', qty=1)
 
     # 엑셀 가져오기
     def test_import_work_orders_and_rollback(self):

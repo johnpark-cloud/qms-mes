@@ -5,12 +5,13 @@
 {% if error %}
   <p class="errornote">{{ error }}</p>
 {% else %}
-<p>부분군 크기 n={{ res.n }} · 부분군 {{ res.points|length }}개 ·
-   X̄̄={{ res.limits.cl|floatformat:4 }} · R̄={{ res.limits.r_cl|floatformat:4 }} ·
-   σ(R̄/d2)={{ res.sigma|floatformat:4 }} ·
-   <strong>Cpk={% if res.cpk is None %}-{% else %}{{ res.cpk|floatformat:2 }}{% endif %}</strong></p>
+<p><strong>{{ res.kind }} 관리도</strong> · 부분군 크기 n={{ res.n }} · 부분군 {{ res.points|length }}개 (최근 100개까지) ·
+   CL={{ res.limits.cl|floatformat:4 }} · {% if res.n == 1 %}MR̄{% else %}R̄{% endif %}={{ res.limits.r_cl|floatformat:4 }} ·
+   σ={{ res.sigma|floatformat:4 }} ·
+   <strong>Cpk={% if res.cpk is None %}-{% else %}{{ res.cpk|floatformat:2 }}{% endif %}</strong>
+   {% if char.special %} · 특별특성 {{ char.special }}: 경보 시 부적합 자동 등록{% endif %}</p>
 
-<svg viewBox="0 0 {{ W }} {{ H }}" width="100%" style="max-width:{{ W }}px" role="img" aria-label="X-bar 관리도">
+<svg viewBox="0 0 {{ W }} {{ H }}" width="100%" style="max-width:{{ W }}px" role="img" aria-label="{{ res.kind }} 관리도">
   {% for name, ly in lines %}
     <line x1="30" x2="{{ W|add:'-30' }}" y1="{{ ly }}" y2="{{ ly }}" stroke="{% if name == 'CL' %}#417690{% else %}#ba2121{% endif %}" stroke-dasharray="{% if name == 'CL' %}0{% else %}4 4{% endif %}"/>
     <text x="{{ W|add:'-28' }}" y="{{ ly }}" font-size="11" fill="currentColor">{{ name }}</text>
@@ -20,14 +21,14 @@
 </svg>
 
 <table>
-  <thead><tr><th>#</th><th>검사(LOT)</th><th>X̄</th><th>R</th><th>경보</th></tr></thead>
+  <thead><tr><th>#</th><th>검사(LOT)</th><th>{% if res.n == 1 %}X{% else %}X̄{% endif %}</th><th>{% if res.n == 1 %}MR{% else %}R{% endif %}</th><th>경보</th></tr></thead>
   <tbody>
   {% for p in res.points %}
     <tr>
       <td>{{ forloop.counter }}</td>
       <td>{{ p.label.lot }} · {{ p.label.inspected_at|date:"Y-m-d H:i" }}</td>
       <td>{{ p.xbar|floatformat:4 }}</td>
-      <td>{{ p.r|floatformat:4 }}</td>
+      <td>{% if p.r is None %}-{% else %}{{ p.r|floatformat:4 }}{% endif %}</td>
       <td>{% if p.alarms %}<strong style="color:#ba2121">{{ p.alarms|join:", " }}</strong> · <a href="{{ p.nc_url }}">부적합 등록</a>{% endif %}</td>
     </tr>
   {% endfor %}

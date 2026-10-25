@@ -2,7 +2,7 @@ from django import forms
 from django.apps import apps
 from django.contrib import messages
 from django.contrib.admin.views.decorators import staff_member_required
-from django.core.exceptions import PermissionDenied
+from django.core.exceptions import PermissionDenied, ValidationError
 from django.http import Http404
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
@@ -44,12 +44,17 @@ def approve(request, app_label, model_name, pk):
         return redirect(back)
     error = None
     if request.method == 'POST':
-        if request.user.check_password(request.POST.get('password', '')):
+        if not request.user.check_password(request.POST.get('password', '')):
+            error = '비밀번호가 맞지 않습니다.'
+        else:
             obj.approved_by, obj.approved_at = request.user, timezone.now()
-            obj.save()
-            messages.success(request, f'{obj} 승인 완료')
-            return redirect(back)
-        error = '비밀번호가 맞지 않습니다.'
+            try:
+                obj.save()
+            except ValidationError as e:  # 예: 고객 승인번호 없는 4M 변경
+                error = ' '.join(e.messages)
+            else:
+                messages.success(request, f'{obj} 승인 완료')
+                return redirect(back)
     return render(request, 'core/approve.html', {'obj': obj, 'error': error, 'back': back, 'title': '승인 서명'})
 
 

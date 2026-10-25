@@ -11,7 +11,8 @@ from django.utils import timezone
 from core.models import Hold, Nonconformance, is_approver
 
 from . import spc
-from .models import Characteristic, CustomerClaim, DocumentRevision, ExcelTemplate, InspectionSpec, Measurement, Scar
+from .models import (ChangeRequest, Characteristic, ControlPlan, CustomerClaim, DocumentRevision, ExcelTemplate, Gauge,
+                     InspectionSpec, Scar)
 
 
 @staff_member_required
@@ -46,24 +47,43 @@ def todo(request):
         'held_lots': Hold.objects.filter(released_at__isnull=True).values('lot').distinct().count(),
         'pending_specs': InspectionSpec.objects.filter(approved_at__isnull=True) if is_approver(request.user) else [],
         'pending_docs': DocumentRevision.objects.filter(approved_at__isnull=True) if is_approver(request.user) else [],
+        'pending_plans': ControlPlan.objects.filter(approved_at__isnull=True) if is_approver(request.user) else [],
+        'pending_changes': ChangeRequest.objects.filter(approved_at__isnull=True) if is_approver(request.user) else [],
+        'today': timezone.localdate(),
+        'gauges': [g for g in Gauge.objects.filter(active=True)
+                   if g.next_due <= timezone.localdate() + datetime.timedelta(days=14)],
+        'first_articles': [c for c in ChangeRequest.objects.filter(approved_at__isnull=False).select_related('item')
+                           if not c.first_article],
+        'spc_alarms': _recent_spc_alarms(now),
     }
     return render(request, 'qms/todo.html', ctx)
+
+
+def _recent_spc_alarms(now):
+    """최근 7일 측정된 계량형 항목 중 마지막 점에 경보가 있는 것 (특별특성은 이미 부적합이 자동 등록됨)."""
+    seen, out = set(), []
+    recent = (Characteristic.objects.filter(measurements__inspection__inspected_at__gte=now - datetime.timedelta(days=7))
+              .select_related('spec__item').distinct())
+    for c in recent:
+        key = (c.spec.item_id, c.spec.inspection_type, c.name)
+        if key in seen or not c.is_variable:
+            continue
+        seen.add(key)
+        try:
+            last = spc.control_chart(c.spc_series(), c.lsl, c.usl)['points'][-1]
+        except ValueError:
+            continue
+        if last['alarms']:
+            out.append({'char': c, 'lot': last['label'].lot, 'alarms': last['alarms']})
+    return out
 
 
 @staff_member_required
 def spc_view(request, char_id):
     char = get_object_or_404(Characteristic.objects.select_related('spec__item'), pk=char_id)
-    # 같은 품번·검사구분·항목명이면 기준 개정이 달라도 같은 특성으로 본다
-    ms = (Measurement.objects
-          .filter(characteristic__spec__item=char.spec.item, characteristic__spec__inspection_type=char.spec.inspection_type,
-                  characteristic__name=char.name, value__isnull=False, inspection__result__in=['PASS', 'FAIL'])
-          .select_related('inspection__lot').order_by('inspection__inspected_at', 'pk'))
-    groups = {}
-    for m in ms:
-        groups.setdefault(m.inspection, []).append(m.value)
     ctx = {'title': f'SPC · {char.spec.item.code} {char.name}', 'char': char}
     try:
-        res = spc.xbar_r([(insp, v) for insp, v in groups.items()], char.lsl, char.usl)
+        res = spc.control_chart(char.spc_series(limit=100), char.lsl, char.usl)
     except ValueError as e:
         ctx['error'] = str(e)
         return render(request, 'qms/spc.html', ctx)
