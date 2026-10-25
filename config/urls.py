@@ -1,8 +1,9 @@
 from django.conf import settings
-from django.conf.urls.static import static
 from django.contrib import admin
-from django.urls import path
+from django.contrib.admin.views.decorators import staff_member_required
+from django.urls import path, re_path
 from django.views.generic import RedirectView
+from django.views.static import serve
 
 from core import views as core_views
 from qms import views as qms_views
@@ -17,4 +18,6 @@ urlpatterns = [
     path('print/<str:app_label>/<str:model_name>/<int:pk>/', core_views.print_view, name='print'),
     path('report/<int:template_id>/<int:pk>/', qms_views.excel_report, name='excel_report'),
     path('spc/<int:char_id>/', qms_views.spc_view, name='spc'),
-] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)  # DEBUG일 때만 동작
+    # 문서 원본은 로그인한 사용자에게만 (DEBUG=0 사내망 서비스에서도 동작)
+    re_path(r'^media/(?P<path>.*)$', staff_member_required(serve), {'document_root': settings.MEDIA_ROOT}),
+]

@@ -1,14 +1,15 @@
 import datetime
+import sqlite3
 import tempfile
 from decimal import Decimal
-from io import BytesIO
+from io import BytesIO, StringIO
 from pathlib import Path
 
 from django.contrib.auth.models import Group, User
 from django.contrib.contenttypes.models import ContentType
 from django.core.exceptions import ValidationError
 from django.core.files.uploadedfile import SimpleUploadedFile
-from django.core.management import call_command
+from django.core.management import CommandError, call_command
 from django.test import TestCase, override_settings
 from django.utils import timezone
 from openpyxl import Workbook, load_workbook
@@ -170,6 +171,33 @@ class QmsTest(TestCase):
         made = [p.name for p in Path(dest).iterdir()]
         self.assertEqual(len(made), 1)  # 30일 지난 백업은 지워진다
         self.assertTrue((Path(dest) / made[0] / 'db.sqlite3').exists())
+
+    def test_restore_rehearsal_and_apply(self):
+        dest, live = Path(tempfile.mkdtemp()), Path(tempfile.mkdtemp())
+        from core.management.commands.restore import TABLES
+        with sqlite3.connect(live / 'db.sqlite3') as con:  # 점검 대상 테이블만 있는 작은 '운영 DB'
+            for t in TABLES:
+                con.execute(f'CREATE TABLE {t} (id INTEGER)')
+            con.execute('INSERT INTO core_lot VALUES (1), (2)')
+        con.close()
+        db = {'default': {'ENGINE': 'django.db.backends.sqlite3', 'NAME': live / 'db.sqlite3'}}
+        with override_settings(DATABASES=db, DATA_DIR=live, MEDIA_ROOT=live / 'media'):
+            call_command('backup', str(dest))
+            backup = next(dest.iterdir())
+            out = StringIO()
+            call_command('restore', str(backup), stdout=out)
+            self.assertIn('리허설 통과', out.getvalue())
+            self.assertIn('core_lot: 2건', out.getvalue())
+            call_command('restore', str(backup), '--apply', stdout=StringIO())
+        self.assertTrue(any(p.name.startswith('pre-restore-') for p in live.iterdir()))
+        (backup / 'db.sqlite3').write_bytes(b'not a db')
+        with self.assertRaises(CommandError):
+            call_command('restore', str(backup), stdout=StringIO())
+
+    def test_secret_key_not_in_code(self):
+        from django.conf import settings
+        self.assertNotIn('django-insecure', settings.SECRET_KEY)
+        self.assertNotIn('django-insecure', (Path(settings.BASE_DIR) / 'config' / 'settings.py').read_text('utf-8'))
 
     # 화면 · 승인 서명
     def test_approve_requires_password(self):

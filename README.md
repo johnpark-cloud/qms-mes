@@ -27,6 +27,18 @@ http://127.0.0.1:8000/ → **내 할 일** 화면이 열립니다.
 | 엑셀 일괄 등록 (품번, 작업지시) | /import/ |
 | SPC 관리도 | 검사기준 화면의 검사항목 옆 "관리도" 링크 |
 
+## 사내망 서비스 (팀 공유)
+
+혼자 쓸 때는 위의 `runserver`로 충분합니다. 팀원이 각자 PC에서 접속하게 하려면 아래처럼 띄웁니다(waitress, 무료).
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\serve.ps1 -HostName QA-PC01   # QA-PC01 = 이 PC 이름 또는 IP
+```
+
+- 팀원은 `http://QA-PC01:8000`으로 접속합니다. Windows 방화벽이 묻으면 "개인/도메인 네트워크 허용"을 선택합니다.
+- 서명·세션용 비밀키는 처음 실행할 때 `data/secret_key.txt`에 자동으로 만들어집니다(Git에 올라가지 않음). 이 파일을 지우면 모두 다시 로그인해야 합니다.
+- 첨부파일(문서 원본)은 로그인한 사용자만 내려받을 수 있습니다.
+
 ## 모듈
 
 - **MES**: 품번·BOM, 공정, 작업지시, LOT·계보(분할·병합), 출하
@@ -60,7 +72,16 @@ http://127.0.0.1:8000/ → **내 할 일** 화면이 열립니다.
 powershell -ExecutionPolicy Bypass -File scripts\register_backup_task.ps1 -Dest "\\NAS\quality\qms-backup"
 ```
 
-30일이 지난 백업은 자동으로 지워집니다. 복구는 백업 폴더의 `db.sqlite3`와 `media`를 `data/`에 다시 복사하면 됩니다.
+30일이 지난 백업은 자동으로 지워집니다.
+
+복구는 먼저 리허설로 백업이 쓸 만한지 확인한 뒤 실행합니다. 분기마다 리허설을 한 번 해 두면 "백업은 있는데 복구가 안 되는" 일을 막을 수 있습니다.
+
+```powershell
+.\.venv\Scripts\python manage.py restore "\\NAS\quality\qms-backup\qms-20261026-180000"           # 리허설: 무결성 검사 + 건수 확인
+.\.venv\Scripts\python manage.py restore "\\NAS\quality\qms-backup\qms-20261026-180000" --apply   # 실제 복원 (서버를 먼저 끄세요)
+```
+
+실제 복원 전의 데이터는 `data/pre-restore-날짜/`에 따로 보관됩니다.
 
 ## 측정 데이터 자동 수집 (3단계)
 

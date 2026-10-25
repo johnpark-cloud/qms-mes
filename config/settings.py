@@ -17,16 +17,28 @@ from pathlib import Path
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 
-# Quick-start development settings - unsuitable for production
-# See https://docs.djangoproject.com/en/6.1/howto/deployment/checklist/
+# Company data lives outside the code (PRD: never commit company data).
+DATA_DIR = Path(os.environ.get('QMS_DATA_DIR', BASE_DIR / 'data'))
+DATA_DIR.mkdir(exist_ok=True)
 
-# SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'django-insecure-z3qhs@+%1qp+e^av59z==k_k=cme^3om(nvg*vz3@**n%!!j+&'
 
-# SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+def _secret_key():
+    """환경변수가 없으면 설치마다 키를 만들어 data/에 둔다 (git에 남지 않음)."""
+    if os.environ.get('QMS_SECRET_KEY'):
+        return os.environ['QMS_SECRET_KEY']
+    path = DATA_DIR / 'secret_key.txt'
+    if not path.exists():
+        from django.core.management.utils import get_random_secret_key
+        path.write_text(get_random_secret_key(), encoding='utf-8')
+    return path.read_text(encoding='utf-8').strip()
 
-ALLOWED_HOSTS = []
+
+SECRET_KEY = _secret_key()
+
+# 사내망 서비스(scripts/serve.ps1)는 QMS_DEBUG=0으로 띄운다
+DEBUG = os.environ.get('QMS_DEBUG', '1') == '1'
+
+ALLOWED_HOSTS = [h for h in os.environ.get('QMS_ALLOWED_HOSTS', '').split(',') if h]
 
 
 # Application definition
@@ -45,6 +57,7 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
+    'whitenoise.middleware.WhiteNoiseMiddleware',  # DEBUG=0에서도 관리자 화면 CSS·JS 제공
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
@@ -76,10 +89,6 @@ WSGI_APPLICATION = 'config.wsgi.application'
 
 # Database
 # https://docs.djangoproject.com/en/6.1/ref/settings/#databases
-
-# Company data lives outside the code (PRD: never commit company data).
-DATA_DIR = Path(os.environ.get('QMS_DATA_DIR', BASE_DIR / 'data'))
-DATA_DIR.mkdir(exist_ok=True)
 
 DATABASES = {
     'default': {
@@ -137,6 +146,8 @@ USE_TZ = True
 # https://docs.djangoproject.com/en/6.1/howto/static-files/
 
 STATIC_URL = 'static/'
+STATIC_ROOT = DATA_DIR / 'static'  # collectstatic 결과 (scripts/serve.ps1)
+STATIC_ROOT.mkdir(exist_ok=True)
 
 
 # Email
