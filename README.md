@@ -13,6 +13,10 @@ python -m venv .venv
 
 ## 실행
 
+프로젝트 폴더의 **`서버시작.bat`을 더블클릭**하면 DB 갱신(migrate) 후 서버가 켜지고 브라우저가 열립니다. 끌 때는 그 검은 창에서 `Ctrl+C`를 누르거나 창을 닫습니다.
+
+터미널에서 직접 켤 때:
+
 ```powershell
 .\.venv\Scripts\python manage.py runserver
 ```
