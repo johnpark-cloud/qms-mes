@@ -171,7 +171,12 @@ class NonconformanceAdmin(ReportLinksMixin, SimpleHistoryAdmin):
 
     def get_readonly_fields(self, request, obj=None):
         locked = ['lot', 'description', 'detected_at', 'disposition', 'customer_approval_ref'] if obj and obj.closed_at else []
-        return locked + ['approved_by', 'closed_at', 'report_links', 'similar_cases']
+        return locked + ['approved_by', 'closed_at', 'report_links', 'similar_cases', 'capa']
+
+    @admin.display(description='CAPA')
+    def capa(self, obj):
+        from qms.admin import capa_links  # CAPA는 qms 앱 기능
+        return capa_links(obj, 'NC', f'{obj}: {obj.description}')
 
     @admin.display(description='유사 과거 사례')
     def similar_cases(self, obj):

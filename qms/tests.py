@@ -1,9 +1,12 @@
 import datetime
+import json
+import re
 import sqlite3
 import tempfile
 from decimal import Decimal
 from io import BytesIO, StringIO
 from pathlib import Path
+from unittest import mock
 
 from django.contrib.auth.models import Group, User
 from django.contrib.contenttypes.models import ContentType
@@ -19,8 +22,9 @@ from core.models import ImportProfile, Item, Lot, LotLink, Nonconformance, Shipm
 
 from . import kpi, spc
 from .management.commands.collect import ingest
-from .models import (ChangeRequest, Characteristic, ControlPlan, ControlPlanLine, CustomerClaim, ExcelTemplate, Gauge,
-                     Inspection, InspectionSpec, Measurement, Qualification, Scar)
+from .models import (AuditFinding, Capa, ChangeRequest, Characteristic, ControlPlan, ControlPlanLine, CustomerClaim,
+                     Document, ExcelTemplate, Gauge, Inspection, InspectionSpec, InternalAudit, Measurement, PpapSubmission,
+                     Qualification, Scar)
 from .similar import similar
 
 TMP_MEDIA = tempfile.mkdtemp()
@@ -351,6 +355,87 @@ class QmsTest(TestCase):
         self.assertEqual([p for _, p, _ in found], [nc])
         self.client.force_login(self.lead)
         self.assertContains(self.client.get(f'/admin/core/nonconformance/{new.pk}/change/'), '전해액 주입량 부족')
+
+    # CAPA · 내부심사 · PPAP · 알림
+    def test_capa_lifecycle_and_link_from_source(self):
+        scar = Scar.objects.create(number='S-1', supplier='B소재', lot=self.raw, request='치수 불량 개선',
+                                   response_due=timezone.localdate())
+        self.client.force_login(self.lead)
+        page = self.client.get(f'/admin/qms/scar/{scar.pk}/change/').content.decode()
+        self.assertIn('CAPA 만들기', page)
+        add_url = re.search(r'href="(/admin/qms/capa/add/\?[^"]+)"', page).group(1).replace('&amp;', '&')
+        self.assertContains(self.client.get(add_url), 'S-1 B소재')  # 제목이 미리 채워짐
+        capa = Capa.objects.create(title='치수', source='SCAR', source_type=ContentType.objects.get_for_model(Scar),
+                                   source_id=scar.pk, action='금형 보정', owner=self.lead,
+                                   due_date=timezone.localdate() - datetime.timedelta(days=1))
+        self.assertEqual(capa.status, '기한 초과')
+        self.assertIn(capa.number, self.client.get(f'/admin/qms/scar/{scar.pk}/change/').content.decode())
+        capa.closed_at = timezone.localdate()
+        with self.assertRaises(ValidationError):  # 유효성 확인 없이 종결
+            capa.save()
+        capa.closed_at, capa.done_at = None, timezone.localdate()
+        capa.save()
+        self.assertEqual(capa.status, '유효성 확인 대기')
+        capa.effective, capa.verified_at, capa.verified_by = True, timezone.localdate(), self.lead
+        capa.closed_at = timezone.localdate()
+        capa.save()
+        self.assertEqual(capa.status, '종결')
+
+    def test_internal_audit_needs_capa_for_major_minor(self):
+        audit = InternalAudit.objects.create(name='공정심사', planned_date=timezone.localdate(), auditor='김심사',
+                                             performed_at=timezone.localdate())
+        finding = AuditFinding.objects.create(audit=audit, clause='8.5.1', grade='MINOR', description='작업표준 미게시')
+        AuditFinding.objects.create(audit=audit, clause='7.5', grade='OBS', description='관찰')
+        audit.closed_at = timezone.localdate()
+        with self.assertRaises(ValidationError):
+            audit.save()
+        Capa.objects.create(title='표준 게시', source='AUDIT', source_type=ContentType.objects.get_for_model(AuditFinding),
+                            source_id=finding.pk, action='게시', owner=self.lead, due_date=timezone.localdate())
+        finding.refresh_from_db()
+        self.assertIsNotNone(finding.capa)  # 지적에서 만든 CAPA가 자동 연결
+        audit.save()
+
+    def test_ppap_elements_and_psw_signature(self):
+        plan = ControlPlan.objects.create(item=self.raw_item)
+        approve(plan, self.lead)
+        ppap = PpapSubmission.objects.create(item=self.raw_item, customer='A사', level=3, reason='신규')
+        self.assertEqual(ppap.elements.count(), 18)
+        self.assertEqual(ppap.elements.get(number=7).record, plan)  # 관리계획서 자동 연결
+        self.assertEqual(ppap.elements.get(number=15).requirement, 'R')
+        self.client.force_login(self.lead)
+        url = f'/approve/qms/ppapsubmission/{ppap.pk}/'
+        self.assertContains(self.client.post(url, {'password': 'pw-lead-123'}), '증적이 없습니다')
+        doc = Document.objects.create(number='D-1', title='PPAP 묶음')
+        for e in ppap.missing_elements():
+            e.document = doc
+            e.save()
+        self.client.post(url, {'password': 'pw-lead-123'})
+        ppap.refresh_from_db()
+        self.assertTrue(ppap.is_approved)
+        ppap.submitted_at = timezone.localdate()
+        ppap.save()  # 승인 후에도 제출일은 기록
+        ppap.level = 2
+        with self.assertRaises(ValidationError):
+            ppap.save()
+        self.assertContains(self.client.get(f'/print/qms/ppapsubmission/{ppap.pk}/'), '부품 제출 보증서')
+
+    @override_settings(MAILERS={'default': {'BACKEND': 'django.core.mail.backends.locmem.EmailBackend'}})
+    def test_notify(self):
+        from django.core import mail
+        out = StringIO()
+        with mock.patch.dict('os.environ', {'QMS_NOTIFY_EMAILS': 'qa@example.com', 'QMS_TEAMS_WEBHOOK': ''}):
+            call_command('notify', stdout=out)
+        self.assertIn('보낼 항목이 없습니다', out.getvalue())
+        self.assertEqual(len(mail.outbox), 0)
+        Gauge.objects.create(number='MC-01', name='마이크로미터', last_calibrated=timezone.localdate() - datetime.timedelta(days=400))
+        with mock.patch.dict('os.environ', {'QMS_NOTIFY_EMAILS': 'qa@example.com', 'QMS_TEAMS_WEBHOOK': 'https://hook'}), \
+                mock.patch('urllib.request.urlopen') as urlopen:
+            urlopen.return_value.__enter__.return_value.status = 202
+            call_command('notify', stdout=StringIO())
+        self.assertEqual(mail.outbox[0].to, ['qa@example.com'])
+        self.assertIn('MC-01', mail.outbox[0].body)
+        payload = json.loads(urlopen.call_args[0][0].data)
+        self.assertIn('MC-01', json.dumps(payload, ensure_ascii=False))
 
     # 검사원 입력 화면
     def test_inspector_screen_flow(self):

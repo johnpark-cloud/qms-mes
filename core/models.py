@@ -335,6 +335,10 @@ class Shipment(models.Model):
 
     COA_HEADER = ['검사항목', '특별특성', 'LSL', 'USL', '단위', '측정값', '판정']
 
+    def print_table(self):
+        """인쇄 화면(core.views.print_view)에 붙는 표 = 출하성적서."""
+        return '출하성적서', self.COA_HEADER, self.coa_rows()
+
     def coa_rows(self):
         """출하성적서 표: 이 LOT의 최신 합격 출하검사(없으면 공정검사) 항목별 결과. 엑셀 매핑 예: {"A10": "coa_rows"}"""
         for itype in ('OUTGOING', 'PROCESS'):

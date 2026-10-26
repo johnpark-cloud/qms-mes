@@ -1,4 +1,3 @@
-import datetime
 from decimal import Decimal, InvalidOperation
 from urllib.parse import urlencode
 
@@ -11,11 +10,11 @@ from django.urls import reverse
 from django.utils import timezone
 from django.utils.html import format_html
 
-from core.models import Hold, Lot, Nonconformance, is_approver
+from core.models import Lot, is_approver
 
 from . import kpi, spc
-from .models import (ChangeRequest, Characteristic, ControlPlan, CustomerClaim, DocumentRevision, ExcelTemplate, Gauge,
-                     Inspection, InspectionSpec, Measurement, Scar)
+from .due import due_items
+from .models import Characteristic, ExcelTemplate, Gauge, Inspection, InspectionSpec, Measurement
 
 
 @staff_member_required
@@ -32,53 +31,11 @@ def excel_report(request, template_id, pk):
 
 @staff_member_required
 def todo(request):
-    """내 할 일: 기한 임박·초과 8D와 SCAR, 승인 대기, 열린 부적합, 보류 LOT."""
-    now = timezone.now()
-    soon = now + datetime.timedelta(days=2)
-    claims = []
-    for c in CustomerClaim.objects.filter(closed_at__isnull=True).select_related('lot'):
-        c.due_label, c.due = ('대책', c.corrective_due) if c.d3_containment else ('봉쇄', c.containment_due)
-        if c.due <= soon:
-            c.overdue = c.due < now
-            claims.append(c)
-    ctx = {
-        'title': '내 할 일',
-        'now': now,
-        'claims': claims,
-        'scars': Scar.objects.filter(responded_at__isnull=True, response_due__lte=soon.date()),
-        'open_ncs': Nonconformance.objects.filter(closed_at__isnull=True).select_related('lot'),
-        'held_lots': Hold.objects.filter(released_at__isnull=True).values('lot').distinct().count(),
-        'pending_specs': InspectionSpec.objects.filter(approved_at__isnull=True) if is_approver(request.user) else [],
-        'pending_docs': DocumentRevision.objects.filter(approved_at__isnull=True) if is_approver(request.user) else [],
-        'pending_plans': ControlPlan.objects.filter(approved_at__isnull=True) if is_approver(request.user) else [],
-        'pending_changes': ChangeRequest.objects.filter(approved_at__isnull=True) if is_approver(request.user) else [],
-        'today': timezone.localdate(),
-        'gauges': [g for g in Gauge.objects.filter(active=True)
-                   if g.next_due <= timezone.localdate() + datetime.timedelta(days=14)],
-        'first_articles': [c for c in ChangeRequest.objects.filter(approved_at__isnull=False).select_related('item')
-                           if not c.first_article],
-        'spc_alarms': _recent_spc_alarms(now),
-    }
-    return render(request, 'qms/todo.html', ctx)
-
-
-def _recent_spc_alarms(now):
-    """최근 7일 측정된 계량형 항목 중 마지막 점에 경보가 있는 것 (특별특성은 이미 부적합이 자동 등록됨)."""
-    seen, out = set(), []
-    recent = (Characteristic.objects.filter(measurements__inspection__inspected_at__gte=now - datetime.timedelta(days=7))
-              .select_related('spec__item').distinct())
-    for c in recent:
-        key = (c.spec.item_id, c.spec.inspection_type, c.name)
-        if key in seen or not c.is_variable:
-            continue
-        seen.add(key)
-        try:
-            last = spc.control_chart(c.spc_series(), c.lsl, c.usl)['points'][-1]
-        except ValueError:
-            continue
-        if last['alarms']:
-            out.append({'char': c, 'lot': last['label'].lot, 'alarms': last['alarms']})
-    return out
+    """내 할 일: 기한 임박·초과 항목, 승인 대기, 열린 부적합, 보류 LOT (계산은 qms.due)."""
+    d = due_items(approver=is_approver(request.user))
+    d['claims_overdue'] = sum(c.overdue for c in d['claims'])
+    d['capas_late'] = sum(c.status == '기한 초과' for c in d['capas'])
+    return render(request, 'qms/todo.html', {'title': '내 할 일', **d})
 
 
 def _months(request):

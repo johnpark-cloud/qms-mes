@@ -1,17 +1,20 @@
+from urllib.parse import urlencode
+
 from django.contrib import admin, messages
+from django.contrib.contenttypes.models import ContentType
 from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.db.models import Max
 from django.urls import reverse
 from django.utils import timezone
-from django.utils.html import format_html
+from django.utils.html import format_html, format_html_join
 from simple_history.admin import SimpleHistoryAdmin
 
 from core.admin import ApprovalAdminMixin, ReportLinksMixin
 
-from .models import (AuditChecklist, AuditItem, ChangeRequest, Characteristic, ControlPlan, ControlPlanLine,
-                     CustomerClaim, CustomerRule, Document, DocumentRevision, Evidence, ExcelTemplate, Gauge, Inspection,
-                     InspectionSpec, Measurement, Qualification, Scar)
+from .models import (AuditChecklist, AuditFinding, AuditItem, Capa, ChangeRequest, Characteristic, ControlPlan,
+                     ControlPlanLine, CustomerClaim, CustomerRule, Document, DocumentRevision, Evidence, ExcelTemplate, Gauge,
+                     Inspection, InspectionSpec, InternalAudit, Measurement, PpapElement, PpapSubmission, Qualification, Scar)
 from .similar import similar_html
 
 
@@ -206,6 +209,109 @@ class ChangeRequestAdmin(ApprovalAdminMixin, SimpleHistoryAdmin):
         return super().get_readonly_fields(request, obj) + ['first_article_state']
 
 
+def capa_links(obj, source, title):
+    """출처 기록 화면에 연결된 CAPA 목록과 'CAPA 만들기' 버튼."""
+    if not obj.pk:
+        return '저장 후 만들 수 있습니다.'
+    ct = ContentType.objects.get_for_model(obj)
+    linked = format_html_join(' · ', '<a href="{}">{} [{}]</a>', (
+        (reverse('admin:qms_capa_change', args=[c.pk]), c.number, c.status)
+        for c in Capa.objects.filter(source_type=ct, source_id=obj.pk)))
+    url = reverse('admin:qms_capa_add') + '?' + urlencode(
+        {'source': source, 'source_type': ct.pk, 'source_id': obj.pk, 'title': str(title)[:200]})
+    return format_html('{} <a class="button" href="{}">CAPA 만들기</a>', linked, url)
+
+
+@admin.register(Capa)
+class CapaAdmin(SimpleHistoryAdmin):
+    list_display = ['number', 'title', 'source', 'owner', 'due_date', 'status']
+    list_filter = ['source']
+    search_fields = ['number', 'title', 'root_cause', 'action']
+    readonly_fields = ['status', 'source_link']
+    fieldsets = [
+        (None, {'fields': ['number', 'title', 'source', 'source_type', 'source_id', 'source_link', 'status']}),
+        ('조치', {'fields': ['root_cause', 'action', 'owner', 'due_date', 'done_at']}),
+        ('유효성 확인 · 종결', {'fields': ['effective', 'verified_at', 'verified_by', 'verification_note', 'closed_at']}),
+    ]
+
+    @admin.display(description='출처 기록')
+    def source_link(self, obj):
+        rec = obj.source_record if obj.pk else None
+        if not rec:
+            return '-'
+        meta = rec._meta
+        return format_html('<a href="{}">{}</a>', reverse(f'admin:{meta.app_label}_{meta.model_name}_change', args=[rec.pk]), rec)
+
+    def get_changeform_initial_data(self, request):
+        return {**super().get_changeform_initial_data(request), 'owner': request.user.pk}
+
+
+class AuditFindingInline(admin.TabularInline):
+    model = AuditFinding
+    extra = 1
+    fields = ['clause', 'grade', 'description', 'capa', 'capa_link']
+    readonly_fields = ['capa_link']
+    autocomplete_fields = ['capa']
+
+    @admin.display(description='CAPA 만들기')
+    def capa_link(self, obj):
+        if obj.capa_id or obj.grade not in AuditFinding.NEEDS_CAPA:
+            return '-'
+        return capa_links(obj, 'AUDIT', f'{obj.audit.name} {obj.clause}: {obj.description}')
+
+
+@admin.register(InternalAudit)
+class InternalAuditAdmin(SimpleHistoryAdmin):
+    list_display = ['name', 'planned_date', 'auditor', 'auditee', 'performed_at', 'open_findings', 'closed_at']
+    search_fields = ['name', 'auditee']
+    inlines = [AuditFindingInline]
+
+    @admin.display(description='CAPA 미연결 지적')
+    def open_findings(self, obj):
+        n = obj.findings.filter(grade__in=AuditFinding.NEEDS_CAPA, capa__isnull=True).count()
+        return format_html('<strong style="color:var(--error-fg)">{}</strong>', n) if n else 0
+
+
+class PpapElementInline(admin.TabularInline):
+    model = PpapElement
+    extra = 0
+    fields = ['number', 'name', 'requirement', 'document', 'record_type', 'record_id', 'evidence', 'note']
+    readonly_fields = ['number', 'name', 'evidence']
+    autocomplete_fields = ['document']
+    can_delete = False
+
+    @admin.display(description='증적')
+    def evidence(self, obj):
+        if obj.record:
+            meta = obj.record._meta
+            return format_html('<a href="{}" target="_blank">{}</a>',
+                               reverse(f'admin:{meta.app_label}_{meta.model_name}_change', args=[obj.record.pk]), obj.record)
+        if obj.has_evidence or obj.requirement != 'S' or obj.number == 18:
+            return '-'
+        return format_html('<strong style="color:var(--error-fg)">필요</strong>')
+
+    def has_add_permission(self, request, obj=None):
+        return False  # 18요소는 제출을 만들 때 자동 생성된다
+
+    def has_change_permission(self, request, obj=None):
+        return not (obj and obj.is_approved) and super().has_change_permission(request, obj)
+
+
+@admin.register(PpapSubmission)
+class PpapSubmissionAdmin(ApprovalAdminMixin, ReportLinksMixin, SimpleHistoryAdmin):
+    list_display = ['item', 'customer', 'level', 'reason', 'due_date', 'is_approved', 'submitted_at', 'customer_approved_at']
+    search_fields = ['item__code', 'customer']
+    autocomplete_fields = ['item']
+    inlines = [PpapElementInline]
+
+    def get_readonly_fields(self, request, obj=None):
+        fields = super().get_readonly_fields(request, obj) + ['report_links']
+        if obj and not obj.is_approved:
+            fields.append('level')  # 요소가 이미 수준에 맞춰 만들어졌다
+        # 승인 후에도 제출일·고객 승인일은 기록한다
+        return [f for f in fields if f not in PpapSubmission.AFTER_APPROVAL]
+
+
 @admin.register(CustomerRule)
 class CustomerRuleAdmin(SimpleHistoryAdmin):
     list_display = ['customer', 'containment_hours', 'corrective_days']
@@ -217,11 +323,11 @@ class CustomerClaimAdmin(ReportLinksMixin, SimpleHistoryAdmin):
     search_fields = ['number', 'customer', 'lot__number']
     autocomplete_fields = ['lot']
     readonly_fields = ['nonconformance', 'trace_link', 'containment_due', 'corrective_due', 'current_step', 'report_links',
-                       'similar_cases']
+                       'similar_cases', 'capa']
     fieldsets = [
         (None, {'fields': ['number', 'customer', 'lot', 'description', 'defect_qty', 'received_at', 'nonconformance',
                            'trace_link', 'containment_due', 'corrective_due', 'current_step', 'report_links']}),
-        ('재발 방지', {'fields': ['similar_cases']}),
+        ('재발 방지', {'fields': ['similar_cases', 'capa']}),
         ('8D', {'fields': [f for f, _ in CustomerClaim.STEPS]}),
         ('종결', {'fields': ['closed_at']}),
     ]
@@ -229,6 +335,10 @@ class CustomerClaimAdmin(ReportLinksMixin, SimpleHistoryAdmin):
     @admin.display(description='유사 과거 사례')
     def similar_cases(self, obj):
         return similar_html(obj) if obj.pk else '저장 후 표시됩니다.'
+
+    @admin.display(description='CAPA')
+    def capa(self, obj):
+        return capa_links(obj, '8D', f'{obj}: {obj.description}')
 
     @admin.display(description='영향 범위')
     def trace_link(self, obj):
@@ -242,7 +352,11 @@ class ScarAdmin(ReportLinksMixin, SimpleHistoryAdmin):
     list_display = ['number', 'supplier', 'lot', 'issued_at', 'response_due', 'responded_at', 'closed_at']
     search_fields = ['number', 'supplier', 'lot__number']
     autocomplete_fields = ['lot', 'nonconformance']
-    readonly_fields = ['report_links']
+    readonly_fields = ['report_links', 'capa']
+
+    @admin.display(description='CAPA')
+    def capa(self, obj):
+        return capa_links(obj, 'SCAR', f'{obj}: {obj.request}')
 
 
 class RevisionInline(admin.TabularInline):

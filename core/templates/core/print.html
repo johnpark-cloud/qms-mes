@@ -17,14 +17,14 @@
 <table>
   {% for label, value in rows %}<tr><th>{{ label }}</th><td>{{ value }}</td></tr>{% endfor %}
 </table>
-{% if coa_header %}
-<h2>검사 성적</h2>
-{% if coa %}
+{% if table_header %}
+<h2>상세</h2>
+{% if table %}
 <table>
-  <tr>{% for h in coa_header %}<th style="width:auto">{{ h }}</th>{% endfor %}</tr>
-  {% for row in coa %}<tr>{% for v in row %}<td>{{ v|default_if_none:"-" }}</td>{% endfor %}</tr>{% endfor %}
+  <tr>{% for h in table_header %}<th style="width:auto">{{ h }}</th>{% endfor %}</tr>
+  {% for row in table %}<tr>{% for v in row %}<td>{{ v|default_if_none:"-" }}</td>{% endfor %}</tr>{% endfor %}
 </table>
-{% else %}<p>이 LOT에 합격한 출하·공정검사가 없습니다.</p>{% endif %}
+{% else %}<p>표시할 기록이 없습니다 (출하라면 이 LOT에 합격한 출하·공정검사가 없습니다).</p>{% endif %}
 {% endif %}
 <p>출력 일시: {% now "Y-m-d H:i" %} · 출력자: {{ request.user.username }}</p>
 </body>

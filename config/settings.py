@@ -158,3 +158,15 @@ MAILERS = {
         'BACKEND': 'django.core.mail.backends.console.EmailBackend',
     },
 }
+if os.environ.get('QMS_SMTP_HOST'):  # 기한 알림(manage.py notify)용 회사 메일 서버
+    MAILERS['default'] = {
+        'BACKEND': 'django.core.mail.backends.smtp.EmailBackend',
+        'OPTIONS': {
+            'host': os.environ['QMS_SMTP_HOST'],
+            'port': int(os.environ.get('QMS_SMTP_PORT', '587')),
+            'username': os.environ.get('QMS_SMTP_USER', ''),
+            'password': os.environ.get('QMS_SMTP_PASSWORD', ''),
+            'use_tls': os.environ.get('QMS_SMTP_TLS', '1') == '1',
+        },
+    }
+DEFAULT_FROM_EMAIL = os.environ.get('QMS_MAIL_FROM', 'qms@localhost')

@@ -519,6 +519,213 @@ class Evidence(models.Model):
             raise ValidationError('문서나 기록 중 하나는 연결해야 합니다.')
 
 
+# ---------- CAPA · 내부심사 · PPAP ----------
+
+def _capa_number():
+    return timezone.localtime().strftime('CAPA-%y%m%d-%H%M%S')
+
+class Capa(models.Model):
+    """시정·예방조치. 8D·SCAR·심사 지적·SPC·부적합 어디서 나왔든 한 목록에서 유효성 확인까지 추적한다."""
+    SOURCES = [('8D', '고객 클레임(8D)'), ('SCAR', '협력사(SCAR)'), ('AUDIT', '내부심사'), ('SPC', 'SPC 경보'),
+               ('NC', '부적합'), ('OTHER', '기타')]
+
+    number = models.CharField('CAPA 번호', max_length=50, unique=True, default=_capa_number)
+    title = models.CharField('제목', max_length=200)
+    source = models.CharField('출처', max_length=10, choices=SOURCES)
+    source_type = models.ForeignKey(ContentType, on_delete=models.PROTECT, null=True, blank=True, verbose_name='출처 기록 종류')
+    source_id = models.PositiveIntegerField('출처 기록 ID', null=True, blank=True)
+    source_record = GenericForeignKey('source_type', 'source_id')
+    root_cause = models.TextField('근본 원인', blank=True)
+    action = models.TextField('조치 내용')
+    owner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name='capas', verbose_name='담당자')
+    due_date = models.DateField('기한')
+    done_at = models.DateField('조치 완료일', null=True, blank=True)
+    effective = models.BooleanField('유효성', null=True, blank=True, help_text='비움 = 미확인, 예 = 유효, 아니오 = 무효(새 CAPA 필요)')
+    verified_at = models.DateField('유효성 확인일', null=True, blank=True)
+    verified_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, null=True, blank=True,
+                                    related_name='+', verbose_name='확인자')
+    verification_note = models.TextField('확인 근거', blank=True, help_text='예: 3개월간 재발 0건, 관련 LOT 공정능력 Cpk 1.67')
+    closed_at = models.DateField('종결일', null=True, blank=True)
+    history = HistoricalRecords()
+
+    class Meta:
+        verbose_name = verbose_name_plural = 'CAPA(시정조치)'
+
+    def __str__(self):
+        return f'{self.number} {self.title}'
+
+    @property
+    def status(self):
+        if self.closed_at:
+            return '종결'
+        if self.done_at:
+            return '유효성 확인 대기'
+        return '기한 초과' if self.due_date and self.due_date < timezone.localdate() else '진행'
+
+    def clean(self):
+        if self.effective is not None and not (self.done_at and self.verified_at and self.verified_by_id):
+            raise ValidationError('유효성은 조치 완료 후 확인일·확인자와 함께 기록합니다.')
+        if self.closed_at and self.effective is not True:
+            raise ValidationError('유효성 확인 결과가 "유효"여야 종결할 수 있습니다. 무효면 새 CAPA를 만드세요.')
+
+    def save(self, *args, **kwargs):
+        self.clean()
+        super().save(*args, **kwargs)
+        if self.source_type_id and self.source_type.model == 'auditfinding':  # 심사 지적에서 만들면 지적에 연결
+            AuditFinding.objects.filter(pk=self.source_id, capa__isnull=True).update(capa=self)
+
+
+class InternalAudit(models.Model):
+    """내부심사 계획·실시 (IATF 9.2). 중·경부적합 지적은 CAPA가 연결돼야 종결된다."""
+    name = models.CharField('심사명', max_length=200, help_text='예: 2026 상반기 공정심사 - 조립')
+    scope = models.TextField('범위(공정·조항)', blank=True)
+    checklist = models.ForeignKey(AuditChecklist, on_delete=models.SET_NULL, null=True, blank=True, verbose_name='체크리스트')
+    planned_date = models.DateField('계획일')
+    auditor = models.CharField('심사원', max_length=100)
+    auditee = models.CharField('피심사 부서', max_length=100, blank=True)
+    performed_at = models.DateField('실시일', null=True, blank=True)
+    closed_at = models.DateField('종결일', null=True, blank=True)
+    history = HistoricalRecords()
+
+    class Meta:
+        verbose_name = verbose_name_plural = '내부심사'
+        ordering = ['-planned_date']
+
+    def __str__(self):
+        return f'{self.name} ({self.planned_date})'
+
+    def clean(self):
+        if self.closed_at:
+            if not self.performed_at:
+                raise ValidationError('실시일 없이 종결할 수 없습니다.')
+            if self.pk and self.findings.filter(grade__in=AuditFinding.NEEDS_CAPA, capa__isnull=True).exists():
+                raise ValidationError('CAPA가 연결되지 않은 중·경부적합 지적이 있어 종결할 수 없습니다.')
+
+    def save(self, *args, **kwargs):
+        self.clean()
+        super().save(*args, **kwargs)
+
+
+class AuditFinding(models.Model):
+    GRADES = [('MAJOR', '중부적합'), ('MINOR', '경부적합'), ('OBS', '관찰'), ('OFI', '개선기회')]
+    NEEDS_CAPA = ['MAJOR', 'MINOR']
+
+    audit = models.ForeignKey(InternalAudit, on_delete=models.CASCADE, related_name='findings', verbose_name='심사')
+    clause = models.CharField('조항', max_length=50, blank=True)
+    grade = models.CharField('등급', max_length=5, choices=GRADES)
+    description = models.TextField('지적 내용')
+    capa = models.ForeignKey(Capa, on_delete=models.PROTECT, null=True, blank=True, related_name='findings', verbose_name='CAPA')
+    history = HistoricalRecords()
+
+    class Meta:
+        verbose_name = verbose_name_plural = '심사 지적'
+
+    def __str__(self):
+        return f'{self.audit.name} {self.clause} {self.get_grade_display()}'
+
+
+# AIAG PPAP 4판 18요소와 제출 수준(1~5)별 요구: S 제출, R 보관, * 고객 지정
+# shortcut: 표준 표 그대로, 고객 특별 요구(CSR)가 다르면 요소 화면에서 '요구'를 직접 고친다
+PPAP_ELEMENTS = [
+    (1, '설계 기록', 'RSS*R'), (2, '설계 변경 문서', 'RSS*R'), (3, '고객 엔지니어링 승인', 'RRS*R'),
+    (4, 'DFMEA', 'RRS*R'), (5, '공정 흐름도', 'RRS*R'), (6, 'PFMEA', 'RRS*R'), (7, '관리계획서', 'RRS*R'),
+    (8, '측정시스템 분석(MSA)', 'RRS*R'), (9, '치수 측정 결과', 'RSS*R'), (10, '재료·성능 시험 결과', 'RSS*R'),
+    (11, '초기 공정 능력 연구', 'RRS*R'), (12, '공인 시험실 문서', 'RSS*R'), (13, '외관 승인 보고서(AAR)', 'SSS*R'),
+    (14, '샘플 제품', 'RSS*R'), (15, '마스터 샘플', 'RRR*R'), (16, '검사 보조구', 'RRR*R'),
+    (17, '고객 특별 요구사항', 'RRS*R'), (18, '부품 제출 보증서(PSW)', 'SSSSR'),
+]
+PSW = 18
+
+
+class PpapSubmission(Approvable):
+    """PPAP 제출. 승인 서명 = 내부 PSW 서명이며, '제출(S)' 요소에 증적이 모두 있어야 한다."""
+    item = models.ForeignKey(Item, on_delete=models.PROTECT, related_name='ppaps', verbose_name='품번')
+    customer = models.CharField('고객사', max_length=100)
+    level = models.PositiveSmallIntegerField('제출 수준', choices=[(i, f'Level {i}') for i in range(1, 6)], default=3)
+    reason = models.CharField('제출 사유', max_length=200, help_text='예: 신규 부품, 설계 변경, 4M 변경(공정 변경)')
+    due_date = models.DateField('제출 기한', null=True, blank=True)
+    submitted_at = models.DateField('제출일', null=True, blank=True)
+    customer_approved_at = models.DateField('고객 승인일', null=True, blank=True)
+    history = HistoricalRecords()
+
+    class Meta:
+        verbose_name = verbose_name_plural = 'PPAP 제출'
+
+    def __str__(self):
+        return f'PPAP {self.item.code} {self.customer} Level {self.level}'
+
+    def missing_elements(self):
+        return [e for e in self.elements.filter(requirement='S').exclude(number=PSW) if not e.has_evidence]
+
+    def clean(self):
+        if self.approved_at and self.pk and (missing := self.missing_elements()):
+            raise ValidationError(f'제출(S) 요소에 증적이 없습니다: {", ".join(f"{e.number}.{e.name}" for e in missing)}')
+
+    AFTER_APPROVAL = {'submitted_at', 'customer_approved_at'}  # PSW 서명 후에도 기록하는 칸
+
+    @transaction.atomic
+    def save(self, *args, **kwargs):
+        self.clean()
+        old = PpapSubmission.objects.filter(pk=self.pk, approved_at__isnull=False).first() if self.pk else None
+        if old:
+            changed = {f.name for f in self._meta.concrete_fields if getattr(old, f.attname) != getattr(self, f.attname)}
+            if changed - self.AFTER_APPROVAL:
+                raise ValidationError('PSW 승인 후에는 제출일·고객 승인일만 기록할 수 있습니다.')
+            return models.Model.save(self, *args, **kwargs)  # Approvable의 승인 후 잠금을 이 두 칸에만 풀어 준다
+        adding = self._state.adding
+        super().save(*args, **kwargs)
+        if adding:
+            self._create_elements()
+
+    def _create_elements(self):
+        plan = ControlPlan.objects.filter(item=self.item, approved_at__isnull=False).order_by('-revision').first()
+        dim = (Inspection.objects.filter(lot__item=self.item, result=Inspection.PASS, spec__inspection_type=InspectionSpec.OUTGOING)
+               .order_by('-inspected_at').first())
+        auto = {6: plan, 7: plan, 9: dim}  # 이미 있는 기록으로 채울 수 있는 요소
+        for number, name, req in PPAP_ELEMENTS:
+            rec = auto.get(number)
+            PpapElement.objects.create(
+                submission=self, number=number, name=name, requirement=req[self.level - 1],
+                record_type=ContentType.objects.get_for_model(rec) if rec else None, record_id=rec.pk if rec else None,
+                note='이 제출서 자체' if number == PSW else ('자동 연결' if rec else ''))
+
+    def print_table(self):
+        return ('부품 제출 보증서(PSW)', ['번호', '요소', '요구', '증적', '비고'],
+                [[e.number, e.name, e.get_requirement_display(), str(e.document or e.record or '') or None, e.note or None]
+                 for e in self.elements.order_by('number')])
+
+
+class PpapElement(models.Model):
+    REQUIREMENTS = [('S', '제출'), ('R', '보관'), ('*', '고객 지정')]
+
+    submission = models.ForeignKey(PpapSubmission, on_delete=models.CASCADE, related_name='elements', verbose_name='PPAP')
+    number = models.PositiveSmallIntegerField('번호')
+    name = models.CharField('요소', max_length=100)
+    requirement = models.CharField('요구', max_length=1, choices=REQUIREMENTS)
+    document = models.ForeignKey(Document, on_delete=models.PROTECT, null=True, blank=True, verbose_name='문서')
+    record_type = models.ForeignKey(ContentType, on_delete=models.PROTECT, null=True, blank=True, verbose_name='기록 종류')
+    record_id = models.PositiveIntegerField('기록 ID', null=True, blank=True)
+    record = GenericForeignKey('record_type', 'record_id')
+    note = models.CharField('비고', max_length=200, blank=True)
+    history = HistoricalRecords()
+
+    class Meta:
+        verbose_name = verbose_name_plural = 'PPAP 요소'
+        ordering = ['submission', 'number']
+
+    def __str__(self):
+        return f'{self.number}. {self.name}'
+
+    @property
+    def has_evidence(self):
+        return bool(self.document_id or (self.record_type_id and self.record_id))
+
+    def save(self, *args, **kwargs):
+        if self.submission.is_approved:
+            raise ValidationError('PSW 승인 후에는 요소를 수정할 수 없습니다.')
+        super().save(*args, **kwargs)
+
+
 # ---------- 보고서 ----------
 
 class ExcelTemplate(models.Model):

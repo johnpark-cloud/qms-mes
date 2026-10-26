@@ -84,6 +84,6 @@ def print_view(request, app_label, model_name, pk):
         value = getattr(obj, f'get_{f.name}_display', lambda: getattr(obj, f.name))()
         rows.append((f.verbose_name, '' if value is None else value))
     ctx = {'obj': obj, 'rows': rows, 'title': model._meta.verbose_name}
-    if hasattr(obj, 'coa_rows'):  # 출하 = 출하성적서
-        ctx.update(title='출하성적서', coa_header=obj.COA_HEADER, coa=obj.coa_rows())
+    if hasattr(obj, 'print_table'):  # 예: 출하 → 출하성적서, PPAP → PSW 요소표
+        ctx['title'], ctx['table_header'], ctx['table'] = obj.print_table()
     return render(request, 'core/print.html', ctx)
