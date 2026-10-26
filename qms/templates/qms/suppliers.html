@@ -1,23 +1,27 @@
 {% extends "admin/base_site.html" %}
 {% block content %}
-<h1>협력사 성적표 (최근 {{ months }}개월)</h1>
-<p><a href="{% url 'kpi' %}?months={{ months }}">품질 KPI</a> · <a href="{% url 'todo' %}">내 할 일</a></p>
-<table>
-  <thead><tr><th>협력사</th><th>입고 LOT</th><th>입고 수량</th><th>수입검사</th><th>수입검사 불합격률(%)</th><th>부적합 PPM</th><th>SCAR</th><th>SCAR 회신 기한 준수(%)</th></tr></thead>
-  <tbody>
-  {% for r in rows %}
-    <tr>
-      <td><a href="{% url 'admin:core_lot_changelist' %}?q={{ r.name|urlencode }}">{{ r.name }}</a></td>
-      <td>{{ r.lots }}</td>
-      <td>{{ r.received|floatformat:"0g" }}</td>
-      <td>{{ r.inspections }}</td>
-      <td>{% if r.fail_rate is None %}-{% else %}<span {% if r.fail_rate > 0 %}style="color:#ba2121"{% endif %}>{{ r.fail_rate|floatformat:1 }}</span>{% endif %}</td>
-      <td>{% if r.ppm is None %}-{% else %}{{ r.ppm|floatformat:"0g" }}{% endif %}</td>
-      <td><a href="{% url 'admin:qms_scar_changelist' %}?q={{ r.name|urlencode }}">{{ r.scars }}</a></td>
-      <td>{% if r.scar_on_time is None %}-{% else %}{{ r.scar_on_time|floatformat:0 }}{% endif %}</td>
-    </tr>
-  {% empty %}<tr><td colspan="8">LOT에 협력사가 입력된 기록이나 SCAR가 없습니다.</td></tr>{% endfor %}
-  </tbody>
-</table>
-<p class="help">협력사는 LOT 화면의 "협력사"와 SCAR의 "협력사" 이름으로 묶습니다. 같은 회사는 같은 이름으로 입력하세요.</p>
+<div class="toolbar">
+  <span class="status status--neutral">최근 {{ months }}개월</span>
+  <a class="button ghost" href="{% url 'kpi' %}?months={{ months }}">품질 KPI</a>
+</div>
+<section class="card">
+  <table>
+    <thead><tr><th>협력사</th><th class="num">입고 LOT</th><th class="num">입고 수량</th><th class="num">수입검사</th><th class="num">불합격률(%)</th><th class="num">부적합 PPM</th><th class="num">SCAR</th><th class="num">SCAR 회신 준수(%)</th></tr></thead>
+    <tbody>
+    {% for r in rows %}
+      <tr>
+        <td><a href="{% url 'admin:core_lot_changelist' %}?q={{ r.name|urlencode }}">{{ r.name }}</a></td>
+        <td class="num">{{ r.lots }}</td>
+        <td class="num">{{ r.received|floatformat:"0g" }}</td>
+        <td class="num">{{ r.inspections }}</td>
+        <td class="num">{% if r.fail_rate is None %}-{% elif r.fail_rate > 0 %}<span class="status status--negative">{{ r.fail_rate|floatformat:1 }}</span>{% else %}<span class="status status--positive">0.0</span>{% endif %}</td>
+        <td class="num">{% if r.ppm is None %}-{% else %}{{ r.ppm|floatformat:"0g" }}{% endif %}</td>
+        <td class="num"><a href="{% url 'admin:qms_scar_changelist' %}?q={{ r.name|urlencode }}">{{ r.scars }}</a></td>
+        <td class="num">{% if r.scar_on_time is None %}-{% elif r.scar_on_time < 100 %}<span class="status status--critical">{{ r.scar_on_time|floatformat:0 }}</span>{% else %}<span class="status status--positive">100</span>{% endif %}</td>
+      </tr>
+    {% empty %}<tr><td colspan="8" class="empty">LOT에 협력사가 입력된 기록이나 SCAR가 없습니다.</td></tr>{% endfor %}
+    </tbody>
+  </table>
+  <p class="help">협력사는 LOT 화면의 "협력사"와 SCAR의 "협력사" 이름으로 묶습니다. 같은 회사는 같은 이름으로 입력하세요.</p>
+</section>
 {% endblock %}

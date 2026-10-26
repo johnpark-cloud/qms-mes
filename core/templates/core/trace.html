@@ -1,20 +1,25 @@
 {% extends "admin/base_site.html" %}
 {% block title %}LOT 추적{% endblock %}
 {% block content %}
-<h1>LOT 추적</h1>
-<form method="get">
-  <label for="lot">LOT/시리얼 번호</label>
-  <input id="lot" name="lot" value="{{ number }}" autofocus>
-  <button type="submit">조회</button>
-</form>
+<section class="card">
+  <form method="get" class="toolbar">
+    <label for="lot">LOT/시리얼 번호</label>
+    <input id="lot" name="lot" value="{{ number }}" autofocus>
+    <button type="submit">조회</button>
+  </form>
+</section>
 
-{% if number and not lot %}<p>{{ number }}: 등록되지 않은 LOT입니다.</p>{% endif %}
+{% if number and not lot %}<p class="errornote">{{ number }}: 등록되지 않은 LOT입니다.</p>{% endif %}
 
 {% if lot %}
-<h2>{{ lot }} · {{ lot.item }}{% if lot.on_hold %} · <strong>보류 중</strong>{% endif %}{% if lot.lineage_gap %} · 계보 미등록{% endif %}</h2>
-<h3>상위 계보 (투입 자재)</h3>
-{% include "core/lot_table.html" with lots=ancestors %}
-<h3>하위 계보 (영향 범위)</h3>
-{% include "core/lot_table.html" with lots=descendants %}
+<section class="card">
+  <h2>{{ lot }} <span class="count">{{ lot.item }}</span>
+    {% if lot.on_hold %}<span class="status status--negative">보류 중</span>{% else %}<span class="status status--positive">정상</span>{% endif %}
+    {% if lot.lineage_gap %}<span class="status status--critical">계보 미등록</span>{% endif %}</h2>
+</section>
+<div class="cards">
+  <section class="card"><h2>상위 계보 <span class="count">투입 자재</span></h2>{% include "core/lot_table.html" with lots=ancestors %}</section>
+  <section class="card"><h2>하위 계보 <span class="count">영향 범위</span></h2>{% include "core/lot_table.html" with lots=descendants %}</section>
+</div>
 {% endif %}
 {% endblock %}

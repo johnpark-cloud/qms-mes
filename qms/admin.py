@@ -203,7 +203,7 @@ class ChangeRequestAdmin(ApprovalAdminMixin, SimpleHistoryAdmin):
         fa = obj.first_article if obj.pk else None
         if fa:
             return format_html('<a href="{}">{} 합격</a>', reverse('admin:qms_inspection_change', args=[fa.pk]), fa)
-        return format_html('<strong style="color:#ba2121">미확인 (출하 차단)</strong>') if obj.is_approved else '-'
+        return format_html('<span class="status status--negative">{}</span>', '미확인 (출하 차단)') if obj.is_approved else '-'
 
     def get_readonly_fields(self, request, obj=None):
         return super().get_readonly_fields(request, obj) + ['first_article_state']
@@ -269,7 +269,7 @@ class InternalAuditAdmin(SimpleHistoryAdmin):
     @admin.display(description='CAPA 미연결 지적')
     def open_findings(self, obj):
         n = obj.findings.filter(grade__in=AuditFinding.NEEDS_CAPA, capa__isnull=True).count()
-        return format_html('<strong style="color:var(--error-fg)">{}</strong>', n) if n else 0
+        return format_html('<span class="status status--negative">{}</span>', n) if n else 0
 
 
 class PpapElementInline(admin.TabularInline):
@@ -288,7 +288,7 @@ class PpapElementInline(admin.TabularInline):
                                reverse(f'admin:{meta.app_label}_{meta.model_name}_change', args=[obj.record.pk]), obj.record)
         if obj.has_evidence or obj.requirement != 'S' or obj.number == 18:
             return '-'
-        return format_html('<strong style="color:var(--error-fg)">필요</strong>')
+        return format_html('<span class="status status--negative">{}</span>', '필요')
 
     def has_add_permission(self, request, obj=None):
         return False  # 18요소는 제출을 만들 때 자동 생성된다
@@ -405,7 +405,7 @@ class AuditItemAdmin(SimpleHistoryAdmin):
     @admin.display(description='증적 수')
     def evidence_count(self, obj):
         n = obj.evidences.count()
-        return n if n else format_html('<strong style="color:#ba2121">미비</strong>')
+        return n if n else format_html('<span class="status status--negative">{}</span>', '미비')
 
 
 class AuditItemInline(admin.TabularInline):

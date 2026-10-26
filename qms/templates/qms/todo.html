@@ -1,79 +1,141 @@
 {% extends "admin/base_site.html" %}
 {% block content %}
-<h1>내 할 일</h1>
-<p>
-  <a href="{% url 'admin:index' %}">전체 메뉴</a> ·
-  <a href="{% url 'inspect' %}">검사 입력</a> ·
-  <a href="{% url 'kpi' %}">품질 KPI</a> ·
-  <a href="{% url 'suppliers' %}">협력사 성적표</a> ·
-  <a href="{% url 'trace' %}">LOT 추적</a> ·
-  <a href="{% url 'import' %}">엑셀 일괄 등록</a> ·
-  보류 중인 LOT <strong>{{ held_lots }}</strong>개
-</p>
 
-<h2>8D 기한 임박·초과 (2일 이내)</h2>
-<table>
-  <thead><tr><th>클레임</th><th>LOT</th><th>현재 단계</th><th>기한</th></tr></thead>
-  <tbody>
-  {% for c in claims %}
-    <tr>
-      <td><a href="{% url 'admin:qms_customerclaim_change' c.pk %}">{{ c }}</a></td>
-      <td>{{ c.lot }}</td>
-      <td>{{ c.current_step }}</td>
-      <td>{{ c.due_label }} {{ c.due|date:"Y-m-d H:i" }}{% if c.overdue %} <strong style="color:#ba2121">초과</strong>{% endif %}</td>
-    </tr>
-  {% empty %}<tr><td colspan="4">없음</td></tr>{% endfor %}
-  </tbody>
-</table>
+<div class="tiles">
+  <a class="tile {% if held_lots %}tile--negative{% else %}tile--positive{% endif %}" href="#ncs">
+    <span><span class="tile__title">보류 LOT</span><br><span class="tile__sub">출하·투입 차단 중</span></span>
+    <span class="tile__value">{{ held_lots }}</span></a>
+  <a class="tile {% if open_ncs %}tile--critical{% else %}tile--positive{% endif %}" href="#ncs">
+    <span><span class="tile__title">열린 부적합</span><br><span class="tile__sub">MRB 처분 대기</span></span>
+    <span class="tile__value">{{ open_ncs|length }}</span></a>
+  <a class="tile {% if claims_overdue %}tile--negative{% elif claims %}tile--critical{% else %}tile--positive{% endif %}" href="#claims">
+    <span><span class="tile__title">8D 기한</span><br><span class="tile__sub">초과 {{ claims_overdue }} · 임박 {{ claims|length }}</span></span>
+    <span class="tile__value">{{ claims|length }}</span></a>
+  <a class="tile {% if capas_late %}tile--negative{% elif capas %}tile--critical{% else %}tile--positive{% endif %}" href="#capas">
+    <span><span class="tile__title">CAPA</span><br><span class="tile__sub">지연 {{ capas_late }} · 확인 대기 포함</span></span>
+    <span class="tile__value">{{ capas|length }}</span></a>
+  <a class="tile {% if gauges %}tile--critical{% else %}tile--positive{% endif %}" href="#gauges">
+    <span><span class="tile__title">계측기 교정</span><br><span class="tile__sub">14일 이내·초과</span></span>
+    <span class="tile__value">{{ gauges|length }}</span></a>
+  <a class="tile {% if first_articles %}tile--negative{% else %}tile--positive{% endif %}" href="#fa">
+    <span><span class="tile__title">4M 초품 미확인</span><br><span class="tile__sub">출하 차단 중</span></span>
+    <span class="tile__value">{{ first_articles|length }}</span></a>
+</div>
 
-<h2>SCAR 회신 기한 임박·초과</h2>
-<table>
-  <thead><tr><th>SCAR</th><th>협력사</th><th>회신 기한</th></tr></thead>
-  <tbody>
-  {% for s in scars %}
-    <tr><td><a href="{% url 'admin:qms_scar_change' s.pk %}">{{ s.number }}</a></td><td>{{ s.supplier }}</td><td>{{ s.response_due|date:"Y-m-d" }}</td></tr>
-  {% empty %}<tr><td colspan="3">없음</td></tr>{% endfor %}
-  </tbody>
-</table>
+<div class="cards">
+  <section class="card" id="claims">
+    <h2>8D 기한 임박·초과 <span class="count">2일 이내</span></h2>
+    <table>
+      <thead><tr><th>클레임</th><th>LOT</th><th>현재 단계</th><th>기한</th></tr></thead>
+      <tbody>
+      {% for c in claims %}
+        <tr><td><a href="{% url 'admin:qms_customerclaim_change' c.pk %}">{{ c }}</a></td><td>{{ c.lot }}</td><td>{{ c.current_step }}</td>
+          <td>{{ c.due_label }} {{ c.due|date:"m-d H:i" }} {% if c.overdue %}<span class="status status--negative">초과</span>{% else %}<span class="status status--critical">임박</span>{% endif %}</td></tr>
+      {% empty %}<tr><td colspan="4" class="empty">없음</td></tr>{% endfor %}
+      </tbody>
+    </table>
+  </section>
 
-<h2>열린 부적합 (MRB 처분 대기)</h2>
-<table>
-  <thead><tr><th>부적합</th><th>내용</th><th>발견</th></tr></thead>
-  <tbody>
-  {% for nc in open_ncs %}
-    <tr><td><a href="{% url 'admin:core_nonconformance_change' nc.pk %}">{{ nc }}</a></td><td>{{ nc.description|truncatechars:60 }}</td><td>{{ nc.detected_at|date:"Y-m-d" }}</td></tr>
-  {% empty %}<tr><td colspan="3">없음</td></tr>{% endfor %}
-  </tbody>
-</table>
+  <section class="card" id="ncs">
+    <h2>열린 부적합 <span class="count">MRB 처분 대기</span></h2>
+    <table>
+      <thead><tr><th>부적합</th><th>내용</th><th>발견</th></tr></thead>
+      <tbody>
+      {% for nc in open_ncs %}
+        <tr><td><a href="{% url 'admin:core_nonconformance_change' nc.pk %}">{{ nc }}</a></td><td>{{ nc.description|truncatechars:50 }}</td><td>{{ nc.detected_at|date:"Y-m-d" }}</td></tr>
+      {% empty %}<tr><td colspan="3" class="empty">없음</td></tr>{% endfor %}
+      </tbody>
+    </table>
+  </section>
 
-{% if first_articles %}
-<h2>4M 변경 초품 미확인 (출하 차단 중)</h2>
-<ul>
-  {% for c in first_articles %}<li><a href="{% url 'admin:qms_changerequest_change' c.pk %}">{{ c }}</a> · 적용 {{ c.effective_at|date:"Y-m-d H:i" }}</li>{% endfor %}
-</ul>
-{% endif %}
+  <section class="card" id="capas">
+    <h2>CAPA <span class="count">지연·임박·유효성 확인 대기</span></h2>
+    <table>
+      <thead><tr><th>CAPA</th><th>담당</th><th>기한</th><th>상태</th></tr></thead>
+      <tbody>
+      {% for c in capas %}
+        <tr><td><a href="{% url 'admin:qms_capa_change' c.pk %}">{{ c }}</a></td><td>{{ c.owner }}</td><td>{{ c.due_date|date:"Y-m-d" }}</td>
+          <td><span class="status {% if c.status == '기한 초과' %}status--negative{% elif c.status == '유효성 확인 대기' %}status--info{% else %}status--critical{% endif %}">{{ c.status }}</span></td></tr>
+      {% empty %}<tr><td colspan="4" class="empty">없음</td></tr>{% endfor %}
+      </tbody>
+    </table>
+  </section>
 
-{% if gauges %}
-<h2>계측기 교정 임박·초과 (14일 이내)</h2>
-<ul>
-  {% for g in gauges %}<li><a href="{% url 'admin:qms_gauge_change' g.pk %}">{{ g }}</a> · 교정 기한 {{ g.next_due|date:"Y-m-d" }}{% if g.next_due < today %} <strong style="color:#ba2121">초과</strong>{% endif %}</li>{% endfor %}
-</ul>
-{% endif %}
+  <section class="card">
+    <h2>SCAR 회신 기한 <span class="count">2일 이내·초과</span></h2>
+    <table>
+      <thead><tr><th>SCAR</th><th>협력사</th><th>회신 기한</th></tr></thead>
+      <tbody>
+      {% for s in scars %}
+        <tr><td><a href="{% url 'admin:qms_scar_change' s.pk %}">{{ s.number }}</a></td><td>{{ s.supplier }}</td>
+          <td>{{ s.response_due|date:"Y-m-d" }} {% if s.response_due < today %}<span class="status status--negative">초과</span>{% endif %}</td></tr>
+      {% empty %}<tr><td colspan="3" class="empty">없음</td></tr>{% endfor %}
+      </tbody>
+    </table>
+  </section>
 
-{% if spc_alarms %}
-<h2>SPC 경보 (최근 7일)</h2>
-<ul>
-  {% for a in spc_alarms %}<li><a href="{% url 'spc' a.char.pk %}">{{ a.char.spec.item.code }} {{ a.char.name }}</a> · {{ a.lot }} · {{ a.alarms|join:", " }}</li>{% endfor %}
-</ul>
-{% endif %}
+  {% if first_articles %}
+  <section class="card" id="fa">
+    <h2>4M 변경 초품 미확인 <span class="status status--negative">출하 차단 중</span></h2>
+    <table><tbody>
+      {% for c in first_articles %}<tr><td><a href="{% url 'admin:qms_changerequest_change' c.pk %}">{{ c }}</a></td><td>적용 {{ c.effective_at|date:"Y-m-d H:i" }}</td></tr>{% endfor %}
+    </tbody></table>
+  </section>
+  {% endif %}
 
-{% if pending_specs or pending_docs or pending_plans or pending_changes %}
-<h2>승인 대기</h2>
-<ul>
-  {% for s in pending_specs %}<li><a href="{% url 'approve' 'qms' 'inspectionspec' s.pk %}">검사기준 {{ s }}</a></li>{% endfor %}
-  {% for d in pending_docs %}<li><a href="{% url 'approve' 'qms' 'documentrevision' d.pk %}">문서 {{ d }}</a></li>{% endfor %}
-  {% for p in pending_plans %}<li><a href="{% url 'approve' 'qms' 'controlplan' p.pk %}">{{ p }}</a></li>{% endfor %}
-  {% for c in pending_changes %}<li><a href="{% url 'approve' 'qms' 'changerequest' c.pk %}">4M 변경 {{ c }}</a></li>{% endfor %}
-</ul>
-{% endif %}
+  {% if gauges %}
+  <section class="card" id="gauges">
+    <h2>계측기 교정 <span class="count">14일 이내·초과</span></h2>
+    <table><tbody>
+      {% for g in gauges %}<tr><td><a href="{% url 'admin:qms_gauge_change' g.pk %}">{{ g }}</a></td>
+        <td>{{ g.next_due|date:"Y-m-d" }} {% if g.next_due < today %}<span class="status status--negative">초과</span>{% else %}<span class="status status--critical">임박</span>{% endif %}</td></tr>{% endfor %}
+    </tbody></table>
+  </section>
+  {% endif %}
+
+  {% if audits or findings %}
+  <section class="card">
+    <h2>내부심사 <span class="count">14일 내 예정 · CAPA 미연결 지적</span></h2>
+    <table><tbody>
+      {% for a in audits %}<tr><td><a href="{% url 'admin:qms_internalaudit_change' a.pk %}">{{ a.name }}</a></td><td>{{ a.planned_date|date:"Y-m-d" }} <span class="status status--info">예정</span></td></tr>{% endfor %}
+      {% for f in findings %}<tr><td><a href="{% url 'admin:qms_internalaudit_change' f.audit_id %}">{{ f }}</a></td><td><span class="status status--negative">CAPA 필요</span></td></tr>{% endfor %}
+    </tbody></table>
+  </section>
+  {% endif %}
+
+  {% if ppaps %}
+  <section class="card">
+    <h2>PPAP 제출 기한 <span class="count">14일 이내</span></h2>
+    <table><tbody>
+      {% for p in ppaps %}<tr><td><a href="{% url 'admin:qms_ppapsubmission_change' p.pk %}">{{ p }}</a></td>
+        <td>{{ p.due_date|date:"Y-m-d" }} {% if p.due_date < today %}<span class="status status--negative">초과</span>{% endif %}</td></tr>{% endfor %}
+    </tbody></table>
+  </section>
+  {% endif %}
+
+  {% if spc_alarms %}
+  <section class="card">
+    <h2>SPC 경보 <span class="count">최근 7일</span></h2>
+    <table><tbody>
+      {% for a in spc_alarms %}<tr><td><a href="{% url 'spc' a.char.pk %}">{{ a.char.spec.item.code }} {{ a.char.name }}</a></td><td>{{ a.lot }}</td>
+        <td>{% for x in a.alarms %}<span class="status status--critical">{{ x }}</span> {% endfor %}</td></tr>{% endfor %}
+    </tbody></table>
+  </section>
+  {% endif %}
+
+  {% if pending_specs or pending_docs or pending_plans or pending_changes or pending_ppaps %}
+  <section class="card">
+    <h2>승인 대기 <span class="count">품질팀장 서명</span></h2>
+    <table><tbody>
+      {% for s in pending_specs %}<tr><td>검사기준</td><td><a href="{% url 'approve' 'qms' 'inspectionspec' s.pk %}">{{ s }}</a></td></tr>{% endfor %}
+      {% for d in pending_docs %}<tr><td>문서</td><td><a href="{% url 'approve' 'qms' 'documentrevision' d.pk %}">{{ d }}</a></td></tr>{% endfor %}
+      {% for p in pending_plans %}<tr><td>관리계획서</td><td><a href="{% url 'approve' 'qms' 'controlplan' p.pk %}">{{ p }}</a></td></tr>{% endfor %}
+      {% for c in pending_changes %}<tr><td>4M 변경</td><td><a href="{% url 'approve' 'qms' 'changerequest' c.pk %}">{{ c }}</a></td></tr>{% endfor %}
+      {% for p in pending_ppaps %}<tr><td>PSW</td><td><a href="{% url 'admin:qms_ppapsubmission_change' p.pk %}">{{ p }}</a></td></tr>{% endfor %}
+    </tbody></table>
+  </section>
+  {% endif %}
+</div>
+
+<p class="help"><a href="{% url 'import' %}">엑셀 일괄 등록</a> · 이 목록은 <code>manage.py notify</code>로 메일·Teams에도 보낼 수 있습니다.</p>
 {% endblock %}

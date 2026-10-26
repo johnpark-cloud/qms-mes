@@ -1,38 +1,47 @@
 {% extends "admin/base_site.html" %}
 {% block content %}
-<h1>{{ title }}</h1>
-<p>규격: {{ char.lsl|default:"-" }} ~ {{ char.usl|default:"-" }} {{ char.unit }}</p>
+<div class="toolbar">
+  <span class="status status--neutral">규격 {{ char.lsl|default:"-" }} ~ {{ char.usl|default:"-" }} {{ char.unit }}</span>
+  {% if char.special %}<span class="status status--critical">특별특성 {{ char.special }} · 경보 시 부적합 자동 등록</span>{% endif %}
+</div>
 {% if error %}
   <p class="errornote">{{ error }}</p>
 {% else %}
-<p><strong>{{ res.kind }} 관리도</strong> · 부분군 크기 n={{ res.n }} · 부분군 {{ res.points|length }}개 (최근 100개까지) ·
-   CL={{ res.limits.cl|floatformat:4 }} · {% if res.n == 1 %}MR̄{% else %}R̄{% endif %}={{ res.limits.r_cl|floatformat:4 }} ·
-   σ={{ res.sigma|floatformat:4 }} ·
-   <strong>Cpk={% if res.cpk is None %}-{% else %}{{ res.cpk|floatformat:2 }}{% endif %}</strong>
-   {% if char.special %} · 특별특성 {{ char.special }}: 경보 시 부적합 자동 등록{% endif %}</p>
+<div class="tiles">
+  <div class="tile"><span class="tile__title">관리도</span><span class="tile__value">{{ res.kind }}</span></div>
+  <div class="tile"><span><span class="tile__title">부분군</span><br><span class="tile__sub">n={{ res.n }}, 최근 100개까지</span></span><span class="tile__value">{{ res.points|length }}</span></div>
+  <div class="tile"><span><span class="tile__title">중심선</span><br><span class="tile__sub">σ={{ res.sigma|floatformat:4 }}</span></span><span class="tile__value">{{ res.limits.cl|floatformat:3 }}</span></div>
+  <div class="tile {% if res.cpk is not None and res.cpk < 1.33 %}tile--negative{% elif res.cpk is not None %}tile--positive{% endif %}">
+    <span><span class="tile__title">Cpk</span><br><span class="tile__sub">목표 1.33 이상</span></span>
+    <span class="tile__value">{% if res.cpk is None %}-{% else %}{{ res.cpk|floatformat:2 }}{% endif %}</span></div>
+</div>
 
-<svg viewBox="0 0 {{ W }} {{ H }}" width="100%" style="max-width:{{ W }}px" role="img" aria-label="{{ res.kind }} 관리도">
-  {% for name, ly in lines %}
-    <line x1="30" x2="{{ W|add:'-30' }}" y1="{{ ly }}" y2="{{ ly }}" stroke="{% if name == 'CL' %}#417690{% else %}#ba2121{% endif %}" stroke-dasharray="{% if name == 'CL' %}0{% else %}4 4{% endif %}"/>
-    <text x="{{ W|add:'-28' }}" y="{{ ly }}" font-size="11" fill="currentColor">{{ name }}</text>
-  {% endfor %}
-  <polyline points="{{ polyline }}" fill="none" stroke="currentColor"/>
-  {% for p in res.points %}<circle cx="{{ p.x }}" cy="{{ p.y }}" r="{% if p.alarms %}5{% else %}3{% endif %}" fill="{% if p.alarms %}#ba2121{% else %}currentColor{% endif %}"/>{% endfor %}
-</svg>
+<section class="card">
+  <svg class="chart" viewBox="0 0 {{ W }} {{ H }}" width="100%" style="max-width:{{ W }}px" role="img" aria-label="{{ res.kind }} 관리도">
+    {% for name, ly in lines %}
+      <line x1="30" x2="{{ W|add:'-30' }}" y1="{{ ly }}" y2="{{ ly }}" class="{% if name == 'CL' %}center{% else %}limit{% endif %}" stroke-dasharray="{% if name == 'CL' %}0{% else %}4 4{% endif %}"/>
+      <text x="{{ W|add:'-28' }}" y="{{ ly }}" font-size="11" fill="currentColor">{{ name }}</text>
+    {% endfor %}
+    <polyline points="{{ polyline }}" fill="none" stroke="currentColor"/>
+    {% for p in res.points %}<circle cx="{{ p.x }}" cy="{{ p.y }}" r="{% if p.alarms %}5{% else %}3{% endif %}" {% if p.alarms %}class="alarm"{% else %}fill="currentColor"{% endif %}/>{% endfor %}
+  </svg>
+</section>
 
-<table>
-  <thead><tr><th>#</th><th>검사(LOT)</th><th>{% if res.n == 1 %}X{% else %}X̄{% endif %}</th><th>{% if res.n == 1 %}MR{% else %}R{% endif %}</th><th>경보</th></tr></thead>
-  <tbody>
-  {% for p in res.points %}
-    <tr>
-      <td>{{ forloop.counter }}</td>
-      <td>{{ p.label.lot }} · {{ p.label.inspected_at|date:"Y-m-d H:i" }}</td>
-      <td>{{ p.xbar|floatformat:4 }}</td>
-      <td>{% if p.r is None %}-{% else %}{{ p.r|floatformat:4 }}{% endif %}</td>
-      <td>{% if p.alarms %}<strong style="color:#ba2121">{{ p.alarms|join:", " }}</strong> · <a href="{{ p.nc_url }}">부적합 등록</a>{% endif %}</td>
-    </tr>
-  {% endfor %}
-  </tbody>
-</table>
+<section class="card">
+  <table>
+    <thead><tr><th>#</th><th>검사(LOT)</th><th class="num">{% if res.n == 1 %}X{% else %}X̄{% endif %}</th><th class="num">{% if res.n == 1 %}MR{% else %}R{% endif %}</th><th>경보</th></tr></thead>
+    <tbody>
+    {% for p in res.points %}
+      <tr>
+        <td>{{ forloop.counter }}</td>
+        <td>{{ p.label.lot }} · {{ p.label.inspected_at|date:"Y-m-d H:i" }}</td>
+        <td class="num">{{ p.xbar|floatformat:4 }}</td>
+        <td class="num">{% if p.r is None %}-{% else %}{{ p.r|floatformat:4 }}{% endif %}</td>
+        <td>{% for a in p.alarms %}<span class="status status--negative">{{ a }}</span> {% endfor %}{% if p.alarms %}<a href="{{ p.nc_url }}">부적합 등록</a>{% endif %}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</section>
 {% endif %}
 {% endblock %}

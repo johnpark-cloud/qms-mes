@@ -1,74 +1,84 @@
 {% extends "admin/base_site.html" %}
-{% block extrahead %}
-<style>
-  .bar { background: #417690; height: .8rem; min-width: 1px; }
-  .bar.cost { background: #ba2121; }
-  .kpi td.num { text-align: right; white-space: nowrap; }
-  .kpi td.w { width: 25%; }
-</style>
-{% endblock %}
 {% block content %}
-<div class="kpi">
-<h1>품질 KPI</h1>
-<form method="get">
+<form method="get" class="toolbar">
   <label for="months">기간</label>
   <select id="months" name="months" onchange="this.form.submit()">
     <option value="3" {% if months == 3 %}selected{% endif %}>최근 3개월</option>
     <option value="6" {% if months == 6 %}selected{% endif %}>최근 6개월</option>
     <option value="12" {% if months == 12 %}selected{% endif %}>최근 12개월</option>
   </select>
-  · <a href="{% url 'suppliers' %}?months={{ months }}">협력사 성적표</a> · <a href="{% url 'todo' %}">내 할 일</a>
+  <a class="button ghost" href="{% url 'suppliers' %}?months={{ months }}">협력사 성적표</a>
 </form>
 
-<h2>월별</h2>
-<table>
-  <thead><tr><th>월</th><th>출하 수량</th><th>클레임</th><th>고객 PPM</th><th></th><th>직행률(%)</th><th>8D 봉쇄 기한 준수(%)</th><th>실패비용(원)</th><th></th></tr></thead>
-  <tbody>
-  {% for r in rows %}
-    <tr>
-      <td>{{ r.month|date:"Y-m" }}</td>
-      <td class="num">{{ r.shipped|floatformat:"0g" }}</td>
-      <td class="num">{{ r.claims }}</td>
-      <td class="num">{% if r.ppm is None %}-{% else %}{{ r.ppm|floatformat:"0g" }}{% endif %}</td>
-      <td class="w"><div class="bar" style="width:{{ r.ppm_bar|floatformat:0 }}%"></div></td>
-      <td class="num">{% if r.fpy is None %}-{% else %}{{ r.fpy|floatformat:1 }}{% endif %}</td>
-      <td class="num">{% if r.d3_on_time is None %}-{% else %}{{ r.d3_on_time|floatformat:0 }}{% endif %}</td>
-      <td class="num">{{ r.copq|floatformat:"0g" }}</td>
-      <td class="w"><div class="bar cost" style="width:{{ r.copq_bar|floatformat:0 }}%"></div></td>
-    </tr>
-  {% endfor %}
-  </tbody>
-</table>
-<p class="help">고객 PPM = 클레임 불량 수량 ÷ 출하 수량 × 1,000,000 · 직행률 = LOT·검사구분별 첫 판정이 합격인 비율 ·
-  8D 봉쇄 기한 준수 = D3가 고객사별 기한 안에 처음 기록된 비율 · 실패비용 = 부적합에 입력한 비용 합계</p>
+{% with cur=rows|last %}
+<div class="tiles">
+  <div class="tile"><span><span class="tile__title">고객 PPM</span><br><span class="tile__sub">{{ cur.month|date:"Y-m" }}</span></span>
+    <span class="tile__value">{% if cur.ppm is None %}-{% else %}{{ cur.ppm|floatformat:"0g" }}{% endif %}</span></div>
+  <div class="tile"><span><span class="tile__title">직행률</span><br><span class="tile__sub">{{ cur.month|date:"Y-m" }} · %</span></span>
+    <span class="tile__value">{% if cur.fpy is None %}-{% else %}{{ cur.fpy|floatformat:1 }}{% endif %}</span></div>
+  <div class="tile {% if cur.d3_on_time is not None and cur.d3_on_time < 100 %}tile--critical{% endif %}"><span><span class="tile__title">8D 봉쇄 기한 준수</span><br><span class="tile__sub">{{ cur.month|date:"Y-m" }} · %</span></span>
+    <span class="tile__value">{% if cur.d3_on_time is None %}-{% else %}{{ cur.d3_on_time|floatformat:0 }}{% endif %}</span></div>
+  <div class="tile {% if cur.copq %}tile--negative{% endif %}"><span><span class="tile__title">실패비용</span><br><span class="tile__sub">{{ cur.month|date:"Y-m" }} · 원</span></span>
+    <span class="tile__value">{{ cur.copq|floatformat:"0g" }}</span></div>
+</div>
+{% endwith %}
 
-<h2>공정별 수율 (작업 실적, 기간 전체)</h2>
-<table>
-  <thead><tr><th>공정</th><th>실적 건수</th><th>투입</th><th>양품</th><th>불량</th><th>수율(%)</th></tr></thead>
-  <tbody>
-  {% for y in yields %}
-    <tr><td>{{ y.process }}</td><td class="num">{{ y.n }}</td><td class="num">{{ y.input|floatformat:"0g" }}</td>
-      <td class="num">{{ y.good|floatformat:"0g" }}</td><td class="num">{{ y.defect|floatformat:"0g" }}</td>
-      <td class="num">{% if y.yield is None %}-{% else %}{{ y.yield|floatformat:1 }}{% endif %}</td></tr>
-  {% empty %}<tr><td colspan="6">작업 실적이 없습니다.</td></tr>{% endfor %}
-  </tbody>
-</table>
+<section class="card">
+  <h2>월별 추이</h2>
+  <table>
+    <thead><tr><th>월</th><th class="num">출하 수량</th><th class="num">클레임</th><th class="num">고객 PPM</th><th></th><th class="num">직행률(%)</th><th class="num">8D 봉쇄 기한 준수(%)</th><th class="num">실패비용(원)</th><th></th></tr></thead>
+    <tbody>
+    {% for r in rows %}
+      <tr>
+        <td>{{ r.month|date:"Y-m" }}</td>
+        <td class="num">{{ r.shipped|floatformat:"0g" }}</td>
+        <td class="num">{{ r.claims }}</td>
+        <td class="num">{% if r.ppm is None %}-{% else %}{{ r.ppm|floatformat:"0g" }}{% endif %}</td>
+        <td class="w"><div class="bar" style="width:{{ r.ppm_bar|floatformat:0 }}%"></div></td>
+        <td class="num">{% if r.fpy is None %}-{% else %}{{ r.fpy|floatformat:1 }}{% endif %}</td>
+        <td class="num">{% if r.d3_on_time is None %}-{% else %}{{ r.d3_on_time|floatformat:0 }}{% endif %}</td>
+        <td class="num">{{ r.copq|floatformat:"0g" }}</td>
+        <td class="w"><div class="bar bar--negative" style="width:{{ r.copq_bar|floatformat:0 }}%"></div></td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  <p class="help">고객 PPM = 클레임 불량 수량 ÷ 출하 수량 × 1,000,000 · 직행률 = LOT·검사구분별 첫 판정이 합격인 비율 ·
+    8D 봉쇄 기한 준수 = D3가 고객사별 기한 안에 처음 기록된 비율 · 실패비용 = 부적합에 입력한 비용 합계</p>
+</section>
 
-<h2>불량유형 파레토 (기간 전체)</h2>
-<table>
-  <thead><tr><th>불량유형</th><th>건수</th><th>불량 수량</th><th>비율(%)</th><th>누적(%)</th><th></th></tr></thead>
-  <tbody>
-  {% for p in pareto %}
-    <tr>
-      <td><a href="{% url 'admin:core_nonconformance_changelist' %}?defect_type={{ p.defect_type|urlencode }}">{{ p.defect_type }}</a></td>
-      <td class="num">{{ p.n }}</td>
-      <td class="num">{{ p.qty|floatformat:"0g" }}</td>
-      <td class="num">{{ p.share|floatformat:1 }}</td>
-      <td class="num">{{ p.cum|floatformat:1 }}</td>
-      <td class="w"><div class="bar" style="width:{{ p.share|floatformat:0 }}%"></div></td>
-    </tr>
-  {% empty %}<tr><td colspan="6">불량유형이 입력된 부적합이 없습니다.</td></tr>{% endfor %}
-  </tbody>
-</table>
+<div class="cards">
+  <section class="card">
+    <h2>공정별 수율 <span class="count">작업 실적, 기간 전체</span></h2>
+    <table>
+      <thead><tr><th>공정</th><th class="num">실적</th><th class="num">투입</th><th class="num">양품</th><th class="num">불량</th><th class="num">수율(%)</th></tr></thead>
+      <tbody>
+      {% for y in yields %}
+        <tr><td>{{ y.process }}</td><td class="num">{{ y.n }}</td><td class="num">{{ y.input|floatformat:"0g" }}</td>
+          <td class="num">{{ y.good|floatformat:"0g" }}</td><td class="num">{{ y.defect|floatformat:"0g" }}</td>
+          <td class="num">{% if y.yield is None %}-{% else %}{{ y.yield|floatformat:1 }}{% endif %}</td></tr>
+      {% empty %}<tr><td colspan="6" class="empty">작업 실적이 없습니다.</td></tr>{% endfor %}
+      </tbody>
+    </table>
+  </section>
+
+  <section class="card">
+    <h2>불량유형 파레토 <span class="count">기간 전체</span></h2>
+    <table>
+      <thead><tr><th>불량유형</th><th class="num">건수</th><th class="num">수량</th><th class="num">비율(%)</th><th class="num">누적(%)</th><th></th></tr></thead>
+      <tbody>
+      {% for p in pareto %}
+        <tr>
+          <td><a href="{% url 'admin:core_nonconformance_changelist' %}?defect_type={{ p.defect_type|urlencode }}">{{ p.defect_type }}</a></td>
+          <td class="num">{{ p.n }}</td>
+          <td class="num">{{ p.qty|floatformat:"0g" }}</td>
+          <td class="num">{{ p.share|floatformat:1 }}</td>
+          <td class="num">{{ p.cum|floatformat:1 }}</td>
+          <td class="w"><div class="bar" style="width:{{ p.share|floatformat:0 }}%"></div></td>
+        </tr>
+      {% empty %}<tr><td colspan="6" class="empty">불량유형이 입력된 부적합이 없습니다.</td></tr>{% endfor %}
+      </tbody>
+    </table>
+  </section>
 </div>
 {% endblock %}

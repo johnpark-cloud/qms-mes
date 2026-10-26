@@ -1,4 +1,5 @@
-<p><strong>{{ lot.number }}</strong> · {{ spec }}{% if spec.sampling %} · 샘플링 {{ spec.sampling }}{% endif %}</p>
+<section class="card">
+<h2>{{ lot.number }} <span class="count">{{ spec }}{% if spec.sampling %} · 샘플링 {{ spec.sampling }}{% endif %}</span></h2>
 <form hx-post="{% url 'inspect_submit' lot.pk spec.pk %}" hx-target="#step" autocomplete="off">
   {% if gauges %}
   <p><label for="gauge">계측기</label>
@@ -12,7 +13,7 @@
     <tbody>
     {% for c in chars %}
       <tr>
-        <td><label for="c{{ c.pk }}">{{ c.name }}</label>{% if c.special %} <strong>[{{ c.special }}]</strong>{% endif %}</td>
+        <td><label for="c{{ c.pk }}">{{ c.name }}</label>{% if c.special %} <span class="status status--critical">{{ c.special }}</span>{% endif %}</td>
         <td>{% if c.is_variable %}{{ c.lsl|default:"-" }} ~ {{ c.usl|default:"-" }} {{ c.unit }}{% else %}OK/NG{% endif %}</td>
         <td>
           {% if c.is_variable %}
@@ -31,3 +32,4 @@
   </table>
   <p><button type="submit">판정</button></p>
 </form>
+</section>

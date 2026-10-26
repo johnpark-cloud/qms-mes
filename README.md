@@ -48,7 +48,10 @@ powershell -ExecutionPolicy Bypass -File scripts\serve.ps1 -HostName QA-PC01   #
 
 ## 모듈
 
-- **MES**: 품번·BOM, 공정, 작업지시, LOT·계보(분할·병합), 출하
+- **MES**: 품번·BOM·공정 라우팅, 작업지시·작업 실적(투입·양품·불량, 이전 공정 실적 없으면 등록 차단, 진도율), LOT·계보(분할·병합), 출하
+- **CAPA**: 8D·SCAR·부적합·심사 지적 화면의 "CAPA 만들기" → 담당·기한 → 조치 완료 → 유효성 확인("유효")해야 종결
+- **내부심사**: 계획·실시·지적(중부적합/경부적합/관찰/개선기회). 중·경부적합은 CAPA가 연결돼야 심사 종결
+- **PPAP**: 제출을 만들면 AIAG 18요소가 수준(1~5)에 맞게 생성되고 관리계획서·출하검사가 자동 연결. 제출(S) 요소에 문서·기록이 모두 있어야 PSW 승인 서명 가능, "인쇄/PDF"가 PSW 요소표
 - **부적합**: 등록 즉시 LOT과 하위 계보 전체 자동 보류 → 투입·출하 차단. MRB 처분(재작업·수리는 재검사 합격 기록 필요, 특채는 고객 승인번호 필요, 폐기·반품은 보류 유지)
 - **검사**: 검사기준(개정·승인 서명, 승인 후 잠금) → 검사 → "저장하고 판정하기" → 불합격이면 부적합 자동 등록
 - **고객 클레임(8D)**: 접수 즉시 부적합·보류, 고객사별 D3·D5 기한, D1~D8 모두 채워야 종결
@@ -98,6 +101,27 @@ powershell -ExecutionPolicy Bypass -File scripts\register_backup_task.ps1 -Dest 
 
 실제 복원 전의 데이터는 `data/pre-restore-날짜/`에 따로 보관됩니다.
 
+## 기한 알림 (메일 · Teams)
+
+"내 할 일"과 같은 기준(8D·SCAR·CAPA 기한, 교정, 초품, 심사, PPAP, SPC 경보)으로 매일 아침 요약을 보냅니다. 보낼 항목이 없으면 보내지 않습니다.
+
+1. Windows 검색 → "시스템 환경 변수 편집" → 환경 변수 → **사용자 변수**에 추가합니다.
+
+   | 변수 | 예 | 설명 |
+   | --- | --- | --- |
+   | `QMS_NOTIFY_EMAILS` | `qa1@회사.com,qa2@회사.com` | 메일 받는 사람 (쉼표로 구분) |
+   | `QMS_SMTP_HOST` / `QMS_SMTP_PORT` | `smtp.회사.com` / `587` | 회사 메일 서버 (IT팀에 문의) |
+   | `QMS_SMTP_USER` / `QMS_SMTP_PASSWORD` | | 발송 계정 |
+   | `QMS_MAIL_FROM` | `qms@회사.com` | 보내는 사람 주소 |
+   | `QMS_TEAMS_WEBHOOK` | `https://...` | Teams 채널 → 워크플로 → "웹후크 요청 수신 시 채널에 게시" URL |
+
+2. 내용만 먼저 확인: `.\.venv\Scripts\python manage.py notify --dry-run`
+3. 매일 08:30 자동 발송 등록: `powershell -ExecutionPolicy Bypass -File scripts\register_task.ps1 -Command notify -Time 08:30`
+
+## 화면 디자인
+
+SAP Fiori Horizon(SAP Digital Manufacturing·QM의 디자인 시스템)의 색·간격·카드·상태 배지 규칙을 참고해 `core/static/qms/fiori.css` 한 파일로 만들었습니다(상표·전용 폰트 미사용, 인터넷 불필요). 오른쪽 위 반달 아이콘으로 라이트·다크·자동을 바꿉니다. 회사 색으로 바꾸려면 파일 맨 위의 `--f-brand`, `--f-link` 값만 고치면 됩니다.
+
 ## 측정 데이터 자동 수집 (3단계)
 
 `data/inbox/`에 아래 형식의 CSV를 넣고 `collect`를 실행하면 검사 기록이 만들어지고 판정됩니다. 결과 파일은 `done/` 또는 `error/`로 옮겨집니다.
@@ -132,5 +156,5 @@ RAW-1,수입검사,외관,OK
 
 ```powershell
 .\.venv\Scripts\python manage.py test core qms   # 단위 테스트
-.\.venv\Scripts\python scripts\e2e_check.py      # 실제 서버를 띄워 화면 흐름 45개 점검 (임시 DB 사용)
+.\.venv\Scripts\python scripts\e2e_check.py      # 실제 서버를 띄워 화면 흐름 55개 점검 (임시 DB 사용)
 ```

@@ -113,7 +113,8 @@ def inspect_check(request, char_id):
     m = _measurement(char, request.POST.get(f'c{char.pk}', ''))
     if m is None:
         return HttpResponse('')
-    return HttpResponse(format_html('<span class="{}">{}</span>', 'ok' if m.passed else 'ng', '합격' if m.passed else '규격 이탈'))
+    return HttpResponse(format_html('<span class="status status--{}">{}</span>',
+                                    'positive' if m.passed else 'negative', '합격' if m.passed else '규격 이탈'))
 
 
 @staff_member_required

@@ -22,7 +22,7 @@ from core.models import ImportProfile, Item, Lot, LotLink, Nonconformance, Shipm
 
 from . import kpi, spc
 from .management.commands.collect import ingest
-from .models import (AuditFinding, Capa, ChangeRequest, Characteristic, ControlPlan, ControlPlanLine, CustomerClaim,
+from .models import (AuditChecklist, AuditFinding, AuditItem, Capa, ChangeRequest, Characteristic, ControlPlan, ControlPlanLine, CustomerClaim,
                      Document, ExcelTemplate, Gauge, Inspection, InspectionSpec, InternalAudit, Measurement, PpapSubmission,
                      Qualification, Scar)
 from .similar import similar
@@ -369,6 +369,8 @@ class QmsTest(TestCase):
                                    source_id=scar.pk, action='금형 보정', owner=self.lead,
                                    due_date=timezone.localdate() - datetime.timedelta(days=1))
         self.assertEqual(capa.status, '기한 초과')
+        second = Capa.objects.create(title='둘째', source='OTHER', action='x', owner=self.lead, due_date=timezone.localdate())
+        self.assertEqual((capa.number[-3:], second.number[-3:]), ('001', '002'))  # 같은 순간에 만들어도 번호가 겹치지 않음
         self.assertIn(capa.number, self.client.get(f'/admin/qms/scar/{scar.pk}/change/').content.decode())
         capa.closed_at = timezone.localdate()
         with self.assertRaises(ValidationError):  # 유효성 확인 없이 종결
@@ -481,6 +483,18 @@ class QmsTest(TestCase):
         self.assertIn('초과', html)
         self.assertEqual(self.client.get(f'/spc/{self.thk.pk}/').status_code, 200)
         self.assertIn('CL-2', self.client.get(f'/print/qms/customerclaim/{claim.pk}/').content.decode())
+        # 빨간 상태 배지가 그려지는 화면들 (format_html 인자 누락 회귀 방지)
+        ppap = PpapSubmission.objects.create(item=self.cell_item, customer='A사', reason='신규')
+        AuditItem.objects.create(checklist=AuditChecklist.objects.create(name='QSA'), clause='1', requirement='x')
+        cr = ChangeRequest.objects.create(number='4M-9', item=self.cell_item, category='MAN', description='x',
+                                          customer_notice=False, effective_at=timezone.now() + datetime.timedelta(days=1))
+        approve(cr, self.lead)
+        audit = InternalAudit.objects.create(name='심사', planned_date=timezone.localdate(), auditor='김')
+        AuditFinding.objects.create(audit=audit, grade='MAJOR', description='x')
+        for url in (f'/admin/qms/ppapsubmission/{ppap.pk}/change/', '/admin/qms/audititem/', '/admin/qms/changerequest/',
+                    '/admin/qms/internalaudit/', f'/admin/qms/internalaudit/{audit.pk}/change/', '/admin/qms/capa/add/',
+                    '/admin/core/workorder/add/', '/kpi/', '/suppliers/', '/inspect/', '/trace/?lot=CELL-1'):
+            self.assertEqual(self.client.get(url).status_code, 200, url)
         for url in ('/admin/qms/inspection/add/', f'/admin/qms/customerclaim/{claim.pk}/change/',
                     f'/admin/qms/inspectionspec/{self.spec.pk}/change/', '/admin/core/nonconformance/add/',
                     '/admin/qms/auditchecklist/add/', '/admin/qms/document/add/', '/import/', '/admin/'):

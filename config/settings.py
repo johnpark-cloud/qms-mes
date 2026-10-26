@@ -72,7 +72,7 @@ ROOT_URLCONF = 'config.urls'
 TEMPLATES = [
     {
         'BACKEND': 'django.template.backends.django.DjangoTemplates',
-        'DIRS': [],
+        'DIRS': [BASE_DIR / 'templates'],  # 관리 화면 틀 덮어쓰기 (admin 앱 템플릿보다 먼저 찾는다)
         'APP_DIRS': True,
         'OPTIONS': {
             'context_processors': [

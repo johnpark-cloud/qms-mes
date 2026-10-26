@@ -522,7 +522,9 @@ class Evidence(models.Model):
 # ---------- CAPA · 내부심사 · PPAP ----------
 
 def _capa_number():
-    return timezone.localtime().strftime('CAPA-%y%m%d-%H%M%S')
+    """CAPA-YYMMDD-001: 날짜별 순번. 같은 순간 두 화면에서 만들면 저장 시 중복 오류로 막힌다(번호 고쳐 저장)."""
+    prefix = timezone.localtime().strftime('CAPA-%y%m%d-')
+    return f'{prefix}{Capa.objects.filter(number__startswith=prefix).count() + 1:03d}'
 
 class Capa(models.Model):
     """시정·예방조치. 8D·SCAR·심사 지적·SPC·부적합 어디서 나왔든 한 목록에서 유효성 확인까지 추적한다."""

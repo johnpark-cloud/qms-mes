@@ -186,9 +186,45 @@ try:
     check('초품 합격 후 CELL-Z 출하 가능', s == 302, errors(html))
     check('출하성적서에 용량 결과', '용량' in get('/print/core/shipment/3/'))
 
-    # 대시보드
+    # 대시보드 · 디자인
     check('품질 KPI 화면 (불량유형 파레토)', '이물' in get('/kpi/'))
     check('협력사 성적표 화면', '협력사 성적표' in get('/suppliers/'))
+    check('Fiori 디자인 CSS 적용·제공', 'qms/fiori.css' in get('/todo/') and '--f-brand' in get('/static/qms/fiori.css'))
+
+    # 공정 라우팅 · 작업 실적: 공정 건너뛰기 차단
+    post('/admin/core/process/add/', {'code': 'P10', 'name': '적층'})
+    post('/admin/core/process/add/', {'code': 'P20', 'name': '용접'})
+    routing = {**bom, 'routing-TOTAL_FORMS': 2, 'routing-0-seq': 10, 'routing-0-process': 1,
+               'routing-1-seq': 20, 'routing-1-process': 2}
+    s, html = post('/admin/core/item/2/change/', {'code': 'C1', 'name': '셀', 'item_type': 'FIN', **routing})
+    check('셀 라우팅 등록 (10 적층 → 20 용접)', s == 302, errors(html))
+    s, html = post('/admin/core/workorder/add/', {'number': 'WO-1', 'item': 2, 'planned_qty': 100, 'status': 'PLANNED',
+                                                  'results-TOTAL_FORMS': 0, 'results-INITIAL_FORMS': 0,
+                                                  'results-MIN_NUM_FORMS': 0, 'results-MAX_NUM_FORMS': 1000})
+    check('작업지시 등록', s == 302, errors(html))
+    result = {'work_order': 1, 'input_qty': 10, 'good_qty': 10, 'defect_qty': 0, 'operator': 1, **dt('started_at')}
+    s, html = post('/admin/core/workresult/add/', {**result, 'step': 2})
+    check('적층 없이 용접 실적 → 차단', s == 200 and '이전 공정' in html, errors(html))
+    s, html = post('/admin/core/workresult/add/', {**result, 'step': 1})
+    check('적층 실적 등록', s == 302, errors(html))
+    s, html = post('/admin/core/workresult/add/', {**result, 'step': 2})
+    check('적층 후 용접 실적 등록', s == 302, errors(html))
+
+    # CAPA: 유효성 확인 없이 종결 차단
+    capa = {'number': 'CAPA-E2E-1', 'title': '재발 방지', 'source': 'NC', 'action': '조치', 'owner': 1,
+            'due_date': '2026-11-30', 'effective': 'unknown'}
+    s, html = post('/admin/qms/capa/add/', capa)
+    check('CAPA 등록', s == 302, errors(html))
+    s, html = post('/admin/qms/capa/1/change/', {**capa, 'closed_at': '2026-10-26'})
+    check('유효성 확인 없이 CAPA 종결 → 차단', s == 200 and '유효' in html, errors(html))
+
+    # PPAP: 제출(S) 증적 없으면 PSW 서명 거부
+    s, html = post('/admin/qms/ppapsubmission/add/', {'item': 2, 'customer': 'A사', 'level': 1, 'reason': '신규',
+                                                      'elements-TOTAL_FORMS': 0, 'elements-INITIAL_FORMS': 0,
+                                                      'elements-MIN_NUM_FORMS': 0, 'elements-MAX_NUM_FORMS': 1000})
+    check('PPAP 제출 등록 → PSW 인쇄에 요소표', s == 302 and '외관 승인 보고서' in get('/print/qms/ppapsubmission/1/'), errors(html))
+    s, html = post('/approve/qms/ppapsubmission/1/', {'password': 'e2e-pass-123'})
+    check('외관승인(S) 증적 없이 PSW 서명 → 거부', s == 200 and '증적이 없습니다' in html)
 finally:
     server.terminate()
 

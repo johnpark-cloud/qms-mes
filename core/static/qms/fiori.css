@@ -1,0 +1,328 @@
+/*
+  QMS+MES 디자인 시스템 — SAP Fiori Horizon의 색·간격·모서리·밀도·상태 표시 규칙을 참고해 직접 만든 스타일.
+  SAP 상표·"72" 폰트·아이콘은 쓰지 않는다. Django 관리 화면 변수(--primary 등)를 토큰에 맞춰 덮어쓴다.
+*/
+
+/* ---------- 토큰: 라이트 ---------- */
+html[data-theme="light"],
+:root {
+    --f-brand: #0070f2;
+    --f-brand-strong: #0064d9;
+    --f-brand-soft: #e1f4ff;
+    --f-link: #0064d9;
+    --f-bg: #f5f6f7;
+    --f-shell: #ffffff;
+    --f-card: #ffffff;
+    --f-text: #1d2d3e;
+    --f-label: #556b82;
+    --f-border: #d9d9d9;
+    --f-list-border: #e5e5e5;
+    --f-hover: #eaecee;
+    --f-selected: #ebf8ff;
+    --f-field-border: #556b82;
+    --f-positive: #256f3a;
+    --f-positive-bg: #f5fae5;
+    --f-critical: #e76500;
+    --f-critical-bg: #fff8d6;
+    --f-negative: #aa0808;
+    --f-negative-bg: #ffeaf4;
+    --f-info: #0070f2;
+    --f-info-bg: #e1f4ff;
+    --f-neutral: #5b738b;
+    --f-neutral-bg: #eff1f2;
+    --f-shadow: 0 0 .125rem rgba(34, 53, 72, .15), 0 .125rem .5rem rgba(34, 53, 72, .15);
+    --f-focus: #0032a5;
+    --f-radius-card: 1rem;
+    --f-radius: .5rem;
+    --f-radius-field: .25rem;
+}
+
+/* ---------- 토큰: 다크 (Horizon Dark 참고) ---------- */
+@media (prefers-color-scheme: dark) {
+    :root {
+        --f-brand: #4db1ff;
+        --f-brand-strong: #0070f2;
+        --f-brand-soft: #1b3550;
+    --f-link: #4db1ff;
+        --f-link: #4db1ff;
+        --f-bg: #12171c;
+        --f-shell: #1d232a;
+        --f-card: #1d232a;
+        --f-text: #eaecee;
+        --f-label: #a9b4be;
+        --f-border: #384047;
+        --f-list-border: #2d3540;
+        --f-hover: #263039;
+        --f-selected: #1b3550;
+        --f-field-border: #8396a8;
+        --f-positive: #6bd28c;
+        --f-positive-bg: #18301f;
+        --f-critical: #ffab52;
+        --f-critical-bg: #36260d;
+        --f-negative: #ff8a8a;
+        --f-negative-bg: #3a1414;
+        --f-info: #4db1ff;
+        --f-info-bg: #102a43;
+        --f-neutral: #a9b4be;
+        --f-neutral-bg: #263039;
+        --f-shadow: 0 0 .125rem rgba(0, 0, 0, .5), 0 .125rem .5rem rgba(0, 0, 0, .4);
+        --f-focus: #4db1ff;
+    }
+}
+html[data-theme="dark"] {
+    --f-brand: #4db1ff;
+    --f-brand-strong: #0070f2;
+    --f-brand-soft: #1b3550;
+    --f-link: #4db1ff;
+    --f-bg: #12171c;
+    --f-shell: #1d232a;
+    --f-card: #1d232a;
+    --f-text: #eaecee;
+    --f-label: #a9b4be;
+    --f-border: #384047;
+    --f-list-border: #2d3540;
+    --f-hover: #263039;
+    --f-selected: #1b3550;
+    --f-field-border: #8396a8;
+    --f-positive: #6bd28c;
+    --f-positive-bg: #18301f;
+    --f-critical: #ffab52;
+    --f-critical-bg: #36260d;
+    --f-negative: #ff8a8a;
+    --f-negative-bg: #3a1414;
+    --f-info: #4db1ff;
+    --f-info-bg: #102a43;
+    --f-neutral: #a9b4be;
+    --f-neutral-bg: #263039;
+    --f-shadow: 0 0 .125rem rgba(0, 0, 0, .5), 0 .125rem .5rem rgba(0, 0, 0, .4);
+    --f-focus: #4db1ff;
+}
+
+/* ---------- Django 관리 화면 변수 → 토큰 ---------- */
+html[data-theme="light"], html[data-theme="dark"], html[data-theme="auto"], :root {
+    --primary: var(--f-brand);
+    --secondary: var(--f-brand-strong);
+    --accent: var(--f-brand);
+    --primary-fg: #fff;
+    --body-fg: var(--f-text);
+    --body-bg: var(--f-card);
+    --body-quiet-color: var(--f-label);
+    --body-medium-color: var(--f-label);
+    --body-loud-color: var(--f-text);
+    --header-color: var(--f-text);
+    --header-branding-color: var(--f-text);
+    --header-bg: var(--f-shell);
+    --header-link-color: var(--f-link);
+    --breadcrumbs-fg: var(--f-label);
+    --breadcrumbs-link-fg: var(--f-link);
+    --breadcrumbs-bg: transparent;
+    --link-fg: var(--f-link);
+    --link-hover-color: var(--f-brand);
+    --link-selected-fg: var(--f-link);
+    --hairline-color: var(--f-list-border);
+    --border-color: var(--f-border);
+    --error-fg: var(--f-negative);
+    --message-info-bg: var(--f-info-bg);
+    --message-success-bg: var(--f-positive-bg);
+    --message-warning-bg: var(--f-critical-bg);
+    --message-error-bg: var(--f-negative-bg);
+    --darkened-bg: var(--f-bg);
+    --selected-bg: var(--f-selected);
+    --selected-row: var(--f-selected);
+    --button-fg: #fff;
+    --button-bg: var(--f-brand-strong);
+    --button-hover-bg: var(--f-brand);
+    --default-button-bg: var(--f-brand-strong);
+    --default-button-hover-bg: var(--f-brand);
+    --close-button-bg: var(--f-neutral);
+    --close-button-hover-bg: var(--f-label);
+    --delete-button-bg: var(--f-negative);
+    --delete-button-hover-bg: var(--f-negative);
+    --object-tools-fg: var(--f-link);
+    --object-tools-bg: var(--f-card);
+    --object-tools-hover-bg: var(--f-hover);
+    --font-family-primary: "Segoe UI", "Malgun Gothic", "Apple SD Gothic Neo", system-ui, sans-serif;
+}
+
+/* ---------- 바탕 · 셸바 ---------- */
+body { background: var(--f-bg); color: var(--f-text); }
+#header {
+    background: var(--f-shell);
+    color: var(--f-text);
+    box-shadow: var(--f-shadow);
+    padding: .5rem 1rem;
+    min-height: 3rem;
+    gap: 1rem;
+    position: relative;
+    z-index: 2;
+}
+#branding #site-name { font-size: 1rem; font-weight: 700; margin: 0; }
+#branding #site-name a { color: var(--f-text); display: inline-flex; align-items: center; gap: .5rem; text-decoration: none; }
+.shell-logo {
+    display: inline-grid; place-items: center; width: 1.75rem; height: 1.75rem; border-radius: var(--f-radius);
+    background: var(--f-brand-strong); color: #fff; font-weight: 700; font-size: .875rem;
+}
+/* 셸바 배치: 로고 → 주 메뉴 → (오른쪽 끝) 사용자 메뉴 */
+#header #branding { order: 0; }
+#header .shell-nav { order: 1; display: flex; flex-wrap: wrap; gap: .25rem; flex: 1; }
+#header #user-tools { order: 2; margin-left: auto; }
+#header .shell-nav a:link, #header .shell-nav a:visited {
+    color: var(--f-text); text-decoration: none; padding: .5rem .75rem; border-radius: var(--f-radius);
+    font-size: .875rem; border-bottom: .1875rem solid transparent;
+}
+#header .shell-nav a:hover { background: var(--f-hover); text-decoration: none; }
+#header .shell-nav a[aria-current="page"] { color: var(--f-link); font-weight: 600; border-bottom-color: var(--f-brand-strong); border-radius: var(--f-radius) var(--f-radius) 0 0; }
+#user-tools { color: var(--f-label); font-size: .8125rem; }
+#user-tools a, #logout-form button { color: var(--f-link); border-bottom: none; }
+#user-tools a:focus, #user-tools a:hover, #logout-form button:hover { color: var(--f-brand); text-decoration: underline; }
+
+div.breadcrumbs, .breadcrumbs { background: transparent; color: var(--f-label); padding: .75rem 1.5rem 0; }
+.breadcrumbs a { color: var(--f-link); }
+
+/* Horizon 링크: 평소엔 밑줄 없이 색으로 구분, 마우스·키보드 포커스 때만 밑줄.
+   #container를 붙이는 이유: Django의 a:not(..., #content-main.app-list a) 규칙(우선순위 1,1,2)을 이기기 위해 */
+#container #content a:link, #container #content a:visited { text-decoration: none; }
+#container #content a:hover, #container #content a:focus-visible { text-decoration: underline; }
+#container #content a.tile, #container #content a.button { text-decoration: none; }
+
+/* ---------- 본문 · 카드 ---------- */
+#content { padding: 1rem 1.5rem 2rem; }
+h1 { color: var(--f-text); font-weight: 700; font-size: 1.5rem; margin: .5rem 0 1rem; }
+h2 { color: var(--f-text); }
+#content h2, #content h3 { font-weight: 600; }
+
+.module, .card, #changelist .changelist-form-container, fieldset.module, .inline-group .tabular, .inline-group .module {
+    background: var(--f-card);
+    border-radius: var(--f-radius-card);
+    box-shadow: var(--f-shadow);
+    border: none;
+}
+.module { margin-bottom: 1rem; }
+/* 넓은 입력 표(작업 실적·PPAP 요소)는 카드 안에서 가로 스크롤, 줄 제목은 칸 위쪽에 둔다 */
+.inline-group .tabular { overflow-x: auto; }
+.inline-group .tabular td { vertical-align: top; }
+.login .submit-row { box-shadow: none; padding: 0; background: transparent; }
+.card { padding: 1rem 1.25rem; margin: 0 0 1rem; }
+.card > h2 { margin: 0 0 .75rem; font-size: 1rem; display: flex; align-items: center; gap: .5rem; }
+.card > table { width: 100%; }
+.cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(22rem, 1fr)); gap: 1rem; align-items: start; }
+.cards .card { margin: 0; }
+
+/* 모듈 제목: Horizon은 파란 띠 대신 흰 바탕 굵은 제목 */
+.module h2, .module caption, .inline-group h2 {
+    background: var(--f-card); color: var(--f-text); font-size: .9375rem; font-weight: 600;
+    padding: .75rem 1rem; border-bottom: 1px solid var(--f-list-border); text-transform: none; letter-spacing: 0;
+}
+.module caption a, .module h2 a { color: var(--f-text); }
+#nav-sidebar .module caption, #nav-sidebar .module th { font-weight: 600; }
+.app-list .current-app .section:link, .app-list .current-app .section:visited { color: var(--f-brand-strong); }
+
+/* ---------- 표 (Horizon compact) ---------- */
+table { border-color: var(--f-list-border); }
+thead th, tfoot td, .card th {
+    background: var(--f-card); color: var(--f-label); font-weight: 600; font-size: .8125rem;
+    border-bottom: 1px solid var(--f-list-border); text-transform: none;
+}
+td, th { padding: .5rem .75rem; border-bottom: 1px solid var(--f-list-border); vertical-align: middle; }
+tr:hover > td { background: var(--f-hover); }
+#changelist table thead th { background: var(--f-card); }
+td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.empty { color: var(--f-label); text-align: center; padding: 1rem; }
+
+/* ---------- 입력 · 버튼 ---------- */
+input[type=text], input[type=password], input[type=email], input[type=url], input[type=number], input[type=tel],
+input[type=search], input:not([type]), textarea, select, .vTextField {
+    background: var(--f-card); color: var(--f-text);
+    border: 1px solid var(--f-border); border-bottom-color: var(--f-field-border);
+    border-radius: var(--f-radius-field); padding: .375rem .625rem; min-height: 2.25rem; box-sizing: border-box;
+}
+input:hover, textarea:hover, select:hover { background: var(--f-hover); }
+:focus-visible, input:focus, textarea:focus, select:focus {
+    outline: .125rem solid var(--f-focus); outline-offset: .0625rem;
+}
+.button, input[type=submit], input[type=button], .submit-row input, a.button, button:not(.theme-toggle):not(#logout-form button):not(.toggle-nav-sidebar) {
+    border-radius: var(--f-radius); padding: .5rem 1rem; font-weight: 600; font-size: .875rem; min-height: 2.25rem;
+    border: 1px solid var(--f-brand-strong); background: var(--f-brand-strong); color: #fff; cursor: pointer;
+}
+.button:hover, input[type=submit]:hover, a.button:hover, button:not(.theme-toggle):not(#logout-form button):not(.toggle-nav-sidebar):hover {
+    background: var(--f-brand); border-color: var(--f-brand);
+}
+a.button { display: inline-flex; align-items: center; box-sizing: border-box; line-height: 1.2; }
+.button.ghost, a.button.ghost, button.ghost {
+    background: var(--f-card); color: var(--f-link); border-color: var(--f-border);
+}
+.button.ghost:hover, button.ghost:hover { background: var(--f-hover); }
+.submit-row { background: var(--f-card); border: none; border-radius: var(--f-radius-card); box-shadow: var(--f-shadow); padding: .75rem 1rem; }
+.object-tools a:link, .object-tools a:visited {
+    border-radius: var(--f-radius); border: 1px solid var(--f-border); background: var(--f-card); color: var(--f-brand-strong);
+    text-transform: none; font-weight: 600;
+}
+.object-tools a:hover { background: var(--f-hover); }
+
+/* ---------- 메시지 ---------- */
+ul.messagelist li { border-radius: var(--f-radius); color: var(--f-text); margin: 0 1.5rem .5rem; box-shadow: var(--f-shadow); }
+.errornote, .errorlist li { border-radius: var(--f-radius); }
+.errornote { background: var(--f-negative-bg); color: var(--f-negative); border: 1px solid var(--f-negative); }
+
+/* ---------- 상태 배지 (Object Status) ---------- */
+.status {
+    display: inline-flex; align-items: center; gap: .25rem; padding: .0625rem .5rem; border-radius: 1rem;
+    font-size: .75rem; font-weight: 600; white-space: nowrap; border: 1px solid currentColor;
+}
+.status--positive { color: var(--f-positive); background: var(--f-positive-bg); }
+.status--critical { color: var(--f-critical); background: var(--f-critical-bg); }
+.status--negative { color: var(--f-negative); background: var(--f-negative-bg); }
+.status--info { color: var(--f-info); background: var(--f-info-bg); }
+.status--neutral { color: var(--f-neutral); background: var(--f-neutral-bg); }
+.ok { color: var(--f-positive); font-weight: 600; }
+.ng { color: var(--f-negative); font-weight: 600; }
+.count { color: var(--f-label); font-weight: 400; font-size: .875rem; }
+
+/* ---------- KPI 타일 ---------- */
+.tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(10.5rem, 1fr)); gap: 1rem; margin: 0 0 1.5rem; }
+.tile, a.tile:link, a.tile:visited {
+    display: flex; flex-direction: column; justify-content: space-between; min-height: 6.5rem; padding: 1rem;
+    background: var(--f-card); color: var(--f-text); border-radius: var(--f-radius-card); box-shadow: var(--f-shadow);
+    text-decoration: none; border-left: .25rem solid var(--f-neutral);
+}
+a.tile:hover { background: var(--f-hover); }
+.tile__title { font-size: .875rem; font-weight: 600; color: var(--f-text); }
+.tile__sub { font-size: .75rem; color: var(--f-label); }
+.tile__value { font-size: 2.25rem; font-weight: 300; line-height: 1; font-variant-numeric: tabular-nums; }
+.tile--positive { border-left-color: var(--f-positive); }
+.tile--critical { border-left-color: var(--f-critical); }
+.tile--critical .tile__value { color: var(--f-critical); }
+.tile--negative { border-left-color: var(--f-negative); }
+.tile--negative .tile__value { color: var(--f-negative); }
+
+/* ---------- 막대 (KPI) ---------- */
+.bar { background: var(--f-brand); height: .625rem; min-width: 1px; border-radius: .3125rem; }
+.bar--negative { background: var(--f-negative); }
+td.w { width: 25%; }
+
+/* ---------- 툴바 · 필터 줄 ---------- */
+.toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem 1rem; margin: 0 0 1rem; }
+.toolbar label { color: var(--f-label); font-size: .8125rem; }
+.help, p.help { color: var(--f-label); font-size: .8125rem; }
+
+/* ---------- 검사 입력 (현장용 큰 화면) ---------- */
+.insp { max-width: 50rem; font-size: 1.125rem; }
+.insp input, .insp select { font-size: 1.25rem; min-height: 3rem; padding: .5rem .75rem; }
+.insp button { font-size: 1.125rem; min-height: 3rem; padding: .5rem 1.25rem; }
+.insp input[name=lot] { width: 100%; }
+.insp label { display: block; color: var(--f-label); font-size: .9375rem; margin: 0 0 .375rem; }
+.insp .choices { display: flex; flex-wrap: wrap; gap: .5rem; }
+.banner { padding: 1rem 1.25rem; border-radius: var(--f-radius-card); margin: 1rem 0; font-size: 1.375rem; font-weight: 700; border-left: .375rem solid; }
+.banner.ok { background: var(--f-positive-bg); color: var(--f-positive); }
+.banner.ng { background: var(--f-negative-bg); color: var(--f-negative); }
+
+/* ---------- SPC 그래프 ---------- */
+.chart { color: var(--f-text); }
+.chart .limit { stroke: var(--f-negative); }
+.chart .center { stroke: var(--f-brand); }
+.chart .alarm { fill: var(--f-negative); }
+
+@media (max-width: 767px) {
+    .shell-nav { order: 3; width: 100%; }
+    #content { padding: 1rem; }
+}
