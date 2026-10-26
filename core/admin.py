@@ -6,7 +6,8 @@ from django.urls import reverse
 from django.utils.html import format_html, format_html_join
 from simple_history.admin import SimpleHistoryAdmin
 
-from .models import BomLine, Hold, ImportProfile, Item, Lot, LotLink, Nonconformance, Process, Shipment, WorkOrder
+from .models import (BomLine, Hold, ImportProfile, Item, Lot, LotLink, Nonconformance, Process, RoutingStep, Shipment,
+                     WorkOrder, WorkResult)
 
 admin.site.site_header = admin.site.site_title = 'QMS+MES'
 admin.site.index_title = '메뉴'
@@ -54,12 +55,17 @@ class BomInline(admin.TabularInline):
     autocomplete_fields = ['component']
 
 
+class RoutingInline(admin.TabularInline):
+    model = RoutingStep
+    extra = 1
+
+
 @admin.register(Item)
 class ItemAdmin(SimpleHistoryAdmin):
     list_display = ['code', 'name', 'item_type']
     search_fields = ['code', 'name']
     list_filter = ['item_type']
-    inlines = [BomInline]
+    inlines = [BomInline, RoutingInline]
 
 
 @admin.register(Process)
@@ -68,12 +74,44 @@ class ProcessAdmin(SimpleHistoryAdmin):
     search_fields = ['code', 'name']
 
 
+class WorkResultInline(admin.TabularInline):
+    model = WorkResult
+    extra = 1
+    autocomplete_fields = ['lot']
+    fields = ['step', 'lot', 'input_qty', 'good_qty', 'defect_qty', 'operator', 'started_at', 'ended_at']
+
+    def formfield_for_foreignkey(self, db_field, request, **kwargs):
+        # 이 작업지시 품번의 라우팅 공정만 고를 수 있게 한다
+        if db_field.name == 'step' and request.resolver_match.kwargs.get('object_id'):
+            wo = WorkOrder.objects.filter(pk=request.resolver_match.kwargs['object_id']).first()
+            if wo:
+                kwargs['queryset'] = wo.item.routing.select_related('process')
+        if db_field.name == 'operator':
+            kwargs['initial'] = request.user.pk
+        return super().formfield_for_foreignkey(db_field, request, **kwargs)
+
+
 @admin.register(WorkOrder)
 class WorkOrderAdmin(SimpleHistoryAdmin):
-    list_display = ['number', 'item', 'process', 'planned_qty', 'due_date', 'status']
+    list_display = ['number', 'item', 'process', 'planned_qty', 'due_date', 'status', 'progress_display']
     list_filter = ['status', 'process']
     search_fields = ['number', 'item__code']
     autocomplete_fields = ['item', 'process']
+    readonly_fields = ['progress_display']
+    inlines = [WorkResultInline]
+
+    @admin.display(description='진도율')
+    def progress_display(self, obj):
+        p = obj.progress if obj.pk else None
+        return '-' if p is None else f'{p:.0f}%'
+
+
+@admin.register(WorkResult)
+class WorkResultAdmin(SimpleHistoryAdmin):
+    list_display = ['work_order', 'step', 'lot', 'input_qty', 'good_qty', 'defect_qty', 'operator', 'started_at']
+    list_filter = ['step__process']
+    search_fields = ['work_order__number', 'lot__number']
+    autocomplete_fields = ['work_order', 'lot']
 
 
 @admin.register(ImportProfile)

@@ -2,7 +2,31 @@ from django.contrib.auth.models import Group, User
 from django.core.exceptions import ValidationError
 from django.test import TestCase
 
-from .models import Item, Lot, LotLink, Nonconformance, Shipment
+from .models import Item, Lot, LotLink, Nonconformance, Process, RoutingStep, Shipment, WorkOrder, WorkResult
+
+
+class RoutingTest(TestCase):
+    def test_work_results_follow_routing(self):
+        item = Item.objects.create(code='C1', name='셀', item_type=Item.FINISHED)
+        stack, weld = Process.objects.create(code='P10', name='적층'), Process.objects.create(code='P20', name='용접')
+        s10 = RoutingStep.objects.create(item=item, seq=10, process=stack)
+        s20 = RoutingStep.objects.create(item=item, seq=20, process=weld)
+        wo = WorkOrder.objects.create(number='WO-1', item=item, planned_qty=100)
+        with self.assertRaises(ValidationError):  # 적층 없이 용접
+            WorkResult.objects.create(work_order=wo, step=s20, input_qty=10, good_qty=10)
+        with self.assertRaises(ValidationError):  # 양품+불량 > 투입
+            WorkResult.objects.create(work_order=wo, step=s10, input_qty=10, good_qty=9, defect_qty=2)
+        WorkResult.objects.create(work_order=wo, step=s10, input_qty=60, good_qty=58, defect_qty=2)
+        wo.refresh_from_db()
+        self.assertEqual(wo.status, WorkOrder.RUNNING)
+        WorkResult.objects.create(work_order=wo, step=s20, input_qty=58, good_qty=50, defect_qty=8)
+        self.assertEqual(wo.progress, 50.0)
+        held = Lot.objects.create(number='L1', item=item)
+        Nonconformance.objects.create(lot=held, description='x')
+        with self.assertRaises(ValidationError):
+            WorkResult.objects.create(work_order=wo, step=s20, lot=held, input_qty=1, good_qty=1)
+        from qms.kpi import process_yield
+        self.assertEqual([round(y['yield'], 2) for y in process_yield(1)], [round(58 / 60 * 100, 2), round(50 / 58 * 100, 2)])
 
 
 class InterlockTest(TestCase):

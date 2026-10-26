@@ -6,7 +6,7 @@ from decimal import Decimal
 from django.db.models import Count, Sum
 from django.utils import timezone
 
-from core.models import Lot, Nonconformance, Shipment
+from core.models import Lot, Nonconformance, Shipment, WorkResult
 
 from .models import CustomerClaim, Inspection, InspectionSpec, Scar
 
@@ -87,6 +87,18 @@ def pareto(months=6):
         out.append({**d, 'share': float(d['qty']) / float(total) * 100 if total else 0,
                     'cum': float(cum) / float(total) * 100 if total else 0})
     return out
+
+
+def process_yield(months=6):
+    """공정별 수율 = 양품 ÷ 투입 (작업 실적 기준)."""
+    since = _aware(month_starts(months)[0])
+    data = (WorkResult.objects.filter(started_at__gte=since)
+            .values('step__process__code', 'step__process__name')
+            .annotate(inp=Sum('input_qty'), good=Sum('good_qty'), bad=Sum('defect_qty'), n=Count('id'))
+            .order_by('step__process__code'))
+    return [{'process': f"{d['step__process__code']} {d['step__process__name']}", 'n': d['n'], 'input': d['inp'],
+             'good': d['good'], 'defect': d['bad'], 'yield': 100 * float(d['good']) / float(d['inp']) if d['inp'] else None}
+            for d in data]
 
 
 def suppliers(months=6):

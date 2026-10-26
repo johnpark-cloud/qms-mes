@@ -91,6 +91,76 @@ class WorkOrder(models.Model):
     def __str__(self):
         return self.number
 
+    @property
+    def progress(self):
+        """진도율(%) = 마지막 공정 양품 합 ÷ 계획 수량."""
+        last = self.item.routing.order_by('-seq').first()
+        if not last or not self.planned_qty:
+            return None
+        good = self.results.filter(step=last).aggregate(s=models.Sum('good_qty'))['s'] or 0
+        return float(good) / float(self.planned_qty) * 100
+
+
+class RoutingStep(models.Model):
+    """품번별 공정 순서. 작업 실적은 이 순서를 건너뛸 수 없다."""
+    item = models.ForeignKey(Item, on_delete=models.CASCADE, related_name='routing', verbose_name='품번')
+    seq = models.PositiveSmallIntegerField('순서', help_text='10, 20, 30처럼 띄워 두면 중간에 공정을 넣기 쉽다')
+    process = models.ForeignKey(Process, on_delete=models.PROTECT, verbose_name='공정')
+    history = HistoricalRecords()
+
+    class Meta:
+        verbose_name = verbose_name_plural = '공정 라우팅'
+        ordering = ['item', 'seq']
+        constraints = [models.UniqueConstraint(fields=['item', 'seq'], name='uniq_routing_seq')]
+
+    def __str__(self):
+        return f'{self.item.code} {self.seq} {self.process.name}'
+
+
+class WorkResult(models.Model):
+    """작업 실적: 작업지시의 한 공정에서 투입·양품·불량 수량."""
+    work_order = models.ForeignKey(WorkOrder, on_delete=models.PROTECT, related_name='results', verbose_name='작업지시')
+    step = models.ForeignKey(RoutingStep, on_delete=models.PROTECT, related_name='results', verbose_name='공정')
+    lot = models.ForeignKey('Lot', on_delete=models.PROTECT, null=True, blank=True, related_name='work_results',
+                            verbose_name='생산 LOT')
+    input_qty = models.DecimalField('투입 수량', max_digits=12, decimal_places=3)
+    good_qty = models.DecimalField('양품 수량', max_digits=12, decimal_places=3)
+    defect_qty = models.DecimalField('불량 수량', max_digits=12, decimal_places=3, default=0)
+    operator = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, null=True, blank=True,
+                                 verbose_name='작업자')
+    started_at = models.DateTimeField('시작', default=timezone.now)
+    ended_at = models.DateTimeField('종료', null=True, blank=True)
+    history = HistoricalRecords()
+
+    class Meta:
+        verbose_name = verbose_name_plural = '작업 실적'
+
+    def __str__(self):
+        return f'{self.work_order} {self.step}'
+
+    def clean(self):
+        if not (self.work_order_id and self.step_id):
+            return
+        wo = self.work_order
+        if self.step.item_id != wo.item_id:
+            raise ValidationError(f'{self.step}은(는) 작업지시 품번 {wo.item.code}의 라우팅이 아닙니다.')
+        if (self.good_qty or 0) + (self.defect_qty or 0) > (self.input_qty or 0):
+            raise ValidationError('양품+불량 수량이 투입 수량보다 많습니다.')
+        prev = RoutingStep.objects.filter(item=wo.item_id, seq__lt=self.step.seq).order_by('-seq').first()
+        if prev and not wo.results.filter(step=prev, good_qty__gt=0).exclude(pk=self.pk).exists():
+            raise ValidationError(f'이전 공정 {prev.seq} {prev.process.name}의 양품 실적이 없어 이 공정을 등록할 수 없습니다.')
+        if self.lot_id:
+            if self.lot.item_id != wo.item_id:
+                raise ValidationError('LOT의 품번이 작업지시 품번과 다릅니다.')
+            if self._state.adding:
+                self.lot.assert_usable('실적 등록')
+
+    @transaction.atomic
+    def save(self, *args, **kwargs):
+        self.clean()
+        super().save(*args, **kwargs)
+        WorkOrder.objects.filter(pk=self.work_order_id, status=WorkOrder.PLANNED).update(status=WorkOrder.RUNNING)
+
 
 class ImportProfile(models.Model):
     """회사별 엑셀/CSV 양식의 열 매핑. 코드를 고치지 않고 새 회사 양식을 받기 위한 설정."""

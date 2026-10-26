@@ -71,7 +71,8 @@ try:
     s, _ = post('/admin/login/?next=/admin/', {'username': 'mrb', 'password': 'e2e-pass-123', 'next': '/admin/'})
     check('로그인', s == 302)
 
-    bom = {'bom_lines-TOTAL_FORMS': 0, 'bom_lines-INITIAL_FORMS': 0, 'bom_lines-MIN_NUM_FORMS': 0, 'bom_lines-MAX_NUM_FORMS': 1000}
+    bom = {f'{p}-{k}': v for p in ('bom_lines', 'routing')
+           for k, v in (('TOTAL_FORMS', 0), ('INITIAL_FORMS', 0), ('MIN_NUM_FORMS', 0), ('MAX_NUM_FORMS', 1000))}
     s, html = post('/admin/core/item/add/', {'code': 'R1', 'name': '양극재', 'item_type': 'RAW', **bom})
     check('품번 R1(원자재) 등록', s == 302, errors(html) or re.findall(r'ManagementForm[^<]*', html))
     s, _ = post('/admin/core/item/add/', {'code': 'C1', 'name': '셀', 'item_type': 'FIN', **bom})

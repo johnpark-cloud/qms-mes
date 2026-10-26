@@ -97,7 +97,7 @@ def kpi_view(request):
         for r in rows:
             r[f'{key}_bar'] = float(r[key] or 0) / top * 100
     return render(request, 'qms/kpi.html', {'title': '품질 KPI', 'months': months, 'rows': rows,
-                                             'pareto': kpi.pareto(months)})
+                                             'pareto': kpi.pareto(months), 'yields': kpi.process_yield(months)})
 
 
 @staff_member_required

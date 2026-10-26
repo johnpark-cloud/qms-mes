@@ -42,6 +42,18 @@
 <p class="help">고객 PPM = 클레임 불량 수량 ÷ 출하 수량 × 1,000,000 · 직행률 = LOT·검사구분별 첫 판정이 합격인 비율 ·
   8D 봉쇄 기한 준수 = D3가 고객사별 기한 안에 처음 기록된 비율 · 실패비용 = 부적합에 입력한 비용 합계</p>
 
+<h2>공정별 수율 (작업 실적, 기간 전체)</h2>
+<table>
+  <thead><tr><th>공정</th><th>실적 건수</th><th>투입</th><th>양품</th><th>불량</th><th>수율(%)</th></tr></thead>
+  <tbody>
+  {% for y in yields %}
+    <tr><td>{{ y.process }}</td><td class="num">{{ y.n }}</td><td class="num">{{ y.input|floatformat:"0g" }}</td>
+      <td class="num">{{ y.good|floatformat:"0g" }}</td><td class="num">{{ y.defect|floatformat:"0g" }}</td>
+      <td class="num">{% if y.yield is None %}-{% else %}{{ y.yield|floatformat:1 }}{% endif %}</td></tr>
+  {% empty %}<tr><td colspan="6">작업 실적이 없습니다.</td></tr>{% endfor %}
+  </tbody>
+</table>
+
 <h2>불량유형 파레토 (기간 전체)</h2>
 <table>
   <thead><tr><th>불량유형</th><th>건수</th><th>불량 수량</th><th>비율(%)</th><th>누적(%)</th><th></th></tr></thead>
