@@ -237,6 +237,69 @@ try:
     memo_id = re.search(r'name="memo" value="(\d+)"', get('/memo/inbox/')).group(1)
     post('/memo/inbox/', {'memo': memo_id, 'kind': 'LOT', 'number': ' CELL-A \n'})
     check('미분류 메모 → LOT 연결, LOT 이력에 표시', 'E2E 심사원 지적' in get('/trace/?lot=CELL-A'))
+
+    # 4차 고도화: 간편 등록 → 보완·처분 → 메일 → 삭제 요청·승인 → 검색·타임라인·묶음·내 정보·대시보드
+    def shell(code):
+        return manage('shell', '-c', code).stdout.decode().strip().splitlines()[-1]
+    s, html = post('/nc/new/', {'lot': ' CELL-Z \n', 'origin': 'PROCESS', 'description': '간편 등록 이물', 'defect_qty': 2})
+    check('간편 등록 (/nc/new/) → 추적 화면으로 이동', s == 302, errors(html))
+    nc2 = shell("from core.models import Nonconformance as N; print(N.objects.get(description='간편 등록 이물').pk)")
+    check('간편 등록 → CELL-Z 보류', '보류 중' in get('/trace/?lot=CELL-Z'))
+    quick = {'lot': 3, 'origin': 'PROCESS', 'description': '간편 등록 이물', **dt('detected_at'),
+             'defect_qty': 2, 'cost': 0, 'photos-TOTAL_FORMS': 0, 'photos-INITIAL_FORMS': 0,
+             'photos-MIN_NUM_FORMS': 0, 'photos-MAX_NUM_FORMS': 1000, 'password': 'e2e-pass-123'}
+    s, html = post(f'/admin/core/nonconformance/{nc2}/change/', {**quick, 'disposition': 'SCRAP'})
+    check('간편 등록 건: 보완 없이 처분 → 거부', s == 200 and '보완 필요' in html, errors(html))
+    quick.update({'defect_type': '이물', 'process': 1, 'contained_qty': 2, 'sorting_result': '전수 선별'})
+    s, html = post(f'/admin/core/nonconformance/{nc2}/change/', {**quick, 'disposition': 'SCRAP'})
+    check('보완 후 폐기 처분 저장', s == 302, errors(html))
+    check('메일 화면 200 (승인된 부적합)', 'CELL-Z' in get(f'/nc/{nc2}/mail/'))
+    s, _ = post(f'/nc/{nc2}/mail/', {'action': 'mark_sent'})
+    check('메일 "보냈음 표시" → 발송 일시 기록', s == 302 and
+          shell(f"from core.models import Nonconformance as N; print(N.objects.get(pk={nc2}).mailed_at is not None)") == 'True')
+
+    # 삭제 요청 → 관리자 승인 → 삭제 (일반 사용자 qe가 요청)
+    nc3 = shell("from core.models import Nonconformance as N, Lot; "
+                "from django.contrib.auth.models import User; u=User.objects.get(username='mrb'); "
+                "print(N.objects.create(lot=Lot.objects.get(number='RAW-1'), description='삭제 대상', detected_by=u).pk)")
+    shell("from django.contrib.auth.models import User, Group; "
+          "u=User.objects.create_user('qe', password='qe-pass-123', is_staff=True); "
+          "u.groups.add(Group.objects.get(name='품질엔지니어'))")
+    jar.clear()
+    s, _ = post('/admin/login/?next=/admin/', {'username': 'qe', 'password': 'qe-pass-123', 'next': '/admin/'})
+    check('일반 사용자(품질엔지니어) 로그인', s == 302)
+    s, html = post(f'/request/DELETE/core/nonconformance/{nc3}/', {'reason': '중복 등록', 'password': 'wrong'})
+    check('삭제 요청: 비밀번호 틀림 → 거부', s == 200 and '비밀번호' in html)
+    s, _ = post(f'/request/DELETE/core/nonconformance/{nc3}/', {'reason': '중복 등록', 'password': 'qe-pass-123'})
+    check('삭제 요청 접수 (바로 삭제되지 않음)', s == 302 and
+          shell(f"from core.models import Nonconformance as N; print(N.objects.filter(pk={nc3}).exists())") == 'True')
+    req = shell("from core.models import EditRequest as E; print(E.objects.get(status='PENDING').pk)")
+    s, _ = post_only(f'/request/{req}/decide/', {'approve': '1'})
+    check('일반 사용자는 요청을 승인할 수 없다', s == 403)
+    jar.clear()
+    post('/admin/login/?next=/admin/', {'username': 'mrb', 'password': 'e2e-pass-123', 'next': '/admin/'})
+    s, _ = post_only(f'/request/{req}/decide/', {'approve': '1'})
+    check('관리자 승인 → 부적합 삭제', s == 302 and
+          shell(f"from core.models import Nonconformance as N; print(N.objects.filter(pk={nc3}).exists())") == 'False')
+
+    try:
+        post_opener.open(BASE + '/search/?q=CELL-A&go=1'); code = 200
+    except urllib.error.HTTPError as e:
+        code = e.code
+    check('통합 검색 LOT 번호 + go=1 → 추적 화면으로 302', code == 302)
+    check('LOT 타임라인 표시', 'class="timeline"' in get('/trace/?lot=CELL-A'))
+    check('심사 대응 묶음 화면 200', '심사 대응 묶음' in get('/audit-pack/'))
+    check('내 연차·급여 화면 200', get('/me/') != '')
+    def save_layout(body):
+        token = next(c.value for c in jar if c.name == 'csrftoken')
+        try:
+            return post_opener.open(urllib.request.Request(BASE + '/dashboard/save/', body, headers={'X-CSRFToken': token})).status
+        except urllib.error.HTTPError as e:
+            return e.code
+    check('대시보드 저장: 깨진 JSON → 400', save_layout(b'{oops') == 400)
+    check('대시보드 저장: 빈 배치 → 200 (기본 배치로)', save_layout(b'[]') == 200)
+    css = get('/static/qms/fiori.css')
+    check('fiori.css에 CI 색 #2c4d80', '#2c4d80' in css.lower())
 finally:
     server.terminate()
 
