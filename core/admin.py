@@ -336,7 +336,8 @@ class NonconformanceAdmin(ReportLinksMixin, BaseAdmin):
         if obj and obj.closed_at and not can_edit_locked(obj, request.user):
             open_ = Nonconformance.AFTER_APPROVAL
             return [f.name for f in obj._meta.fields if f.name not in open_ and f.name not in self.AUTO] + self.AUTO
-        return self.AUTO
+        # 보류 인터록 칸은 관리자·수정 승인으로도 종결 뒤에 바꿀 수 없다 (새 MRB 서명 없이 보류가 풀리거나 남는다)
+        return self.AUTO + (Nonconformance.INTERLOCK if obj and obj.closed_at else [])
 
     def formfield_for_foreignkey(self, db_field, request, **kwargs):
         if db_field.name == 'detected_by':

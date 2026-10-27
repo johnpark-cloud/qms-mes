@@ -403,3 +403,48 @@ class NcReportTest(TestCase):
         resp = self.client.get(f'/print/core/nonconformance/{nc.pk}/')
         self.assertContains(resp, '부적합 보고서')
         self.assertContains(resp, nc.number)
+
+    def test_closed_nc_interlock_fields_locked_for_superuser(self):
+        from .models import Hold
+        nc = Nonconformance.objects.create(lot=self.lot, description='이물')
+        nc.disposition, nc.approved_by = Nonconformance.SCRAP, self.lead
+        nc.save()
+        other = Lot.objects.create(number='L2', item=self.item)
+        holds = list(Hold.objects.filter(nonconformance=nc).values_list('lot_id', 'released_at'))
+        self.client.force_login(User.objects.create_superuser('root', password='pw'))
+        resp = self.client.post(f'/admin/core/nonconformance/{nc.pk}/change/',
+                                self._form(nc, lot=other.pk, disposition='REWORK', customer_approval_ref='X',
+                                           detected_at_0='2020-01-01', description='관리자 수정'))
+        self.assertEqual(resp.status_code, 302)
+        nc.refresh_from_db()
+        self.assertEqual((nc.lot_id, nc.disposition, nc.customer_approval_ref), (self.lot.pk, 'SCRAP', ''))
+        self.assertNotEqual(nc.detected_at.year, 2020)
+        self.assertEqual(nc.description, '관리자 수정')  # 그 밖의 칸은 관리자가 고칠 수 있다
+        self.assertEqual(list(Hold.objects.filter(nonconformance=nc).values_list('lot_id', 'released_at')), holds)
+
+    def test_photo_inline_rejects_bad_files_keeps_existing(self):
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        from .models import NonconformancePhoto
+        nc = Nonconformance.objects.create(lot=self.lot, description='이물')
+        old = NonconformancePhoto.objects.create(nonconformance=nc, file=SimpleUploadedFile('old.jpg', b'0' * 10))
+        self.client.force_login(self.lead)
+        data = self._form(nc, **{'photos-TOTAL_FORMS': 3, 'photos-INITIAL_FORMS': 1, 'photos-0-id': old.pk,
+                                 'photos-0-nonconformance': nc.pk, 'photos-0-caption': '',
+                                 'photos-1-file': SimpleUploadedFile('x.exe', b'0' * 10),
+                                 'photos-2-file': SimpleUploadedFile('x.jpg', b'0' * (11 * 1024 * 1024))})
+        resp = self.client.post(f'/admin/core/nonconformance/{nc.pk}/change/', data)
+        self.assertContains(resp, '사진 파일만 올릴 수 있습니다')
+        self.assertContains(resp, '10MB 이하')
+        self.assertEqual(list(nc.photos.values_list('pk', flat=True)), [old.pk])
+        self.assertTrue(old.file.storage.exists(old.file.name))
+
+    def test_stored_photo_missing_on_disk_still_valid(self):
+        import os
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        from .models import NonconformancePhoto
+        nc = Nonconformance.objects.create(lot=self.lot, description='이물')
+        photo = NonconformancePhoto.objects.create(nonconformance=nc, file=SimpleUploadedFile('a.jpg', b'0'))
+        os.remove(photo.file.path)
+        photo.refresh_from_db()
+        photo.full_clean()
+        self.assertTrue(NonconformancePhoto.history.filter(id=photo.pk).exists())

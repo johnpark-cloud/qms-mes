@@ -263,6 +263,7 @@ class LotLink(models.Model):
         super().save(*args, **kwargs)
 
 
+# shortcut: 같은 순간 두 건 등록 시 번호 중복(IntegrityError), 하루 999건 넘으면 순번 정렬이 깨진다, 동시 입력이 잦아지면 DB 시퀀스로 바꾼다
 def _nc_number():
     """NC-YYMMDD-001: 날짜별 순번. 중간 번호가 지워져도 겹치지 않게 그날 마지막 번호 다음으로 매긴다."""
     prefix = timezone.localtime().strftime('NC-%y%m%d-')
@@ -274,6 +275,7 @@ class Nonconformance(models.Model):
     ORIGINS = [('INCOMING', '수입검사·협력사'), ('PROCESS', '공정 내부'), ('OUTGOING', '출하검사'), ('CLAIM', '고객 클레임'),
                ('RETURN', '반품')]
     AFTER_APPROVAL = {'cost', 'customer_notified_on', 'capa_required', 'mailed_at'}  # 승인 뒤에도 기록하는 칸
+    INTERLOCK = ['lot', 'detected_at', 'disposition', 'customer_approval_ref']  # 종결 뒤 바뀌면 보류 계산이 어긋나는 칸
     REWORK, REPAIR, SCRAP, RETURN, CONCESSION = 'REWORK', 'REPAIR', 'SCRAP', 'RETURN', 'CONCESSION'
     DISPOSITIONS = [(REWORK, '재작업'), (REPAIR, '수리'), (SCRAP, '폐기'), (RETURN, '반품'), (CONCESSION, '특채')]
     RELEASING = {REWORK, REPAIR, CONCESSION}  # 폐기·반품은 보류를 풀지 않는다
@@ -381,6 +383,8 @@ PHOTO_MAX_MB = 10
 
 
 def validate_photo(f):
+    if getattr(f, '_committed', False):  # 이미 저장된 사진은 다시 검사하지 않는다 (디스크에서 사라졌어도 행 저장은 된다)
+        return
     ext = os.path.splitext(f.name)[1].lower().lstrip('.')
     if ext not in PHOTO_EXTS:
         raise ValidationError(f'사진 파일만 올릴 수 있습니다 ({", ".join(sorted(PHOTO_EXTS))}): {f.name}')
@@ -393,6 +397,7 @@ class NonconformancePhoto(models.Model):
     file = models.FileField('사진', upload_to='nc/%Y/', validators=[validate_photo])
     caption = models.CharField('설명', max_length=200, blank=True)
     uploaded_at = models.DateTimeField('올린 일시', default=timezone.now)
+    history = HistoricalRecords()
 
     class Meta:
         verbose_name = verbose_name_plural = '부적합 사진'
