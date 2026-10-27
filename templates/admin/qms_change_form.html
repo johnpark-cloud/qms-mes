@@ -1,0 +1,8 @@
+{% extends "admin/change_form.html" %}
+{% block object-tools-items %}
+{{ block.super }}
+{% if request_links_enabled %}
+<li><a href="{% url 'edit_request' 'DELETE' opts.app_label opts.model_name original.pk %}">{% if request.user.is_superuser %}삭제{% else %}삭제 요청{% endif %}</a></li>
+{% if record_locked %}<li><a href="{% url 'edit_request' 'EDIT' opts.app_label opts.model_name original.pk %}">{% if request.user.is_superuser %}잠금 풀고 수정{% else %}수정 요청{% endif %}</a></li>{% endif %}
+{% endif %}
+{% endblock %}

@@ -8,9 +8,56 @@ from simple_history.admin import SimpleHistoryAdmin
 
 from .models import (BomLine, Hold, ImportProfile, Item, Lot, LotLink, Nonconformance, Process, RoutingStep, Shipment,
                      WorkOrder, WorkResult)
+from .records import edit_unlocked, is_locked
 
 admin.site.site_header = admin.site.site_title = 'QMS+MES'
 admin.site.index_title = '메뉴'
+
+
+class BaseAdmin(SimpleHistoryAdmin):
+    """삭제는 시스템 관리자만. 그 외 사용자는 '삭제 요청'·'수정 요청'으로 관리자 승인을 받는다."""
+    change_form_template = 'admin/qms_change_form.html'
+    request_links_enabled = True
+
+    def has_delete_permission(self, request, obj=None):
+        return request.user.is_superuser
+
+    def get_actions(self, request):
+        actions = super().get_actions(request)
+        if not request.user.is_superuser:
+            actions.pop('delete_selected', None)
+        return actions
+
+    def get_list_display(self, request):
+        # 표시 메서드는 request를 못 받으므로 사용자별 라벨은 열 이름으로 고른다
+        cols = list(super().get_list_display(request))
+        if self.request_links_enabled:
+            cols.append('delete_link' if request.user.is_superuser else 'request_links')
+        return cols
+
+    def _delete_url(self, obj):
+        return reverse('edit_request', args=['DELETE', obj._meta.app_label, obj._meta.model_name, obj.pk])
+
+    @admin.display(description='요청')
+    def request_links(self, obj):
+        return format_html('<a href="{}">삭제 요청</a>', self._delete_url(obj))
+
+    @admin.display(description='삭제')
+    def delete_link(self, obj):
+        return format_html('<a href="{}">삭제</a>', self._delete_url(obj))
+
+    def render_change_form(self, request, context, add=False, change=False, form_url='', obj=None):
+        context['request_links_enabled'] = self.request_links_enabled
+        context['record_locked'] = obj is not None and is_locked(obj) and not edit_unlocked(obj, request.user)
+        return super().render_change_form(request, context, add, change, form_url, obj)
+
+    def save_model(self, request, obj, form, change):
+        unlock = change and edit_unlocked(obj, request.user)
+        obj._edit_unlocked = bool(unlock)
+        super().save_model(request, obj, form, change)
+        if unlock:  # 저장이 성공했을 때만 잠금 해제를 소모한다
+            unlock.status = unlock.USED
+            unlock.save()
 
 
 class ReportLinksMixin:
@@ -40,7 +87,7 @@ class ApprovalAdminMixin:
         return format_html('<a class="button" href="{}">승인 서명</a> (미승인)', url)
 
     def get_readonly_fields(self, request, obj=None):
-        if obj and obj.is_approved:
+        if obj and obj.is_approved and not edit_unlocked(obj, request.user):
             return [f.name for f in obj._meta.fields] + ['approval']
         return ['approval']
 
@@ -61,7 +108,7 @@ class RoutingInline(admin.TabularInline):
 
 
 @admin.register(Item)
-class ItemAdmin(SimpleHistoryAdmin):
+class ItemAdmin(BaseAdmin):
     list_display = ['code', 'name', 'item_type']
     search_fields = ['code', 'name']
     list_filter = ['item_type']
@@ -69,7 +116,7 @@ class ItemAdmin(SimpleHistoryAdmin):
 
 
 @admin.register(Process)
-class ProcessAdmin(SimpleHistoryAdmin):
+class ProcessAdmin(BaseAdmin):
     list_display = ['code', 'name']
     search_fields = ['code', 'name']
 
@@ -92,7 +139,7 @@ class WorkResultInline(admin.TabularInline):
 
 
 @admin.register(WorkOrder)
-class WorkOrderAdmin(SimpleHistoryAdmin):
+class WorkOrderAdmin(BaseAdmin):
     list_display = ['number', 'item', 'process', 'planned_qty', 'due_date', 'status', 'progress_display']
     list_filter = ['status', 'process']
     search_fields = ['number', 'item__code']
@@ -107,7 +154,7 @@ class WorkOrderAdmin(SimpleHistoryAdmin):
 
 
 @admin.register(WorkResult)
-class WorkResultAdmin(SimpleHistoryAdmin):
+class WorkResultAdmin(BaseAdmin):
     list_display = ['work_order', 'step', 'lot', 'input_qty', 'good_qty', 'defect_qty', 'operator', 'started_at']
     list_filter = ['step__process']
     search_fields = ['work_order__number', 'lot__number']
@@ -115,7 +162,7 @@ class WorkResultAdmin(SimpleHistoryAdmin):
 
 
 @admin.register(ImportProfile)
-class ImportProfileAdmin(SimpleHistoryAdmin):
+class ImportProfileAdmin(BaseAdmin):
     list_display = ['name', 'target', 'header_row']
 
 
@@ -128,7 +175,7 @@ class ParentLinkInline(admin.TabularInline):
 
 
 @admin.register(Lot)
-class LotAdmin(SimpleHistoryAdmin):
+class LotAdmin(BaseAdmin):
     list_display = ['number', 'item', 'work_order', 'qty', 'supplier', 'is_hold', 'is_gap', 'created_at']
     search_fields = ['number', 'item__code', 'supplier']
     autocomplete_fields = ['item', 'work_order']
@@ -162,7 +209,7 @@ class NonconformanceForm(forms.ModelForm):
 
 
 @admin.register(Nonconformance)
-class NonconformanceAdmin(ReportLinksMixin, SimpleHistoryAdmin):
+class NonconformanceAdmin(ReportLinksMixin, BaseAdmin):
     form = NonconformanceForm
     list_display = ['__str__', 'lot', 'defect_type', 'detected_at', 'disposition', 'approved_by', 'closed_at']
     list_filter = ['disposition', 'defect_type']
@@ -188,9 +235,10 @@ class NonconformanceAdmin(ReportLinksMixin, SimpleHistoryAdmin):
 
 
 @admin.register(Hold)
-class HoldAdmin(SimpleHistoryAdmin):
+class HoldAdmin(BaseAdmin):
     list_display = ['lot', 'nonconformance', 'created_at', 'released_at']
     list_filter = [('released_at', admin.EmptyFieldListFilter)]
+    request_links_enabled = False  # 보류는 부적합 삭제와 함께만 지워진다
 
     # 보류는 부적합 등록·처분으로만 생기고 풀린다
     def has_add_permission(self, request):
@@ -204,7 +252,7 @@ class HoldAdmin(SimpleHistoryAdmin):
 
 
 @admin.register(Shipment)
-class ShipmentAdmin(ReportLinksMixin, SimpleHistoryAdmin):
+class ShipmentAdmin(ReportLinksMixin, BaseAdmin):
     list_display = ['lot', 'customer', 'qty', 'shipped_at']
     search_fields = ['lot__number', 'customer']
     autocomplete_fields = ['lot']

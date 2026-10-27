@@ -1,7 +1,10 @@
 from django.apps import apps
 from django.conf import settings
-from django.core.exceptions import ValidationError
+from django.contrib.contenttypes.fields import GenericForeignKey
+from django.contrib.contenttypes.models import ContentType
+from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import models, transaction
+from django.db.models import ProtectedError
 from django.utils import timezone
 from simple_history.models import HistoricalRecords
 
@@ -26,7 +29,9 @@ class Approvable(models.Model):
         return self.approved_at is not None
 
     def save(self, *args, **kwargs):
-        if self.pk and type(self).objects.filter(pk=self.pk, approved_at__isnull=False).exists():
+        # 관리자가 승인한 수정 요청 1회분만 잠금을 건너뛴다 (core.admin.BaseAdmin.save_model)
+        locked = self.pk and type(self).objects.filter(pk=self.pk, approved_at__isnull=False).exists()
+        if locked and not getattr(self, '_edit_unlocked', False):
             raise ValidationError('승인된 기록은 수정할 수 없습니다. 새 개정을 만드세요.')
         super().save(*args, **kwargs)
 
@@ -365,3 +370,53 @@ class Shipment(models.Model):
     def save(self, *args, **kwargs):
         self.clean()
         super().save(*args, **kwargs)
+
+
+class EditRequest(models.Model):
+    """삭제·수정 요청. 관리자(슈퍼유저)가 승인해야 삭제되거나 승인된 기록의 잠금이 1회 풀린다."""
+    DELETE, EDIT = 'DELETE', 'EDIT'
+    KINDS = [(DELETE, '삭제'), (EDIT, '수정')]
+    PENDING, APPROVED, REJECTED, USED = 'PENDING', 'APPROVED', 'REJECTED', 'USED'
+    STATUSES = [(PENDING, '대기'), (APPROVED, '승인'), (REJECTED, '거절'), (USED, '수정 완료')]
+
+    kind = models.CharField('요청 종류', max_length=6, choices=KINDS)
+    content_type = models.ForeignKey(ContentType, on_delete=models.PROTECT, verbose_name='기록 종류')
+    object_id = models.PositiveBigIntegerField('기록 번호')
+    target = GenericForeignKey('content_type', 'object_id')
+    object_repr = models.CharField('대상 기록', max_length=200)
+    reason = models.TextField('사유')
+    requested_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name='+',
+                                     verbose_name='요청자')
+    requested_at = models.DateTimeField('요청 일시', default=timezone.now)
+    status = models.CharField('상태', max_length=8, choices=STATUSES, default=PENDING)
+    decided_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, null=True, blank=True,
+                                   related_name='+', verbose_name='처리자')
+    decided_at = models.DateTimeField('처리 일시', null=True, blank=True)
+    reject_reason = models.TextField('거절 사유', blank=True)
+    history = HistoricalRecords()
+
+    class Meta:
+        verbose_name = verbose_name_plural = '삭제·수정 요청'
+        ordering = ['-requested_at']
+
+    def __str__(self):
+        return f'{self.get_kind_display()} 요청: {self.object_repr}'
+
+    @transaction.atomic
+    def decide(self, user, approve, reject_reason=''):
+        from .records import delete_record
+        if not user.is_superuser:
+            raise PermissionDenied('시스템 관리자만 처리할 수 있습니다.')
+        if self.status != self.PENDING:
+            raise ValidationError('이미 처리된 요청입니다.')
+        if approve and self.kind == self.DELETE:
+            if self.target is None:
+                raise ValidationError('대상 기록이 이미 없습니다.')
+            try:
+                delete_record(self.target)
+            except ProtectedError as e:
+                raise ValidationError('먼저 지워야 할 기록: ' + ', '.join(map(str, e.protected_objects)))
+            self._meta.get_field('target').delete_cached_value(self)  # 지워진 객체를 들고 있으면 save()가 거부한다
+        self.status = self.APPROVED if approve else self.REJECTED
+        self.decided_by, self.decided_at, self.reject_reason = user, timezone.now(), reject_reason
+        self.save()

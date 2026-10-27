@@ -1,7 +1,7 @@
 from django import forms
 from django.apps import apps
 from django.conf import settings
-from django.contrib import messages
+from django.contrib import admin, messages
 from django.contrib.admin.views.decorators import staff_member_required
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.http import FileResponse, Http404
@@ -10,7 +10,8 @@ from django.urls import reverse
 from django.utils import timezone
 
 from .importer import run_import
-from .models import Approvable, ImportProfile, Lot, is_approver
+from .models import Approvable, EditRequest, Hold, ImportProfile, Lot, is_approver
+from .records import blockers, is_locked
 
 
 def find_logo():
@@ -44,6 +45,75 @@ def _get_record(app_label, model_name, pk):
     except LookupError:
         raise Http404
     return model, get_object_or_404(model, pk=pk)
+
+
+def _field_rows(obj):
+    rows = []
+    for f in obj._meta.concrete_fields:
+        value = getattr(obj, f'get_{f.name}_display', lambda: getattr(obj, f.name))()
+        rows.append((f.verbose_name, '' if value is None else value))
+    return rows
+
+
+@staff_member_required
+def edit_request(request, kind, app_label, model_name, pk):
+    """삭제·수정 요청: 사유와 본인 비밀번호. 시스템 관리자는 요청과 동시에 승인·실행된다."""
+    model, obj = _get_record(app_label, model_name, pk)
+    # 관리 화면이 없는 기록과 보류(부적합과 함께만 삭제)는 요청 대상이 아니다
+    if not admin.site.is_registered(model) or model is Hold or kind not in (EditRequest.DELETE, EditRequest.EDIT):
+        raise Http404
+    if kind == EditRequest.EDIT and not is_locked(obj):
+        raise Http404
+    if not request.user.has_perm(f'{app_label}.view_{model_name}'):
+        raise PermissionDenied
+    back = reverse(f'admin:{app_label}_{model_name}_change', args=[pk])
+    error = None
+    if request.method == 'POST':
+        reason = request.POST.get('reason', '').strip()
+        if not reason:
+            error = '사유를 입력하세요.'
+        elif not request.user.check_password(request.POST.get('password', '')):
+            error = '비밀번호가 맞지 않습니다.'
+        else:
+            req = EditRequest.objects.create(kind=kind, target=obj, object_repr=str(obj)[:200], reason=reason,
+                                             requested_by=request.user)
+            if not request.user.is_superuser:
+                messages.success(request, '요청했습니다. 시스템 관리자가 승인하면 처리됩니다.')
+                return redirect(back)
+            try:
+                req.decide(request.user, True)
+            except ValidationError as e:  # 예: 다른 기록이 참조 중이라 삭제 불가 → 승인 화면에서 안내
+                messages.error(request, ' '.join(e.messages))
+                return redirect('edit_request_decide', req.pk)
+            if kind == EditRequest.DELETE:
+                messages.success(request, f'{req.object_repr} 삭제 완료')
+                return redirect(f'admin:{app_label}_{model_name}_changelist')
+            return redirect(back)
+    title = '삭제 요청' if kind == EditRequest.DELETE else '수정 요청'
+    return render(request, 'core/edit_request.html',
+                  {'obj': obj, 'req': None, 'kind': kind, 'error': error, 'back': back, 'title': title})
+
+
+@staff_member_required
+def edit_request_decide(request, pk):
+    if not request.user.is_superuser:
+        raise PermissionDenied('시스템 관리자만 처리할 수 있습니다.')
+    req = get_object_or_404(EditRequest, pk=pk)
+    obj, error = req.target, None
+    back = reverse(f'admin:{req.content_type.app_label}_{req.content_type.model}_change', args=[req.object_id])
+    if request.method == 'POST' and req.status == EditRequest.PENDING:
+        try:
+            req.decide(request.user, 'approve' in request.POST, request.POST.get('reject_reason', '').strip())
+        except ValidationError as e:
+            error = ' '.join(e.messages)
+        else:
+            messages.success(request, f'{req} → {req.get_status_display()}')
+            return redirect('todo')
+    ctx = {'req': req, 'obj': obj, 'error': error, 'back': back, 'title': f'{req.get_kind_display()} 요청 처리',
+           'rows': _field_rows(obj) if obj else [],
+           'blockers': [f'{o._meta.verbose_name}: {o}' for o in blockers(obj)]
+           if obj and req.kind == EditRequest.DELETE and req.status == EditRequest.PENDING else []}
+    return render(request, 'core/edit_request.html', ctx)
 
 
 @staff_member_required
@@ -95,11 +165,7 @@ def print_view(request, app_label, model_name, pk):
     model, obj = _get_record(app_label, model_name, pk)
     if not request.user.has_perm(f'{app_label}.view_{model_name}'):
         raise PermissionDenied
-    rows = []
-    for f in model._meta.concrete_fields:
-        value = getattr(obj, f'get_{f.name}_display', lambda: getattr(obj, f.name))()
-        rows.append((f.verbose_name, '' if value is None else value))
-    ctx = {'obj': obj, 'rows': rows, 'title': model._meta.verbose_name}
+    ctx = {'obj': obj, 'rows': _field_rows(obj), 'title': model._meta.verbose_name}
     if hasattr(obj, 'print_table'):  # 예: 출하 → 출하성적서, PPAP → PSW 요소표
         ctx['title'], ctx['table_header'], ctx['table'] = obj.print_table()
     return render(request, 'core/print.html', ctx)

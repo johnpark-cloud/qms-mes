@@ -8,9 +8,9 @@ from django.db.models import Max
 from django.urls import reverse
 from django.utils import timezone
 from django.utils.html import format_html, format_html_join
-from simple_history.admin import SimpleHistoryAdmin
 
-from core.admin import ApprovalAdminMixin, ReportLinksMixin
+from core.admin import ApprovalAdminMixin, BaseAdmin, ReportLinksMixin
+from core.records import edit_unlocked
 
 from .models import (AuditChecklist, AuditFinding, AuditItem, Capa, ChangeRequest, Characteristic, ControlPlan,
                      ControlPlanLine, CustomerClaim, CustomerRule, Document, DocumentRevision, Evidence, ExcelTemplate, Gauge,
@@ -19,17 +19,17 @@ from .similar import similar_html
 
 
 class LockedWhenApprovedInline(admin.TabularInline):
-    def _locked(self, obj):
-        return obj is not None and obj.is_approved
+    def _locked(self, request, obj):
+        return obj is not None and obj.is_approved and not edit_unlocked(obj, request.user)
 
     def has_add_permission(self, request, obj=None):
-        return not self._locked(obj) and super().has_add_permission(request, obj)
+        return not self._locked(request, obj) and super().has_add_permission(request, obj)
 
     def has_change_permission(self, request, obj=None):
-        return not self._locked(obj) and super().has_change_permission(request, obj)
+        return not self._locked(request, obj) and super().has_change_permission(request, obj)
 
     def has_delete_permission(self, request, obj=None):
-        return not self._locked(obj) and super().has_delete_permission(request, obj)
+        return not self._locked(request, obj) and super().has_delete_permission(request, obj)
 
 
 class CharacteristicInline(LockedWhenApprovedInline):
@@ -45,7 +45,7 @@ class CharacteristicInline(LockedWhenApprovedInline):
 
 
 @admin.register(InspectionSpec)
-class InspectionSpecAdmin(ApprovalAdminMixin, SimpleHistoryAdmin):
+class InspectionSpecAdmin(ApprovalAdminMixin, BaseAdmin):
     list_display = ['item', 'inspection_type', 'revision', 'is_approved']
     list_filter = ['inspection_type']
     search_fields = ['item__code']
@@ -94,7 +94,7 @@ class MeasurementInline(admin.TabularInline):
 
 
 @admin.register(Inspection)
-class InspectionAdmin(ReportLinksMixin, SimpleHistoryAdmin):
+class InspectionAdmin(ReportLinksMixin, BaseAdmin):
     list_display = ['lot', 'spec', 'inspected_at', 'inspector', 'result', 'nonconformance']
     list_filter = ['result', 'spec__inspection_type']
     search_fields = ['lot__number']
@@ -138,14 +138,14 @@ class InspectionAdmin(ReportLinksMixin, SimpleHistoryAdmin):
 
 
 @admin.register(Gauge)
-class GaugeAdmin(SimpleHistoryAdmin):
+class GaugeAdmin(BaseAdmin):
     list_display = ['number', 'name', 'last_calibrated', 'next_due', 'active']
     list_filter = ['active']
     search_fields = ['number', 'name']
 
 
 @admin.register(Qualification)
-class QualificationAdmin(SimpleHistoryAdmin):
+class QualificationAdmin(BaseAdmin):
     list_display = ['user', 'inspection_type', 'valid_until', 'basis']
     list_filter = ['inspection_type']
 
@@ -159,7 +159,7 @@ class ControlPlanLineInline(LockedWhenApprovedInline):
 
 
 @admin.register(ControlPlan)
-class ControlPlanAdmin(ApprovalAdminMixin, SimpleHistoryAdmin):
+class ControlPlanAdmin(ApprovalAdminMixin, BaseAdmin):
     list_display = ['item', 'stage', 'revision', 'is_approved']
     list_filter = ['stage']
     search_fields = ['item__code']
@@ -192,7 +192,7 @@ class ControlPlanAdmin(ApprovalAdminMixin, SimpleHistoryAdmin):
 
 
 @admin.register(ChangeRequest)
-class ChangeRequestAdmin(ApprovalAdminMixin, SimpleHistoryAdmin):
+class ChangeRequestAdmin(ApprovalAdminMixin, BaseAdmin):
     list_display = ['number', 'item', 'category', 'effective_at', 'is_approved', 'first_article_state']
     list_filter = ['category']
     search_fields = ['number', 'item__code']
@@ -223,7 +223,7 @@ def capa_links(obj, source, title):
 
 
 @admin.register(Capa)
-class CapaAdmin(SimpleHistoryAdmin):
+class CapaAdmin(BaseAdmin):
     list_display = ['number', 'title', 'source', 'owner', 'due_date', 'status']
     list_filter = ['source']
     search_fields = ['number', 'title', 'root_cause', 'action']
@@ -261,7 +261,7 @@ class AuditFindingInline(admin.TabularInline):
 
 
 @admin.register(InternalAudit)
-class InternalAuditAdmin(SimpleHistoryAdmin):
+class InternalAuditAdmin(BaseAdmin):
     list_display = ['name', 'planned_date', 'auditor', 'auditee', 'performed_at', 'open_findings', 'closed_at']
     search_fields = ['name', 'auditee']
     inlines = [AuditFindingInline]
@@ -298,7 +298,7 @@ class PpapElementInline(admin.TabularInline):
 
 
 @admin.register(PpapSubmission)
-class PpapSubmissionAdmin(ApprovalAdminMixin, ReportLinksMixin, SimpleHistoryAdmin):
+class PpapSubmissionAdmin(ApprovalAdminMixin, ReportLinksMixin, BaseAdmin):
     list_display = ['item', 'customer', 'level', 'reason', 'due_date', 'is_approved', 'submitted_at', 'customer_approved_at']
     search_fields = ['item__code', 'customer']
     autocomplete_fields = ['item']
@@ -313,12 +313,12 @@ class PpapSubmissionAdmin(ApprovalAdminMixin, ReportLinksMixin, SimpleHistoryAdm
 
 
 @admin.register(CustomerRule)
-class CustomerRuleAdmin(SimpleHistoryAdmin):
+class CustomerRuleAdmin(BaseAdmin):
     list_display = ['customer', 'containment_hours', 'corrective_days']
 
 
 @admin.register(CustomerClaim)
-class CustomerClaimAdmin(ReportLinksMixin, SimpleHistoryAdmin):
+class CustomerClaimAdmin(ReportLinksMixin, BaseAdmin):
     list_display = ['number', 'customer', 'lot', 'received_at', 'current_step', 'containment_due', 'corrective_due', 'closed_at']
     search_fields = ['number', 'customer', 'lot__number']
     autocomplete_fields = ['lot']
@@ -348,7 +348,7 @@ class CustomerClaimAdmin(ReportLinksMixin, SimpleHistoryAdmin):
 
 
 @admin.register(Scar)
-class ScarAdmin(ReportLinksMixin, SimpleHistoryAdmin):
+class ScarAdmin(ReportLinksMixin, BaseAdmin):
     list_display = ['number', 'supplier', 'lot', 'issued_at', 'response_due', 'responded_at', 'closed_at']
     search_fields = ['number', 'supplier', 'lot__number']
     autocomplete_fields = ['lot', 'nonconformance']
@@ -375,7 +375,7 @@ class RevisionInline(admin.TabularInline):
 
 
 @admin.register(Document)
-class DocumentAdmin(SimpleHistoryAdmin):
+class DocumentAdmin(BaseAdmin):
     list_display = ['number', 'title', 'doc_type', 'current_revision']
     search_fields = ['number', 'title']
     list_filter = ['doc_type']
@@ -383,7 +383,7 @@ class DocumentAdmin(SimpleHistoryAdmin):
 
 
 @admin.register(DocumentRevision)
-class DocumentRevisionAdmin(ApprovalAdminMixin, SimpleHistoryAdmin):
+class DocumentRevisionAdmin(ApprovalAdminMixin, BaseAdmin):
     list_display = ['document', 'revision', 'created_at', 'is_approved']
     search_fields = ['document__number', 'document__title']
     autocomplete_fields = ['document']
@@ -396,7 +396,7 @@ class EvidenceInline(admin.TabularInline):
 
 
 @admin.register(AuditItem)
-class AuditItemAdmin(SimpleHistoryAdmin):
+class AuditItemAdmin(BaseAdmin):
     list_display = ['checklist', 'clause', 'requirement', 'evidence_count']
     list_filter = ['checklist']
     search_fields = ['clause', 'requirement']
@@ -415,7 +415,7 @@ class AuditItemInline(admin.TabularInline):
 
 
 @admin.register(AuditChecklist)
-class AuditChecklistAdmin(SimpleHistoryAdmin):
+class AuditChecklistAdmin(BaseAdmin):
     list_display = ['name', 'standard', 'progress']
     inlines = [AuditItemInline]
 
@@ -427,5 +427,5 @@ class AuditChecklistAdmin(SimpleHistoryAdmin):
 
 
 @admin.register(ExcelTemplate)
-class ExcelTemplateAdmin(SimpleHistoryAdmin):
+class ExcelTemplateAdmin(BaseAdmin):
     list_display = ['name', 'target']

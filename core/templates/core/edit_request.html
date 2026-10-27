@@ -1,0 +1,34 @@
+{% extends "admin/base_site.html" %}
+{% block content %}
+<section class="card" style="max-width:48rem">
+  <h2>{{ title }}: <a href="{{ back }}">{% if obj %}{{ obj }}{% else %}{{ req.object_repr }}{% endif %}</a></h2>
+  {% if req %}
+  <p>요청자 {{ req.requested_by }} · {{ req.requested_at|date:"Y-m-d H:i" }} · <span class="status status--{% if req.status == 'PENDING' %}critical{% elif req.status == 'REJECTED' %}negative{% else %}positive{% endif %}">{{ req.get_status_display }}</span></p>
+  <p>사유: {{ req.reason|linebreaksbr }}</p>
+  {% if rows %}<table>{% for label, value in rows %}<tr><th>{{ label }}</th><td>{{ value }}</td></tr>{% endfor %}</table>{% endif %}
+  {% if blockers %}
+  <p class="errornote">먼저 지워야 할 기록이 있어 승인해도 삭제되지 않습니다.</p>
+  <ul>{% for b in blockers %}<li>{{ b }}</li>{% endfor %}</ul>
+  {% endif %}
+  {% else %}
+  <p>{% if kind == 'DELETE' %}삭제는 시스템 관리자 승인 후 실행됩니다.{% else %}승인되면 이 기록을 1회 수정할 수 있습니다.{% endif %}</p>
+  {% endif %}
+  {% if error %}<p class="errornote">{{ error }}</p>{% endif %}
+  {% if not req or req.status == 'PENDING' %}
+  <form method="post">{% csrf_token %}
+    {% if req %}
+    <p><label for="reject_reason">거절 사유</label><br><textarea id="reject_reason" name="reject_reason" rows="2" cols="60"></textarea></p>
+    <p class="toolbar"><button type="submit" name="approve" value="1">승인</button>
+      <button type="submit" name="reject" value="1" class="ghost">거절</button>
+      <a class="button ghost" href="{{ back }}">취소</a></p>
+    {% else %}
+    <p><label for="reason">사유 (필수)</label><br><textarea id="reason" name="reason" rows="3" cols="60" required autofocus></textarea></p>
+    <p class="toolbar"><label for="password">{{ request.user.username }} 비밀번호</label>
+      <input type="password" id="password" name="password" required>
+      <button type="submit">{% if request.user.is_superuser %}실행{% else %}요청{% endif %}</button>
+      <a class="button ghost" href="{{ back }}">취소</a></p>
+    {% endif %}
+  </form>
+  {% endif %}
+</section>
+{% endblock %}

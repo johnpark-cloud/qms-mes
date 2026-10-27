@@ -1,5 +1,5 @@
 from django.contrib.auth.models import Group, User
-from django.core.exceptions import ValidationError
+from django.core.exceptions import PermissionDenied, ValidationError
 from django.test import TestCase
 
 from .models import Item, Lot, LotLink, Nonconformance, Process, RoutingStep, Shipment, WorkOrder, WorkResult
@@ -119,3 +119,102 @@ class ShellTest(TestCase):
         self.assertIn('LOT 이력', html)
         self.client.force_login(User.objects.create_superuser('root'))
         self.assertIn('검사 입력', side(self.client.get('/todo/').content.decode()))
+
+
+class EditRequestTest(TestCase):
+    def setUp(self):
+        from django.utils import timezone
+        from qms.models import InspectionSpec
+        self.item = Item.objects.create(code='C1', name='셀', item_type=Item.FINISHED)
+        self.lot = Lot.objects.create(number='L1', item=self.item)
+        self.eng = User.objects.create_user('eng', password='pw', is_staff=True)
+        self.eng.groups.add(Group.objects.get(name='품질엔지니어'))
+        self.root = User.objects.create_superuser('root', password='pw')
+        self.spec = InspectionSpec.objects.create(item=self.item, inspection_type='PROCESS', approved_by=self.root,
+                                                  approved_at=timezone.now())
+
+    def _request(self, kind, obj, password='pw'):
+        from .models import EditRequest
+        self.client.force_login(self.eng)
+        url = f'/request/{kind}/{obj._meta.app_label}/{obj._meta.model_name}/{obj.pk}/'
+        self.assertEqual(self.client.get(url).status_code, 200)
+        self.client.post(url, {'reason': '잘못 등록', 'password': password})
+        return EditRequest.objects.order_by('-pk').first()
+
+    def test_wrong_password_creates_nothing(self):
+        from .models import EditRequest
+        nc = Nonconformance.objects.create(lot=self.lot, description='x')
+        self._request('DELETE', nc, password='bad')
+        self.assertEqual(EditRequest.objects.count(), 0)
+
+    def test_delete_request_flow(self):
+        from .models import EditRequest, Hold
+        nc = Nonconformance.objects.create(lot=self.lot, description='x')
+        req = self._request('DELETE', nc)
+        self.assertEqual(req.status, EditRequest.PENDING)
+        self.assertTrue(Nonconformance.objects.filter(pk=nc.pk).exists())
+        with self.assertRaises(PermissionDenied):
+            req.decide(self.eng, True)
+        req.decide(self.root, True)
+        self.assertEqual(req.status, EditRequest.APPROVED)
+        self.assertFalse(Nonconformance.objects.filter(pk=nc.pk).exists())
+        self.assertFalse(Hold.objects.filter(nonconformance_id=nc.pk).exists())
+        self.assertTrue(Nonconformance.history.filter(id=nc.pk, history_type='-').exists())
+
+    def test_other_nc_hold_survives(self):
+        from .models import EditRequest, Hold
+        a = Nonconformance.objects.create(lot=self.lot, description='a')
+        b = Nonconformance.objects.create(lot=self.lot, description='b')
+        EditRequest.objects.create(kind='DELETE', target=a, object_repr=str(a), reason='r',
+                                   requested_by=self.eng).decide(self.root, True)
+        self.assertTrue(Hold.objects.filter(nonconformance=b, released_at=None).exists())
+        self.assertTrue(self.lot.on_hold)
+
+    def test_protected_delete_stays_pending(self):
+        from qms.models import Inspection
+        from .models import EditRequest
+        nc = Nonconformance.objects.create(lot=self.lot, description='x')
+        Inspection.objects.create(lot=self.lot, spec=self.spec, nonconformance=nc)
+        req = EditRequest.objects.create(kind='DELETE', target=nc, object_repr=str(nc), reason='r', requested_by=self.eng)
+        self.client.force_login(self.root)
+        self.assertContains(self.client.get(f'/request/{req.pk}/decide/'), '먼저 지워야 할 기록')
+        with self.assertRaisesMessage(ValidationError, '먼저 지워야 할 기록'):
+            req.decide(self.root, True)
+        req.refresh_from_db()
+        self.assertEqual(req.status, EditRequest.PENDING)
+        self.assertTrue(Nonconformance.objects.filter(pk=nc.pk).exists())
+
+    def test_edit_unlock_consumed_on_success_only(self):
+        from .models import EditRequest
+        req = self._request('EDIT', self.spec)
+        self.assertEqual(req.status, EditRequest.PENDING)
+        self.client.force_login(self.root)
+        self.client.post(f'/request/{req.pk}/decide/', {'approve': '1'})
+        req.refresh_from_db()
+        self.assertEqual(req.status, EditRequest.APPROVED)
+        self.client.force_login(self.eng)
+        url = f'/admin/qms/inspectionspec/{self.spec.pk}/change/'
+        data = {'item': self.item.pk, 'inspection_type': 'PROCESS', 'revision': 'x', 'sampling': '', 'note': '고침',
+                'characteristics-TOTAL_FORMS': 0, 'characteristics-INITIAL_FORMS': 0,
+                'characteristics-MIN_NUM_FORMS': 0, 'characteristics-MAX_NUM_FORMS': 1000}
+        self.assertEqual(self.client.post(url, data).status_code, 200)  # 폼 오류
+        req.refresh_from_db()
+        self.assertEqual(req.status, EditRequest.APPROVED)
+        self.assertEqual(self.client.post(url, {**data, 'revision': 2}).status_code, 302)
+        req.refresh_from_db()
+        self.assertEqual(req.status, EditRequest.USED)
+        self.spec.refresh_from_db()
+        self.assertEqual((self.spec.note, self.spec.revision), ('고침', 2))
+        self.assertTrue(self.spec.is_approved)
+        self.spec.note = '또'
+        with self.assertRaisesMessage(ValidationError, '승인된 기록은 수정할 수 없습니다'):
+            self.spec.save()
+
+    def test_non_superuser_has_no_delete(self):
+        self.client.force_login(self.eng)
+        self.assertEqual(self.client.get(f'/admin/core/lot/{self.lot.pk}/delete/').status_code, 403)
+        html = self.client.get('/admin/core/lot/').content.decode()
+        self.assertNotIn('delete_selected', html)
+        self.assertIn('삭제 요청', html)
+        self.client.force_login(self.root)
+        self.assertIn('delete_selected', self.client.get('/admin/core/lot/').content.decode())
