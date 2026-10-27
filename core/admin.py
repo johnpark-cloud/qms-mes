@@ -1,14 +1,17 @@
 from django import forms
 from django.apps import apps
-from django.contrib import admin
+from django.contrib import admin, messages
 from django.contrib.contenttypes.models import ContentType
+from django.db import transaction
+from django.db.models import ProtectedError
+from django.shortcuts import redirect
 from django.urls import reverse
 from django.utils.html import format_html, format_html_join
 from simple_history.admin import SimpleHistoryAdmin
 
 from .models import (BomLine, Hold, ImportProfile, Item, Lot, LotLink, Nonconformance, Process, RoutingStep, Shipment,
                      WorkOrder, WorkResult)
-from .records import edit_unlocked, is_locked
+from .records import blockers, can_edit_locked, delete_record, edit_unlocked, is_locked
 
 admin.site.site_header = admin.site.site_title = 'QMS+MES'
 admin.site.index_title = '메뉴'
@@ -48,16 +51,51 @@ class BaseAdmin(SimpleHistoryAdmin):
 
     def render_change_form(self, request, context, add=False, change=False, form_url='', obj=None):
         context['request_links_enabled'] = self.request_links_enabled
-        context['record_locked'] = obj is not None and is_locked(obj) and not edit_unlocked(obj, request.user)
+        context['record_locked'] = obj is not None and is_locked(obj) and not can_edit_locked(obj, request.user)
         return super().render_change_form(request, context, add, change, form_url, obj)
 
     def save_model(self, request, obj, form, change):
         unlock = change and edit_unlocked(obj, request.user)
-        obj._edit_unlocked = bool(unlock)
+        obj._edit_unlocked = bool(unlock) or request.user.is_superuser
+        if change and is_locked(obj) and not obj._edit_unlocked and not form.has_changed():
+            return  # 잠긴 기록의 읽기 전용 폼을 그냥 저장하면 Approvable.save가 500을 낸다
         super().save_model(request, obj, form, change)
-        if unlock:  # 저장이 성공했을 때만 잠금 해제를 소모한다
+        if unlock:  # 저장이 성공했을 때만 잠금 해제를 소모한다 (changeform_view가 atomic이라 인라인 실패도 되돌린다)
             unlock.status = unlock.USED
             unlock.save()
+
+    def save_formset(self, request, form, formset, change):
+        if getattr(form.instance, '_edit_unlocked', False):
+            for f in formset.forms:  # 부모의 잠금 해제를 항목(검사항목·관리계획 행 등)에도 넘긴다
+                f.instance._edit_unlocked = True
+        super().save_formset(request, form, formset, change)
+
+    def get_deleted_objects(self, objs, request):
+        # 부적합의 보류처럼 delete_record가 먼저 지우는 기록은 '삭제 불가' 목록에서 뺀다
+        deleted, counts, perms_needed, _ = super().get_deleted_objects(objs, request)
+        protected = [f'{o._meta.verbose_name}: {o}' for obj in objs for o in blockers(obj)]
+        return deleted, counts, perms_needed - {Hold._meta.verbose_name}, protected
+
+    def _delete(self, request, objs):
+        try:
+            for obj in objs:
+                delete_record(obj)
+        except ProtectedError as e:
+            transaction.set_rollback(True)  # 삭제 기록(LogEntry)까지 되돌린다
+            request._delete_failed = True
+            self.message_user(request, '먼저 지워야 할 기록: ' + ', '.join(map(str, e.protected_objects)), messages.ERROR)
+
+    def delete_model(self, request, obj):
+        self._delete(request, [obj])
+
+    def delete_queryset(self, request, queryset):
+        # shortcut: 경합으로 여기서 막히면 '선택 항목 삭제'의 성공 메시지도 함께 뜬다, 자주 생기면 액션을 직접 구현
+        self._delete(request, list(queryset))
+
+    def response_delete(self, request, obj_display, obj_id):
+        if getattr(request, '_delete_failed', False):
+            return redirect(request.path.rsplit('/delete/', 1)[0] + '/change/')
+        return super().response_delete(request, obj_display, obj_id)
 
 
 class ReportLinksMixin:
@@ -87,7 +125,7 @@ class ApprovalAdminMixin:
         return format_html('<a class="button" href="{}">승인 서명</a> (미승인)', url)
 
     def get_readonly_fields(self, request, obj=None):
-        if obj and obj.is_approved and not edit_unlocked(obj, request.user):
+        if obj and obj.is_approved and not can_edit_locked(obj, request.user):
             return [f.name for f in obj._meta.fields] + ['approval']
         return ['approval']
 

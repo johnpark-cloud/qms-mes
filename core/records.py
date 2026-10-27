@@ -27,6 +27,11 @@ def edit_unlocked(obj, user):
                                       content_type=ContentType.objects.get_for_model(obj), object_id=obj.pk).first()
 
 
+def can_edit_locked(obj, user):
+    # 시스템 관리자는 요청 없이 바로 수정한다 (이력은 simple_history가 똑같이 남긴다)
+    return user.is_superuser or edit_unlocked(obj, user) is not None
+
+
 def is_locked(obj):
     # Approvable과 (Task 4 이후) 부적합 모두 is_approved로 잠긴다
     return bool(getattr(obj, 'is_approved', False))

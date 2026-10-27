@@ -10,7 +10,7 @@ from django.utils import timezone
 from django.utils.html import format_html, format_html_join
 
 from core.admin import ApprovalAdminMixin, BaseAdmin, ReportLinksMixin
-from core.records import edit_unlocked
+from core.records import can_edit_locked
 
 from .models import (AuditChecklist, AuditFinding, AuditItem, Capa, ChangeRequest, Characteristic, ControlPlan,
                      ControlPlanLine, CustomerClaim, CustomerRule, Document, DocumentRevision, Evidence, ExcelTemplate, Gauge,
@@ -20,7 +20,7 @@ from .similar import similar_html
 
 class LockedWhenApprovedInline(admin.TabularInline):
     def _locked(self, request, obj):
-        return obj is not None and obj.is_approved and not edit_unlocked(obj, request.user)
+        return obj is not None and obj.is_approved and not can_edit_locked(obj, request.user)
 
     def has_add_permission(self, request, obj=None):
         return not self._locked(request, obj) and super().has_add_permission(request, obj)
@@ -294,7 +294,8 @@ class PpapElementInline(admin.TabularInline):
         return False  # 18요소는 제출을 만들 때 자동 생성된다
 
     def has_change_permission(self, request, obj=None):
-        return not (obj and obj.is_approved) and super().has_change_permission(request, obj)
+        locked = obj is not None and obj.is_approved and not can_edit_locked(obj, request.user)
+        return not locked and super().has_change_permission(request, obj)
 
 
 @admin.register(PpapSubmission)

@@ -218,3 +218,59 @@ class EditRequestTest(TestCase):
         self.assertIn('삭제 요청', html)
         self.client.force_login(self.root)
         self.assertIn('delete_selected', self.client.get('/admin/core/lot/').content.decode())
+
+    def _spec_post(self, user, name, extra=None):
+        from qms.models import Characteristic
+        c = Characteristic.objects.filter(spec=self.spec).first() or Characteristic.objects.bulk_create(
+            [Characteristic(spec=self.spec, name='두께', lsl=1, usl=2)])[0]
+        self.client.force_login(user)
+        return self.client.post(f'/admin/qms/inspectionspec/{self.spec.pk}/change/', {
+            'item': self.item.pk, 'inspection_type': 'PROCESS', 'revision': 1, 'sampling': '', 'note': '',
+            'characteristics-TOTAL_FORMS': 1, 'characteristics-INITIAL_FORMS': 1,
+            'characteristics-MIN_NUM_FORMS': 0, 'characteristics-MAX_NUM_FORMS': 1000,
+            'characteristics-0-id': c.pk, 'characteristics-0-spec': self.spec.pk, 'characteristics-0-name': name,
+            'characteristics-0-lsl': 1, 'characteristics-0-usl': 2, 'characteristics-0-unit': '',
+            'characteristics-0-special': '', 'characteristics-0-plan_line': '', **(extra or {})}), c
+
+    def test_unlocked_edit_reaches_inline_items(self):
+        from .models import EditRequest
+        resp, c = self._spec_post(self.eng, '두께2')  # 잠금 상태: 항목은 읽기 전용이라 무시되고 500이 아니다
+        self.assertEqual(resp.status_code, 302)
+        c.refresh_from_db()
+        self.assertEqual(c.name, '두께')
+        req = EditRequest.objects.create(kind='EDIT', target=self.spec, object_repr=str(self.spec), reason='r',
+                                         requested_by=self.eng)
+        req.decide(self.root, True)
+        resp, c = self._spec_post(self.eng, '두께2')
+        self.assertEqual(resp.status_code, 302)
+        c.refresh_from_db()
+        req.refresh_from_db()
+        self.assertEqual((c.name, req.status), ('두께2', EditRequest.USED))
+        c.name = '또'
+        with self.assertRaises(ValidationError):
+            c.save()
+
+    def test_superuser_edits_locked_directly(self):
+        from qms.models import InspectionSpec
+        from .models import EditRequest
+        before = self.spec.history.count()
+        resp, c = self._spec_post(self.root, '관리자 수정', {'note': '관리자'})
+        self.assertEqual(resp.status_code, 302)
+        self.spec.refresh_from_db()
+        c.refresh_from_db()
+        self.assertEqual((self.spec.note, c.name), ('관리자', '관리자 수정'))
+        self.assertTrue(self.spec.is_approved)
+        self.assertGreater(InspectionSpec.history.filter(id=self.spec.pk).count(), before)
+        self.assertEqual(EditRequest.objects.count(), 0)
+        html = self.client.get(f'/admin/qms/inspectionspec/{self.spec.pk}/change/').content.decode()
+        self.assertNotIn('수정 요청', html)
+
+    def test_superuser_admin_delete_removes_nc_holds(self):
+        from .models import Hold
+        nc = Nonconformance.objects.create(lot=self.lot, description='x')
+        self.client.force_login(self.root)
+        url = f'/admin/core/nonconformance/{nc.pk}/delete/'
+        self.assertNotContains(self.client.get(url), '보류: ')
+        self.assertEqual(self.client.post(url, {'post': 'yes'}).status_code, 302)
+        self.assertFalse(Nonconformance.objects.filter(pk=nc.pk).exists())
+        self.assertFalse(Hold.objects.filter(nonconformance_id=nc.pk).exists())

@@ -65,7 +65,7 @@ class Characteristic(models.Model):
         return self.lsl is not None or self.usl is not None
 
     def save(self, *args, **kwargs):
-        if self.spec.is_approved:
+        if self.spec.is_approved and not getattr(self, '_edit_unlocked', False):  # 부모 수정 승인 1회분(BaseAdmin.save_formset)
             raise ValidationError('승인된 검사기준의 항목은 수정할 수 없습니다. 새 개정을 만드세요.')
         super().save(*args, **kwargs)
 
@@ -290,7 +290,7 @@ class ControlPlanLine(models.Model):
         return 'L'
 
     def save(self, *args, **kwargs):
-        if self.plan.is_approved:
+        if self.plan.is_approved and not getattr(self, '_edit_unlocked', False):
             raise ValidationError('승인된 관리계획서의 항목은 수정할 수 없습니다. 새 개정을 만드세요.')
         super().save(*args, **kwargs)
 
@@ -669,7 +669,7 @@ class PpapSubmission(Approvable):
     def save(self, *args, **kwargs):
         self.clean()
         old = PpapSubmission.objects.filter(pk=self.pk, approved_at__isnull=False).first() if self.pk else None
-        if old:
+        if old and not getattr(self, '_edit_unlocked', False):
             changed = {f.name for f in self._meta.concrete_fields if getattr(old, f.attname) != getattr(self, f.attname)}
             if changed - self.AFTER_APPROVAL:
                 raise ValidationError('PSW 승인 후에는 제출일·고객 승인일만 기록할 수 있습니다.')
@@ -723,7 +723,7 @@ class PpapElement(models.Model):
         return bool(self.document_id or (self.record_type_id and self.record_id))
 
     def save(self, *args, **kwargs):
-        if self.submission.is_approved:
+        if self.submission.is_approved and not getattr(self, '_edit_unlocked', False):
             raise ValidationError('PSW 승인 후에는 요소를 수정할 수 없습니다.')
         super().save(*args, **kwargs)
 
