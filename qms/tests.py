@@ -52,8 +52,8 @@ class QmsTest(TestCase):
         self.look = Characteristic.objects.create(spec=self.spec, name='외관')
         approve(self.spec, self.lead)
 
-    def inspect(self, thk, look=True, lot=None):
-        insp = Inspection.objects.create(lot=lot or self.raw, spec=self.spec)
+    def inspect(self, thk, look=True, lot=None, at=None):
+        insp = Inspection.objects.create(lot=lot or self.raw, spec=self.spec, **({'inspected_at': at} if at else {}))
         Measurement.objects.create(inspection=insp, characteristic=self.thk, value=Decimal(thk))
         Measurement.objects.create(inspection=insp, characteristic=self.look, ok=look)
         insp.finalize()
@@ -88,7 +88,7 @@ class QmsTest(TestCase):
             insp.finalize()
 
     def test_rework_needs_pass_after_nc(self):
-        nc = self.inspect('11.0').nonconformance
+        nc = self.inspect('11.0', at=timezone.now() - datetime.timedelta(seconds=1)).nonconformance  # 재검사는 반드시 이후(시계 해상도 무관)
         nc.disposition, nc.approved_by = Nonconformance.REWORK, self.lead
         with self.assertRaises(ValidationError):
             nc.save()
@@ -565,7 +565,10 @@ class TimelineTest(TestCase):
 
     def test_order(self):
         from core.timeline import lot_timeline
-        nc = self.inspect('11.0').nonconformance
+        now = timezone.now()  # 시계 해상도와 무관하게: LOT 생성 < 불합격 < 재검사 합격 < 처분·출하
+        Lot.objects.filter(pk=self.raw.pk).update(created_at=now - datetime.timedelta(seconds=10))
+        self.raw.refresh_from_db()
+        nc = self.inspect('11.0', at=now - datetime.timedelta(seconds=5)).nonconformance
         self.inspect('10.0')
         nc.disposition, nc.approved_by = Nonconformance.REWORK, self.lead
         nc.save()
