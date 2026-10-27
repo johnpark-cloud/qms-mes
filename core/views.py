@@ -249,6 +249,8 @@ def nc_mail(request, pk):
     nc = _approved_nc(pk)
     if not request.user.has_perm('core.view_nonconformance'):
         raise PermissionDenied
+    if request.method == 'POST' and not request.user.has_perm('core.change_nonconformance'):
+        raise PermissionDenied
     title, header, rows = nc.print_table()
     subject = f'[부적합 보고] {nc.number} {nc.lot}'
     ctx = {'nc': nc, 'subject': subject, 'table_header': header, 'table': rows, 'title': '메일 보내기',
@@ -271,10 +273,10 @@ def nc_mail(request, pk):
             return render(request, 'core/nc_mail.html', ctx)
         msg = EmailMessage(subject, render_to_string('core/_nc_mail_body.html', ctx), None, to)
         msg.content_subtype = 'html'
-        for p in ctx['photos']:
-            with p.file.open('rb') as f:
-                msg.attach(os.path.basename(p.file.name), f.read())
         try:
+            for p in ctx['photos']:
+                with p.file.open('rb') as f:
+                    msg.attach(os.path.basename(p.file.name), f.read())
             msg.send()
         except (SMTPException, OSError) as e:
             ctx['error'] = f'메일을 보내지 못했습니다 ({e}). 보냈음 표시는 하지 않았습니다.'
@@ -293,6 +295,9 @@ def nc_photos_zip(request, pk):
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, 'w') as z:  # 사진은 이미 압축 포맷이라 저장만 한다
         for i, p in enumerate(nc.photos.all(), 1):
-            z.write(p.file.path, f'{nc.number}_{i}{os.path.splitext(p.file.name)[1].lower()}')
+            try:
+                z.write(p.file.path, f'{nc.number}_{i}{os.path.splitext(p.file.name)[1].lower()}')
+            except OSError:  # 디스크에서 사라진 사진은 건너뛴다
+                continue
     return HttpResponse(buf.getvalue(), content_type='application/zip',
                         headers={'Content-Disposition': f'attachment; filename="{nc.number}_photos.zip"'})

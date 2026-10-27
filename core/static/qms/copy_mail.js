@@ -6,6 +6,11 @@ document.addEventListener('DOMContentLoaded', () => {
     const body = document.getElementById('mail-body');
     const html = body.innerHTML, text = body.innerText;  // 제목 줄은 본문 첫 단락에 들어 있다
     try {
+      if (!window.ClipboardItem || !navigator.clipboard.write) {
+        await navigator.clipboard.writeText(text);
+        status.textContent = '글자만 복사했습니다(표 서식 없음). 웹메일 작성창에 붙여넣고 사진 ZIP을 첨부하세요.';
+        return;
+      }
       await navigator.clipboard.write([new ClipboardItem({
         'text/html': new Blob([html], {type: 'text/html'}),
         'text/plain': new Blob([text], {type: 'text/plain'}),

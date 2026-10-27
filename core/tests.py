@@ -558,3 +558,33 @@ class NcMailTest(TestCase):
         r = self.client.get(f'/nc/{self.nc.pk}/photos.zip')
         names = zipfile.ZipFile(io.BytesIO(b''.join(r.streaming_content) if r.streaming else r.content)).namelist()
         self.assertEqual(names, [f'{self.nc.number}_1.jpg', f'{self.nc.number}_2.png'])
+
+    def test_view_only_cannot_post(self):
+        from django.contrib.auth.models import Permission
+        self.approve()
+        u = User.objects.create_user('v', password='pw', is_staff=True)
+        u.user_permissions.add(Permission.objects.get(codename='view_nonconformance'))
+        self.client.force_login(u)
+        self.assertEqual(self.client.get(self.url).status_code, 200)
+        self.assertEqual(self.client.post(self.url, {'action': 'mark_sent'}).status_code, 403)
+        self.nc.refresh_from_db()
+        self.assertIsNone(self.nc.mailed_at)
+
+    def test_zip_skips_missing_file(self):
+        import io, os, zipfile
+        self.approve()
+        os.remove(self.nc.photos.first().file.path)
+        r = self.client.get(f'/nc/{self.nc.pk}/photos.zip')
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(len(zipfile.ZipFile(io.BytesIO(r.content)).namelist()), 1)
+
+    def test_send_failure_keeps_mailed_at(self):
+        from smtplib import SMTPException
+        from unittest import mock
+        from django.test import override_settings
+        self.approve()
+        with override_settings(SMTP_ENABLED=True), mock.patch('django.core.mail.EmailMessage.send', side_effect=SMTPException('x')):
+            r = self.client.post(self.url, {'action': 'send', 'to': 'a@x.com'})
+        self.assertContains(r, '메일을 보내지 못했습니다')
+        self.nc.refresh_from_db()
+        self.assertIsNone(self.nc.mailed_at)
