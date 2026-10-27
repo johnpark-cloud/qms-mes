@@ -13,8 +13,8 @@
 
 {% if lot %}
 <section class="card">
-  <h2>{{ lot }} <span class="count">{{ lot.item }}</span>
-    {% if lot.on_hold %}<span class="status status--negative">보류 중</span>{% else %}<span class="status status--positive">정상</span>{% endif %}
+  <h2>{{ lot }} <span class="count">{{ lot.item }} · 수량 {{ lot.qty|floatformat:"-3" }}{% if lot.supplier %} · 협력사 {{ lot.supplier }}{% endif %}</span>
+    {% if lot.on_hold %}<span class="status status--negative">보류 중</span>{% elif shipped %}<span class="status status--info">출하완료</span>{% else %}<span class="status status--positive">정상</span>{% endif %}
     {% if lot.lineage_gap %}<span class="status status--critical">계보 미등록</span>{% endif %}</h2>
 </section>
 <section class="card">

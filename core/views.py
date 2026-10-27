@@ -49,7 +49,7 @@ def trace(request):
     ctx = {'number': number, 'lot': lot, 'title': 'LOT 이력'}
     if lot:
         ctx.update(ancestors=lot.ancestors(), descendants=lot.descendants(),
-                   timeline=lot_timeline(lot), actions=lot_actions(lot, request.user))
+                   shipped=lot.shipments.exists(), timeline=lot_timeline(lot), actions=lot_actions(lot, request.user))
     return render(request, 'core/trace.html', ctx)
 
 

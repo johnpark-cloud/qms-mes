@@ -549,3 +549,23 @@ class TimelineTest(TestCase):
         self.client.force_login(self.admin)
         r = self.client.get('/trace/', {'lot': 'RAW-1'})
         self.assertContains(r, 'class="timeline"')
+
+    def test_summary_badges_and_inherited_hold_action(self):
+        from core.timeline import lot_actions
+        self.client.force_login(self.admin)
+        self.raw.supplier = '협력A'
+        self.raw.qty = Decimal('7')
+        self.raw.save()
+        self.inspect('10.0')
+        r = self.client.get('/trace/', {'lot': 'RAW-1'})
+        self.assertContains(r, '협력A')
+        self.assertContains(r, '수량 7')
+        self.assertNotContains(r, '출하완료')
+        Shipment.objects.create(lot=self.raw, customer='A사', qty=1)
+        self.assertContains(self.client.get('/trace/', {'lot': 'RAW-1'}), '출하완료')
+        nc = Nonconformance.objects.create(lot=self.raw, description='x')  # 하위 CELL-1도 보류
+        self.assertContains(self.client.get('/trace/', {'lot': 'CELL-1'}), '보류 중')
+        acts = lot_actions(self.cell, self.admin)
+        self.assertEqual(acts[0][0], '처분 입력')
+        self.assertIn(f'/{nc.pk}/change/', acts[0][1])
+        self.assertNotIn('출하 등록', [n for n, _ in acts])

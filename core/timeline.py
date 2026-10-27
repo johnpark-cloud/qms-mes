@@ -28,14 +28,18 @@ def lot_timeline(lot):
 
 def lot_actions(lot, user):
     """LOT 상태에 맞는 다음 동작 버튼. 권한 없는 동작은 뺀다."""
+    Inspection = apps.get_model('qms', 'Inspection')
     out = []
     q = urlencode({'lot': lot.number})
-    open_nc = lot.nonconformances.filter(closed_at__isnull=True).first()
+    Nc = apps.get_model('core', 'Nonconformance')
+    # 자기 부적합이 열려 있거나, 상위 LOT 부적합 등으로 보류가 걸린 경우의 부적합
+    open_nc = (lot.nonconformances.filter(closed_at__isnull=True).first()
+               or Nc.objects.filter(holds__lot=lot, holds__released_at__isnull=True).first())
     if open_nc and user.has_perm('core.change_nonconformance'):
         out.append(('처분 입력', reverse('admin:core_nonconformance_change', args=[open_nc.pk])))
     if not lot.inspections.exists() and user.has_perm('qms.add_inspection'):
         out.append(('검사 입력', f'{reverse("inspect")}?{q}'))
-    if not lot.on_hold and lot.inspections.filter(result='PASS').exists() and user.has_perm('core.add_shipment'):
+    if not lot.on_hold and lot.inspections.filter(result=Inspection.PASS).exists() and user.has_perm('core.add_shipment'):
         out.append(('출하 등록', f'{reverse("admin:core_shipment_add")}?lot={lot.pk}'))
     if user.has_perm('core.add_nonconformance'):
         out.append(('부적합 등록', f'{reverse("nc_quick")}?{q}'))
