@@ -22,6 +22,7 @@ from django.utils.html import format_html
 from django.views.decorators.http import require_POST
 
 from core.models import Lot, is_approver
+from core.views import _get_record
 
 from . import kpi, spc
 from .due import due_items
@@ -33,10 +34,9 @@ from .widgets import SIZES, WIDGETS, layout_for
 @staff_member_required
 def excel_report(request, template_id, pk):
     tpl = get_object_or_404(ExcelTemplate, pk=template_id)
-    model = tpl.target.model_class()
+    model, obj = _get_record(tpl.target.app_label, tpl.target.model, pk)  # 개인 자료(급여·연차)는 막는다
     if not request.user.has_perm(f'{model._meta.app_label}.view_{model._meta.model_name}'):
         raise PermissionDenied
-    obj = get_object_or_404(model, pk=pk)
     resp = HttpResponse(tpl.fill(obj), content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
     resp['Content-Disposition'] = f"attachment; filename*=UTF-8''{tpl.name}_{pk}.xlsx".replace(' ', '_')
     return resp

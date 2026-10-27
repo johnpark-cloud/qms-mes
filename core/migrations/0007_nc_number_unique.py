@@ -15,8 +15,8 @@ def fill(apps, schema_editor):
         seq[prefix] = seq.get(prefix, 0) + 1
         nc.number = f'{prefix}{seq[prefix]:03d}'
         if nc.approved_by_id and nc.closed_at:
-            nc.approved_at = nc.closed_at
-        nc.save(update_fields=['number', 'approved_at'])
+            nc.approved_at = nc.mailed_at = nc.closed_at  # 옛 부적합은 메일 발송 대기로 띄우지 않는다
+        nc.save(update_fields=['number', 'approved_at', 'mailed_at'])
         History.objects.filter(id=nc.pk).update(number=nc.number)
     # 이미 지워진 부적합의 이력은 옛 표기(NC-pk)로 남긴다
     for hid in History.objects.filter(number__isnull=True).values_list('id', flat=True).distinct():

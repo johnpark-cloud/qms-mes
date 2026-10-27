@@ -26,4 +26,5 @@ class QmsConfig(AppConfig):
     verbose_name = 'QMS'
 
     def ready(self):
-        post_migrate.connect(ensure_roles, sender=self)
+        # 모든 앱 뒤에도 돌아야 personal 권한(qms보다 늦게 생성)이 첫 migrate에서 들어간다
+        post_migrate.connect(ensure_roles, dispatch_uid='qms.ensure_roles')

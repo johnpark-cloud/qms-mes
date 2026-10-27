@@ -57,7 +57,7 @@ def trace(request):
 def search(request):
     q = request.GET.get('q', '').strip()
     results = run_search(request.user, q)
-    if request.GET.get('go') and results:
+    if request.GET.get('go') and results and results[0]['exact']:  # 바코드 Enter는 정확한 LOT일 때만 이동
         return redirect(results[0]['url'])
     ctx = {'results': results, 'q': q}
     if request.headers.get('HX-Request'):

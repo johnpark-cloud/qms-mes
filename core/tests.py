@@ -521,6 +521,17 @@ class NcMailTest(TestCase):
         self.client.force_login(User.objects.create_user('u', password='pw', is_staff=True, is_superuser=True))
         self.approve = lambda: Nonconformance.objects.filter(pk=self.nc.pk).update(approved_at=timezone.now())
 
+    def test_migration_marks_legacy_closed_as_mailed(self):
+        import importlib
+        from django.apps import apps
+        from django.utils import timezone
+        closed = timezone.now()
+        Nonconformance.objects.filter(pk=self.nc.pk).update(
+            approved_by=User.objects.first(), closed_at=closed, approved_at=None, mailed_at=None)
+        importlib.import_module('core.migrations.0007_nc_number_unique').fill(apps, None)
+        self.nc.refresh_from_db()
+        self.assertEqual((self.nc.approved_at, self.nc.mailed_at), (closed, closed))
+
     def test_unapproved_404(self):
         self.assertEqual(self.client.get(self.url).status_code, 404)
         self.assertEqual(self.client.get(f'/nc/{self.nc.pk}/photos.zip').status_code, 404)
@@ -611,6 +622,11 @@ class SearchTest(TestCase):
     def test_go_redirect(self):
         r = self.client.get('/search/?q=A-2310%0A&go=1')
         self.assertRedirects(r, '/trace/?lot=A-2310', fetch_redirect_response=False)
+
+    def test_go_without_exact_lot_does_not_jump(self):
+        r = self.client.get('/search/?q=A-231&go=1')
+        self.assertEqual(r.status_code, 200)
+        self.assertContains(r, 'A-2310')
 
     def test_action_match(self):
         self.assertIn('부적합 등록', [r['label'] for r in self.search(self.su, '부적')])

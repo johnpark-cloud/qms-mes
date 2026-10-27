@@ -13,7 +13,7 @@
 {% if user.is_anonymous %}{% include "admin/color_theme_toggle.html" %}{% else %}
 <form class="shell-search" role="search" action="{% url 'search' %}" method="get">
   <input type="hidden" name="go" value="1">
-  <input type="search" id="shell-search-input" name="q" autocomplete="off" placeholder="LOT·품번·부적합 번호 검색 (Ctrl+K)" aria-label="통합 검색"
+  <input type="search" id="shell-search-input" name="q" autocomplete="off" placeholder="LOT·품번·부적합 검색 (Ctrl+K)" aria-label="통합 검색"
          role="combobox" aria-expanded="false" aria-controls="search-results"
          hx-get="{% url 'search' %}" hx-trigger="input changed delay:200ms" hx-target="#search-results" hx-vals='{"go": ""}'>
   <div id="search-results" aria-live="polite"></div>

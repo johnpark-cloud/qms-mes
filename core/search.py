@@ -20,14 +20,14 @@ def search(user, q):
     def can(app, model):
         return user.has_perm(f'{app}.view_{model}')
 
-    def add(label, sub, url):
-        out.append({'label': label, 'sub': sub, 'url': url})
+    def add(label, sub, url, exact=False):
+        out.append({'label': label, 'sub': sub, 'url': url, 'exact': exact})
 
     lots = apps.get_model('core', 'lot').objects if can('core', 'lot') else None
     trace = lambda lot: f"{reverse('trace')}?{urlencode({'lot': lot.number})}"
     if lots is not None and q:
         for lot in lots.filter(number__iexact=q).select_related('item')[:1]:
-            add(lot.number, f'LOT · {lot.item.code}', trace(lot))
+            add(lot.number, f'LOT · {lot.item.code}', trace(lot), exact=True)
     for name, url in ACTIONS:
         if q and q.lower() in name.lower():
             add(name, '동작', reverse(url))

@@ -246,6 +246,21 @@ class QmsTest(TestCase):
         self.assertEqual((out['B1'].value, out['B2'].value), ('CL-9', 'CELL-1'))
         self.assertIsInstance(out['B3'].value, datetime.datetime)
 
+    def test_excel_fill_hides_user_secrets(self):
+        wb = Workbook()
+        buf = BytesIO()
+        wb.save(buf)
+        self.lead.first_name = '길동'
+        self.lead.save()
+        capa = Capa.objects.create(title='시정', due_date='2026-12-01', owner=self.lead)
+        tpl = ExcelTemplate.objects.create(name='CAPA', target=ContentType.objects.get_for_model(Capa),
+                                           file=SimpleUploadedFile('c.xlsx', buf.getvalue()),
+                                           mapping={'A1': 'owner.password', 'A2': 'owner.username', 'A3': 'owner.email',
+                                                    'A4': 'owner.payslip_set.first.base_pay', 'A5': 'owner.first_name',
+                                                    'A6': 'owner.get_full_name', 'A7': 'title'})
+        ws = load_workbook(BytesIO(tpl.fill(capa))).active
+        self.assertEqual([ws[f'A{i}'].value for i in range(1, 8)], [None, 'lead', None, None, '길동', '길동', '시정'])
+
     def test_coa(self):
         out_spec = InspectionSpec.objects.create(item=self.raw_item, inspection_type=InspectionSpec.OUTGOING)
         cap = Characteristic.objects.create(spec=out_spec, name='수분', usl=Decimal('200'), unit='ppm', special='SC')

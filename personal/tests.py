@@ -82,6 +82,29 @@ class OwnerOnlyTests(TestCase):
                 self.client.force_login(u)
                 self.assertEqual(self.client.get('/media/' + p).status_code, 404, p)
 
+    def test_excel_report_blocks_personal(self):
+        from django.contrib.auth.models import Group
+        from django.contrib.contenttypes.models import ContentType
+        from qms.models import ExcelTemplate
+        eng = User.objects.create_user('eng', is_staff=True)
+        eng.groups.add(Group.objects.get(name='품질엔지니어'))
+        tpl = ExcelTemplate.objects.create(name='급여', target=ContentType.objects.get_for_model(Payslip),
+                                           file='templates/x.xlsx', mapping={'A1': 'base_pay'})
+        for u in (eng, self.a):
+            self.client.force_login(u)
+            r = self.client.get(f'/report/{tpl.pk}/{self.slip.pk}/')
+            self.assertEqual(r.status_code, 404, u)
+        from django.forms import modelform_factory
+        field = modelform_factory(ExcelTemplate, fields=['target'])().fields['target']
+        self.assertFalse(field.queryset.filter(app_label__in=['personal', 'auth']).exists())
+        self.assertTrue(field.queryset.filter(app_label='qms').exists())
+
+    def test_role_groups_have_personal_perms(self):
+        from django.contrib.auth.models import Group
+        for name in ('품질엔지니어', '품질팀장', '검사원'):
+            self.assertTrue(Group.objects.get(name=name).permissions.filter(
+                content_type__app_label='personal', codename='add_leaveuse').exists(), name)
+
     def test_files_use_temp_storage(self):
         self.assertTrue(self.slip.file.path.startswith(self._tmp))
         self.assertFalse((Path(settings.DATA_DIR) / 'private' / self.slip.file.name).exists())

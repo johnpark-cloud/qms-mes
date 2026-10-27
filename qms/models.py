@@ -1,6 +1,7 @@
 import datetime
 
 from django.conf import settings
+from django.contrib.auth.base_user import AbstractBaseUser
 from django.contrib.contenttypes.fields import GenericForeignKey
 from django.contrib.contenttypes.models import ContentType
 from django.core.exceptions import ValidationError
@@ -735,10 +736,14 @@ class PpapElement(models.Model):
 
 # ---------- 보고서 ----------
 
+USER_FIELDS = {'username', 'first_name', 'last_name', 'get_full_name'}
+
+
 class ExcelTemplate(models.Model):
     """고객사 엑셀 양식에 값을 채운다. 양식이 바뀌면 매핑만 고친다."""
     name = models.CharField('양식 이름', max_length=100)
-    target = models.ForeignKey(ContentType, on_delete=models.PROTECT, verbose_name='대상 기록')
+    target = models.ForeignKey(ContentType, on_delete=models.PROTECT, verbose_name='대상 기록',
+                               limit_choices_to=~models.Q(app_label__in=['personal', 'auth', 'admin', 'sessions', 'contenttypes']))
     file = models.FileField('엑셀 양식', upload_to='templates/')
     mapping = models.JSONField('셀 매핑', help_text='예: {"B3": "number", "B4": "lot.number", "Sheet2!C5": "d4_root_cause"}')
     history = HistoricalRecords()
@@ -758,6 +763,9 @@ class ExcelTemplate(models.Model):
             sheet, _, ref = cell.rpartition('!')
             value = obj
             for attr in path.split('.'):
+                if attr == 'password' or isinstance(value, AbstractBaseUser) and attr not in USER_FIELDS:
+                    value = None  # 사용자 계정은 이름만 내보낸다 (암호·메일·개인 자료 차단)
+                    break
                 value = getattr(value, attr, None) if value is not None else None
                 value = value() if callable(value) else value
             ws = wb[sheet] if sheet else wb.active
