@@ -8,15 +8,18 @@
   table { border-collapse: collapse; width: 100%; }
   th, td { border: 1px solid #555; padding: 6px 8px; vertical-align: top; text-align: left; white-space: pre-wrap; }
   th { width: 25%; background: #eee; }
+  {% block style %}{% endblock %}
   @media print { button { display: none; } }
 </style>
 </head>
 <body>
 <button onclick="window.print()">인쇄 / PDF로 저장</button>
 <h1>{{ title }}: {{ obj }}</h1>
+{% block fields %}
 <table>
   {% for label, value in rows %}<tr><th>{{ label }}</th><td>{{ value }}</td></tr>{% endfor %}
 </table>
+{% endblock %}
 {% if table_header %}
 <h2>상세</h2>
 {% if table %}
@@ -26,6 +29,7 @@
 </table>
 {% else %}<p>표시할 기록이 없습니다 (출하라면 이 LOT에 합격한 출하·공정검사가 없습니다).</p>{% endif %}
 {% endif %}
+{% block extra %}{% endblock %}
 <p>출력 일시: {% now "Y-m-d H:i" %} · 출력자: {{ request.user.username }}</p>
 </body>
 </html>

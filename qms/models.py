@@ -131,7 +131,7 @@ class Inspection(models.Model):
         self.result = self.FAIL if failed else self.PASS
         if failed:
             self.nonconformance = Nonconformance.objects.create(
-                lot=self.lot, detected_at=self.inspected_at,
+                lot=self.lot, detected_at=self.inspected_at, origin=self.spec.inspection_type,
                 description=f'{self.spec} 불합격: {", ".join(failed)}')
         self._finalizing = True
         self.save()
@@ -150,7 +150,7 @@ class Inspection(models.Model):
                 continue  # 점이 부족하면 아직 관리도를 그릴 수 없다
             if last['label'] == self and last['alarms']:
                 self.nonconformance = Nonconformance.objects.create(
-                    lot=self.lot, detected_at=self.inspected_at, defect_type='SPC 경보',
+                    lot=self.lot, detected_at=self.inspected_at, defect_type='SPC 경보', origin='PROCESS',
                     description=f'특별특성 {c.name}({c.special}) SPC 경보: {", ".join(last["alarms"])} (검사 {self.pk})')
                 self.save()
                 return
@@ -404,7 +404,7 @@ class CustomerClaim(models.Model):
         if self._state.adding and not self.nonconformance_id:
             # 클레임 접수 = 부적합 등록 → 클레임 LOT과 하위 계보 자동 보류
             self.nonconformance = Nonconformance.objects.create(
-                lot=self.lot, detected_at=self.received_at, description=f'고객 클레임 {self.number}: {self.description}')
+                lot=self.lot, detected_at=self.received_at, origin='CLAIM', description=f'고객 클레임 {self.number}: {self.description}')
         super().save(*args, **kwargs)
 
 

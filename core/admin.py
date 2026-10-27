@@ -3,15 +3,16 @@ from django.apps import apps
 from django.contrib import admin, messages
 from django.contrib.contenttypes.models import ContentType
 from django.core.exceptions import ValidationError
-from django.db import transaction
+from django.db import models, transaction
 from django.db.models import ProtectedError
 from django.shortcuts import redirect
 from django.urls import reverse
+from django.utils import timezone
 from django.utils.html import format_html, format_html_join
 from simple_history.admin import SimpleHistoryAdmin
 
-from .models import (BomLine, Hold, ImportProfile, Item, Lot, LotLink, Nonconformance, Process, RoutingStep, Shipment,
-                     WorkOrder, WorkResult)
+from .models import (BomLine, Hold, ImportProfile, Item, Lot, LotLink, Nonconformance, NonconformancePhoto, Process,
+                     RoutingStep, Shipment, WorkOrder, WorkResult)
 from .records import blockers, can_edit_locked, delete_record, edit_unlocked, is_locked
 
 admin.site.site_header = admin.site.site_title = 'QMS+MES'
@@ -267,28 +268,86 @@ class NonconformanceForm(forms.ModelForm):
 
     class Meta:
         model = Nonconformance
-        exclude = ['approved_by']
+        exclude = ['approved_by', 'approved_at']
+
+    def _disposing(self):
+        return bool(self.cleaned_data.get('disposition')) and not self.instance.closed_at
 
     def clean(self):
         data = super().clean()
-        if data.get('disposition') and not self.instance.closed_at:
+        if self._disposing():
             if not self.user.check_password(data.get('password') or ''):
                 raise forms.ValidationError('MRB 승인 비밀번호가 맞지 않습니다.')
-            self.instance.approved_by = self.user
+            self.instance.approved_by, self.instance.approved_at = self.user, timezone.now()
         return data
+
+    def _post_clean(self):
+        super()._post_clean()  # 폼 값이 instance에 들어간 뒤라야 읽기 전용 칸까지 포함해 판단할 수 있다
+        if self._disposing() and (missing := self.instance.missing_fields()):
+            self.add_error(None, '보완 필요: ' + ', '.join(missing))
+
+
+class NcPhotoInline(admin.TabularInline):
+    model = NonconformancePhoto
+    extra = 1
+    fields = ['file', 'caption', 'uploaded_at']
+    readonly_fields = ['uploaded_at']
+    formfield_overrides = {models.FileField: {'widget': forms.ClearableFileInput(
+        attrs={'accept': 'image/*', 'capture': 'environment'})}}
+
+    def _open(self, request, obj):
+        # 종결된 부적합의 사진은 본문과 같이 잠긴다
+        return not (obj and obj.closed_at) or can_edit_locked(obj, request.user)
+
+    def has_add_permission(self, request, obj=None):
+        return super().has_add_permission(request, obj) and self._open(request, obj)
+
+    def has_change_permission(self, request, obj=None):
+        return super().has_change_permission(request, obj) and self._open(request, obj)
+
+    def has_delete_permission(self, request, obj=None):
+        return super().has_delete_permission(request, obj) and self._open(request, obj)
 
 
 @admin.register(Nonconformance)
 class NonconformanceAdmin(ReportLinksMixin, BaseAdmin):
     form = NonconformanceForm
-    list_display = ['__str__', 'lot', 'defect_type', 'detected_at', 'disposition', 'approved_by', 'closed_at']
-    list_filter = ['disposition', 'defect_type']
-    search_fields = ['lot__number', 'description']
-    autocomplete_fields = ['lot']
+    list_display = ['number', 'origin', 'lot', 'defect_type', 'detected_at', 'disposition', 'approved_by', 'closed_at']
+    list_filter = ['origin', 'disposition', 'defect_type']
+    search_fields = ['number', 'lot__number', 'description']
+    autocomplete_fields = ['lot', 'process']
+    inlines = [NcPhotoInline]
+    fieldsets = [
+        ('① 구분', {'fields': ['number', 'origin', 'process', 'detected_by', 'detected_at']}),
+        ('② 대상', {'fields': ['lot', 'lot_info', 'defect_qty', 'inspected_qty']}),
+        ('③ 현상', {'fields': ['defect_type', 'description', 'measured_value', 'special_char'],
+                  'description': '사진은 아래 "부적합 사진"에 여러 장 올립니다.'}),
+        ('④ 긴급 조치', {'fields': ['contained_qty', 'sorting_result', 'customer_notify', 'customer_notified_on']}),
+        ('⑤ 처분', {'fields': ['disposition', 'customer_approval_ref', 'cost']}),
+        ('⑥ 후속', {'fields': ['capa_required', 'capa', 'similar_cases']}),
+        ('⑦ 승인', {'fields': ['password', 'approved_by', 'approved_at', 'closed_at', 'mailed_at', 'report_links']}),
+    ]
+    AUTO = ['number', 'lot_info', 'approved_by', 'approved_at', 'closed_at', 'mailed_at', 'report_links', 'similar_cases', 'capa']
+
+    class Media:
+        js = ['qms/nc_form.js']
 
     def get_readonly_fields(self, request, obj=None):
-        locked = ['lot', 'description', 'detected_at', 'disposition', 'customer_approval_ref'] if obj and obj.closed_at else []
-        return locked + ['approved_by', 'closed_at', 'report_links', 'similar_cases', 'capa']
+        if obj and obj.closed_at and not can_edit_locked(obj, request.user):
+            open_ = Nonconformance.AFTER_APPROVAL
+            return [f.name for f in obj._meta.fields if f.name not in open_ and f.name not in self.AUTO] + self.AUTO
+        return self.AUTO
+
+    def formfield_for_foreignkey(self, db_field, request, **kwargs):
+        if db_field.name == 'detected_by':
+            kwargs['initial'] = request.user.pk
+        return super().formfield_for_foreignkey(db_field, request, **kwargs)
+
+    @admin.display(description='품번 · 협력사')
+    def lot_info(self, obj):
+        if not obj.lot_id:
+            return 'LOT을 고르고 저장하면 표시됩니다.'
+        return format_html('{}<span class="nc-incoming"> · 협력사: {}</span>', obj.lot.item, obj.lot.supplier or '-')
 
     @admin.display(description='CAPA')
     def capa(self, obj):

@@ -86,6 +86,8 @@ try:
     check('LOT CELL-Z 등록 (무관한 LOT, 계보 없음)', s == 302)
 
     kpi = {'defect_type': '이물', 'defect_qty': 3, 'cost': 50000}  # 브라우저는 기본값 0을 채워 보낸다
+    kpi.update({'origin': 'INCOMING', 'photos-TOTAL_FORMS': 0, 'photos-INITIAL_FORMS': 0, 'photos-MIN_NUM_FORMS': 0,
+                'photos-MAX_NUM_FORMS': 1000})
     s, _ = post('/admin/core/nonconformance/add/', {'lot': 1, 'description': '이물 혼입', **dt('detected_at'), **kpi})
     check('부적합 등록 (RAW-1)', s == 302)
 
@@ -104,6 +106,9 @@ try:
     check('무관한 CELL-Z는 출하 가능', s == 302)
 
     nc = {'lot': 1, 'description': '이물 혼입', **dt('detected_at'), **kpi, 'password': 'e2e-pass-123'}
+    s, html = post('/admin/core/nonconformance/1/change/', {**nc, 'disposition': 'SCRAP'})
+    check('긴급 조치 비어 있음 → 처분 거부 (보완 필요)', s == 200 and '보완 필요' in html, errors(html))
+    nc.update({'contained_qty': 3, 'sorting_result': '재고 전수 선별'})
     s, html = post('/admin/core/nonconformance/1/change/', {**nc, 'disposition': 'CONCESSION', 'password': 'wrong',
                                                             'customer_approval_ref': 'CA-001'})
     check('MRB 비밀번호 틀림 → 거부', s == 200 and '비밀번호' in html, errors(html))

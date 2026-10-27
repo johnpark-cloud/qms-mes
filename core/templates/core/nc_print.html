@@ -1,0 +1,21 @@
+{% extends "core/print.html" %}
+{% block style %}
+  .photos { display: flex; flex-wrap: wrap; gap: 8px; }
+  .photos figure { margin: 0; width: 180px; }
+  .photos img { width: 180px; height: 135px; object-fit: cover; border: 1px solid #555; }
+  .sign { margin-top: 24px; }
+{% endblock %}
+{% block fields %}{% endblock %}
+{% block extra %}
+<h2>사진</h2>
+{% with photos=obj.photos.all %}
+{% if photos %}
+<div class="photos">
+  {% for p in photos %}<figure><img src="{{ p.file.url }}" alt="{{ p }}"><figcaption>{{ p.caption|default:p }}</figcaption></figure>{% endfor %}
+</div>
+{% else %}<p>등록된 사진이 없습니다.</p>{% endif %}
+{% endwith %}
+<table class="sign">
+  <tr><th>MRB 승인</th><td>{% if obj.approved_at %}{{ obj.approved_by }} · {{ obj.approved_at|date:"Y-m-d H:i" }} (비밀번호 재확인 서명){% else %}미승인{% endif %}</td></tr>
+</table>
+{% endblock %}

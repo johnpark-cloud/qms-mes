@@ -309,3 +309,97 @@ class EditRequestTest(TestCase):
         self.assertFalse(Nonconformance.objects.filter(pk=holds_only.pk).exists())
         self.assertFalse(Hold.objects.filter(nonconformance_id=holds_only.pk).exists())
         self.assertTrue(Hold.objects.filter(nonconformance=blocked).exists())
+
+
+class NcReportTest(TestCase):
+    def setUp(self):
+        import tempfile
+        from django.test import override_settings
+        media = override_settings(MEDIA_ROOT=tempfile.mkdtemp())
+        media.enable()
+        self.addCleanup(media.disable)
+        self.item = Item.objects.create(code='R1', name='양극재', item_type=Item.RAW)
+        self.lot = Lot.objects.create(number='L1', item=self.item, supplier='A소재')
+        self.lead = User.objects.create_user('lead', password='pw', is_staff=True)
+        self.lead.groups.add(Group.objects.get(name='품질팀장'))
+
+    def _form(self, nc, **extra):
+        data = {'lot': nc.lot_id, 'description': nc.description, 'origin': 'INCOMING', 'detected_at_0': '2026-10-27',
+                'detected_at_1': '09:00:00', 'defect_qty': 1, 'cost': 0, 'password': 'pw',
+                'photos-TOTAL_FORMS': 0, 'photos-INITIAL_FORMS': 0, 'photos-MIN_NUM_FORMS': 0, 'photos-MAX_NUM_FORMS': 1000}
+        return {**data, **extra}
+
+    def test_number_format(self):
+        a = Nonconformance.objects.create(lot=self.lot, description='a')
+        b = Nonconformance.objects.create(lot=self.lot, description='b')
+        self.assertRegex(a.number, r'^NC-\d{6}-\d{3}$')
+        self.assertTrue(a.number.endswith('-001'))
+        self.assertTrue(b.number.endswith('-002'))
+
+    def test_photo_validation(self):
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        from .models import validate_photo
+        validate_photo(SimpleUploadedFile('x.heic', b'0' * 1024))
+        with self.assertRaisesMessage(ValidationError, '사진'):
+            validate_photo(SimpleUploadedFile('x.exe', b'0' * 1024))
+        with self.assertRaisesMessage(ValidationError, '10MB'):
+            validate_photo(SimpleUploadedFile('x.jpg', b'0' * (11 * 1024 * 1024)))
+
+    def test_disposition_requires_completion(self):
+        nc = Nonconformance.objects.create(lot=self.lot, description='이물')
+        self.client.force_login(self.lead)
+        url = f'/admin/core/nonconformance/{nc.pk}/change/'
+        resp = self.client.post(url, self._form(nc, disposition='SCRAP'))
+        self.assertContains(resp, '보완 필요')
+        resp = self.client.post(url, self._form(nc, disposition='SCRAP', defect_type='이물', sorting_result='재고 전수 선별',
+                                                contained_qty=10))
+        self.assertEqual(resp.status_code, 302)
+        nc.refresh_from_db()
+        self.assertIsNotNone(nc.approved_at)
+        self.assertEqual(nc.approved_by, self.lead)
+
+    def test_after_approval_fields_editable(self):
+        from django.utils import timezone
+        nc = Nonconformance.objects.create(lot=self.lot, description='이물')
+        Nonconformance.objects.filter(pk=nc.pk).update(disposition='SCRAP', approved_by=self.lead,
+                                                         approved_at=timezone.now(), closed_at=timezone.now())
+        eng = User.objects.create_user('eng', password='pw', is_staff=True)
+        eng.groups.add(Group.objects.get(name='품질엔지니어'))
+        self.client.force_login(eng)
+        html = self.client.get(f'/admin/core/nonconformance/{nc.pk}/change/').content.decode()
+        self.assertIn('name="cost"', html)
+        self.assertNotIn('name="description"', html)
+
+    def test_auto_origin(self):
+        from decimal import Decimal
+        from qms.models import Characteristic, CustomerClaim, Inspection, InspectionSpec, Measurement
+        from qms.tests import approve
+        spec = InspectionSpec.objects.create(item=self.item, inspection_type='INCOMING')
+        thk = Characteristic.objects.create(spec=spec, name='두께', lsl=Decimal('9.5'), usl=Decimal('10.5'))
+        approve(spec, self.lead)
+        insp = Inspection.objects.create(lot=self.lot, spec=spec)
+        Measurement.objects.create(inspection=insp, characteristic=thk, value=Decimal('11'))
+        insp.finalize()
+        self.assertEqual(insp.nonconformance.origin, 'INCOMING')
+        claim = CustomerClaim.objects.create(number='CL-1', customer='B사', lot=self.lot, description='용량 부족')
+        self.assertEqual(claim.nonconformance.origin, 'CLAIM')
+
+    def test_delete_removes_photo_file(self):
+        import os
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        from .models import NonconformancePhoto
+        from .records import delete_record
+        nc = Nonconformance.objects.create(lot=self.lot, description='x')
+        photo = NonconformancePhoto.objects.create(nonconformance=nc, file=SimpleUploadedFile('a.jpg', b'0' * 10))
+        path = photo.file.path
+        self.assertTrue(os.path.exists(path))
+        with self.captureOnCommitCallbacks(execute=True):
+            delete_record(nc)
+        self.assertFalse(os.path.exists(path))
+
+    def test_print_page(self):
+        nc = Nonconformance.objects.create(lot=self.lot, description='이물')
+        self.client.force_login(self.lead)
+        resp = self.client.get(f'/print/core/nonconformance/{nc.pk}/')
+        self.assertContains(resp, '부적합 보고서')
+        self.assertContains(resp, nc.number)

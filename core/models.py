@@ -1,3 +1,5 @@
+import os
+
 from django.apps import apps
 from django.conf import settings
 from django.contrib.contenttypes.fields import GenericForeignKey
@@ -5,6 +7,8 @@ from django.contrib.contenttypes.models import ContentType
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import models, transaction
 from django.db.models import ProtectedError
+from django.db.models.signals import post_delete
+from django.dispatch import receiver
 from django.utils import timezone
 from simple_history.models import HistoricalRecords
 
@@ -259,13 +263,36 @@ class LotLink(models.Model):
         super().save(*args, **kwargs)
 
 
+def _nc_number():
+    """NC-YYMMDD-001: 날짜별 순번. 중간 번호가 지워져도 겹치지 않게 그날 마지막 번호 다음으로 매긴다."""
+    prefix = timezone.localtime().strftime('NC-%y%m%d-')
+    last = Nonconformance.objects.filter(number__startswith=prefix).order_by('-number').values_list('number', flat=True).first()
+    return f'{prefix}{int(last[-3:]) + 1 if last else 1:03d}'
+
+
 class Nonconformance(models.Model):
+    ORIGINS = [('INCOMING', '수입검사·협력사'), ('PROCESS', '공정 내부'), ('OUTGOING', '출하검사'), ('CLAIM', '고객 클레임'),
+               ('RETURN', '반품')]
+    AFTER_APPROVAL = {'cost', 'customer_notified_on', 'capa_required', 'mailed_at'}  # 승인 뒤에도 기록하는 칸
     REWORK, REPAIR, SCRAP, RETURN, CONCESSION = 'REWORK', 'REPAIR', 'SCRAP', 'RETURN', 'CONCESSION'
     DISPOSITIONS = [(REWORK, '재작업'), (REPAIR, '수리'), (SCRAP, '폐기'), (RETURN, '반품'), (CONCESSION, '특채')]
     RELEASING = {REWORK, REPAIR, CONCESSION}  # 폐기·반품은 보류를 풀지 않는다
 
+    number = models.CharField('부적합 번호', max_length=50, unique=True, default=_nc_number)
+    origin = models.CharField('발생 유형', max_length=10, choices=ORIGINS, default='PROCESS')
+    process = models.ForeignKey(Process, on_delete=models.PROTECT, null=True, blank=True, verbose_name='발견 공정')
+    detected_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, null=True, blank=True,
+                                    related_name='+', verbose_name='발견자')
     lot = models.ForeignKey(Lot, on_delete=models.PROTECT, related_name='nonconformances', verbose_name='LOT')
-    description = models.TextField('부적합 내용')
+    inspected_qty = models.DecimalField('검사·로트 수량', max_digits=12, decimal_places=3, null=True, blank=True)
+    description = models.TextField('부적합 내용', help_text='5W1H: 언제·어디서·누가·무엇을·어떻게·왜')
+    measured_value = models.CharField('규격 대비 측정값', max_length=200, blank=True, help_text='예: 두께 10.8mm (규격 9.5~10.5)')
+    special_char = models.CharField('특별특성', max_length=2, choices=[('CC', 'CC'), ('SC', 'SC')], blank=True)
+    contained_qty = models.DecimalField('격리 수량', max_digits=12, decimal_places=3, null=True, blank=True)
+    sorting_result = models.TextField('재고·재공·출하분 선별 결과', blank=True)
+    customer_notify = models.BooleanField('고객 통보 필요', default=False)
+    customer_notified_on = models.DateField('고객 통보일', null=True, blank=True)
+    capa_required = models.BooleanField('시정조치 필요', null=True, blank=True)
     detected_at = models.DateTimeField('발견 일시', default=timezone.now)
     defect_type = models.CharField('불량유형', max_length=100, blank=True, help_text='예: 치수, 이물, 외관, 용량 (파레토 집계 단위)')
     defect_qty = models.DecimalField('불량 수량', max_digits=12, decimal_places=3, default=0)
@@ -275,14 +302,52 @@ class Nonconformance(models.Model):
     customer_approval_ref = models.CharField('고객 특채 승인 문서번호', max_length=100, blank=True)
     approved_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, null=True, blank=True,
                                     verbose_name='MRB 승인자')
+    approved_at = models.DateTimeField('승인 일시', null=True, blank=True)
     closed_at = models.DateTimeField('종결', null=True, blank=True)
+    mailed_at = models.DateTimeField('메일 발송 일시', null=True, blank=True)
     history = HistoricalRecords()
+
+    print_template = 'core/nc_print.html'
 
     class Meta:
         verbose_name = verbose_name_plural = '부적합'
 
     def __str__(self):
-        return f'NC-{self.pk} {self.lot}'
+        return f'{self.number} {self.lot}'
+
+    @property
+    def is_approved(self):
+        return self.approved_at is not None
+
+    def missing_fields(self):
+        names = ['defect_type', 'sorting_result', 'contained_qty'] + (['process'] if self.origin in ('PROCESS', 'OUTGOING') else [])
+        return [str(self._meta.get_field(n).verbose_name) for n in names if getattr(self, n) in (None, '')]
+
+    def print_table(self):
+        """인쇄 화면의 ①~⑦ 요약표 (사진은 nc_print.html이 붙인다)."""
+        def d(v, empty='-'):
+            return empty if v in (None, '') else v
+
+        def when(t):
+            return timezone.localtime(t).strftime('%Y-%m-%d %H:%M') if t else '-'
+
+        notify = '불필요'
+        if self.customer_notify:
+            notify = f'필요 (통보일 {self.customer_notified_on})' if self.customer_notified_on else '필요 (미통보)'
+        rows = [
+            ['① 구분', '발생 유형', self.get_origin_display()], ['', '발견 공정', d(self.process)],
+            ['', '발견자', d(self.detected_by)], ['', '발견 일시', when(self.detected_at)],
+            ['② 대상', 'LOT', self.lot], ['', '품번', self.lot.item], ['', '협력사', d(self.lot.supplier)],
+            ['', '불량 수량', self.defect_qty], ['', '검사·로트 수량', d(self.inspected_qty)],
+            ['③ 현상', '불량유형', d(self.defect_type)], ['', '상세 내용', self.description],
+            ['', '규격 대비 측정값', d(self.measured_value)], ['', '특별특성', d(self.special_char, '해당 없음')],
+            ['④ 긴급 조치', '격리 수량', d(self.contained_qty)], ['', '선별 결과', d(self.sorting_result)], ['', '고객 통보', notify],
+            ['⑤ 처분', '처분', d(self.get_disposition_display())], ['', '특채 고객 승인번호', d(self.customer_approval_ref)],
+            ['', '실패비용(원)', self.cost],
+            ['⑥ 후속', '시정조치 필요', {True: '필요', False: '불필요'}.get(self.capa_required, '-')],
+            ['⑦ 승인', 'MRB 승인자', d(self.approved_by)], ['', '승인 일시', when(self.approved_at)], ['', '종결', when(self.closed_at)],
+        ]
+        return '부적합 보고서', ['구역', '항목', '내용'], rows
 
     def clean(self):
         if not self.disposition:
@@ -309,6 +374,37 @@ class Nonconformance(models.Model):
             Hold.objects.bulk_create(Hold(lot=lot, nonconformance=self) for lot in [self.lot, *self.lot.descendants()])
         elif self.disposition in self.RELEASING:
             self.holds.filter(released_at__isnull=True).update(released_at=self.closed_at)
+
+
+PHOTO_EXTS = {'jpg', 'jpeg', 'png', 'heic', 'heif', 'webp'}
+PHOTO_MAX_MB = 10
+
+
+def validate_photo(f):
+    ext = os.path.splitext(f.name)[1].lower().lstrip('.')
+    if ext not in PHOTO_EXTS:
+        raise ValidationError(f'사진 파일만 올릴 수 있습니다 ({", ".join(sorted(PHOTO_EXTS))}): {f.name}')
+    if f.size > PHOTO_MAX_MB * 1024 * 1024:
+        raise ValidationError(f'사진 한 장은 {PHOTO_MAX_MB}MB 이하여야 합니다: {f.name}')
+
+
+class NonconformancePhoto(models.Model):
+    nonconformance = models.ForeignKey(Nonconformance, on_delete=models.CASCADE, related_name='photos', verbose_name='부적합')
+    file = models.FileField('사진', upload_to='nc/%Y/', validators=[validate_photo])
+    caption = models.CharField('설명', max_length=200, blank=True)
+    uploaded_at = models.DateTimeField('올린 일시', default=timezone.now)
+
+    class Meta:
+        verbose_name = verbose_name_plural = '부적합 사진'
+
+    def __str__(self):
+        return self.caption or os.path.basename(self.file.name)
+
+
+@receiver(post_delete, sender=NonconformancePhoto)
+def _delete_photo_file(sender, instance, **kwargs):
+    # 삭제가 롤백되면 파일도 남아야 하므로 커밋 뒤에 지운다 (관리 화면 사진 삭제·부적합 삭제 모두)
+    transaction.on_commit(lambda: instance.file.delete(save=False))
 
 
 class Hold(models.Model):
