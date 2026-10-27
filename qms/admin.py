@@ -142,6 +142,10 @@ class GaugeAdmin(BaseAdmin):
     list_display = ['number', 'name', 'last_calibrated', 'next_due', 'active']
     list_filter = ['active']
     search_fields = ['number', 'name']
+    fieldsets = [
+        (None, {'fields': ['number', 'name', 'last_calibrated']}),
+        ('추가 정보', {'classes': ['collapse'], 'fields': ['interval_days', 'certificate', 'active']}),
+    ]
 
 
 @admin.register(Qualification)
@@ -229,8 +233,9 @@ class CapaAdmin(BaseAdmin):
     search_fields = ['number', 'title', 'root_cause', 'action']
     readonly_fields = ['status', 'source_link']
     fieldsets = [
-        (None, {'fields': ['number', 'title', 'source', 'source_type', 'source_id', 'source_link', 'status']}),
-        ('조치', {'fields': ['root_cause', 'action', 'owner', 'due_date', 'done_at']}),
+        (None, {'fields': ['title', 'source', 'action', 'owner', 'due_date']}),
+        ('추가 정보', {'classes': ['collapse'], 'fields': ['number', 'source_type', 'source_id', 'source_link', 'status',
+                                                         'root_cause', 'done_at']}),
         ('유효성 확인 · 종결', {'fields': ['effective', 'verified_at', 'verified_by', 'verification_note', 'closed_at']}),
     ]
 
@@ -265,6 +270,10 @@ class InternalAuditAdmin(BaseAdmin):
     list_display = ['name', 'planned_date', 'auditor', 'auditee', 'performed_at', 'open_findings', 'closed_at']
     search_fields = ['name', 'auditee']
     inlines = [AuditFindingInline]
+    fieldsets = [
+        (None, {'fields': ['name', 'planned_date', 'auditor']}),
+        ('추가 정보', {'classes': ['collapse'], 'fields': ['scope', 'checklist', 'auditee', 'performed_at', 'closed_at']}),
+    ]
 
     @admin.display(description='CAPA 미연결 지적')
     def open_findings(self, obj):
@@ -304,6 +313,11 @@ class PpapSubmissionAdmin(ApprovalAdminMixin, ReportLinksMixin, BaseAdmin):
     search_fields = ['item__code', 'customer']
     autocomplete_fields = ['item']
     inlines = [PpapElementInline]
+    fieldsets = [
+        (None, {'fields': ['item', 'customer', 'level', 'reason']}),
+        ('추가 정보', {'classes': ['collapse'], 'fields': ['due_date', 'submitted_at', 'customer_approved_at', 'approval',
+                                                         'report_links']}),
+    ]
 
     def get_readonly_fields(self, request, obj=None):
         fields = super().get_readonly_fields(request, obj) + ['report_links']
@@ -326,8 +340,9 @@ class CustomerClaimAdmin(ReportLinksMixin, BaseAdmin):
     readonly_fields = ['nonconformance', 'trace_link', 'containment_due', 'corrective_due', 'current_step', 'report_links',
                        'similar_cases', 'capa']
     fieldsets = [
-        (None, {'fields': ['number', 'customer', 'lot', 'description', 'defect_qty', 'received_at', 'nonconformance',
-                           'trace_link', 'containment_due', 'corrective_due', 'current_step', 'report_links']}),
+        (None, {'fields': ['number', 'customer', 'lot', 'description']}),
+        ('추가 정보', {'classes': ['collapse'], 'fields': ['defect_qty', 'received_at', 'nonconformance', 'trace_link',
+                                                         'containment_due', 'corrective_due', 'current_step', 'report_links']}),
         ('재발 방지', {'fields': ['similar_cases', 'capa']}),
         ('8D', {'fields': [f for f, _ in CustomerClaim.STEPS]}),
         ('종결', {'fields': ['closed_at']}),
@@ -354,6 +369,11 @@ class ScarAdmin(ReportLinksMixin, BaseAdmin):
     search_fields = ['number', 'supplier', 'lot__number']
     autocomplete_fields = ['lot', 'nonconformance']
     readonly_fields = ['report_links', 'capa']
+    fieldsets = [
+        (None, {'fields': ['number', 'supplier', 'lot', 'request', 'response_due']}),
+        ('추가 정보', {'classes': ['collapse'], 'fields': ['nonconformance', 'issued_at', 'response', 'responded_at', 'closed_at',
+                                                         'capa', 'report_links']}),
+    ]
 
     @admin.display(description='CAPA')
     def capa(self, obj):

@@ -99,7 +99,9 @@ class ShellTest(TestCase):
                 self.assertIn('QMS+MES', self.client.get('/todo/').content.decode())
                 (Path(tmp) / 'brand').mkdir()
                 (Path(tmp) / 'brand' / 'logo.png').write_bytes(b'\x89PNG\r\n\x1a\n')
-                self.assertEqual(self.client.get('/brand/logo').status_code, 200)
+                resp = self.client.get('/brand/logo')
+                self.assertEqual(resp.status_code, 200)
+                resp.close()  # Windows는 열린 파일을 지울 수 없다
                 self.assertIn('src="/brand/logo"', self.client.get('/todo/').content.decode())
 
     def test_sidebar_filters_by_permission(self):

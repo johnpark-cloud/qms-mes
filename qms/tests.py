@@ -472,6 +472,13 @@ class QmsTest(TestCase):
         draft.refresh_from_db()
         self.assertEqual(draft.approved_by, self.lead)
 
+    def test_capa_source_choices(self):
+        from django.contrib import admin
+        self.client.force_login(User.objects.create_superuser('admin', password='x'))
+        req = self.client.get('/admin/qms/capa/add/').wsgi_request
+        qs = admin.site._registry[Capa].get_form(req)().fields['source_type'].queryset
+        self.assertEqual(sorted(qs.values_list('model', flat=True)), ['auditfinding', 'customerclaim', 'nonconformance', 'scar'])
+
     def test_pages_render(self):
         for v in ('9.9', '10.0', '10.1'):
             self.inspect(v)
@@ -494,6 +501,13 @@ class QmsTest(TestCase):
         for url in (f'/admin/qms/ppapsubmission/{ppap.pk}/change/', '/admin/qms/audititem/', '/admin/qms/changerequest/',
                     '/admin/qms/internalaudit/', f'/admin/qms/internalaudit/{audit.pk}/change/', '/admin/qms/capa/add/',
                     '/admin/core/workorder/add/', '/kpi/', '/suppliers/', '/inspect/', '/trace/?lot=CELL-1'):
+            self.assertEqual(self.client.get(url).status_code, 200, url)
+        scar = Scar.objects.create(number='S-1', supplier='B사', lot=self.raw, request='x', response_due=timezone.localdate())
+        gauge = Gauge.objects.create(number='G-1', name='캘리퍼스', last_calibrated=timezone.localdate())
+        wo = WorkOrder.objects.create(number='WO-9', item=self.cell_item, planned_qty=1)
+        for url in ('/admin/qms/ppapsubmission/add/', '/admin/qms/scar/add/', f'/admin/qms/scar/{scar.pk}/change/',
+                    '/admin/qms/internalaudit/add/', '/admin/qms/gauge/add/', f'/admin/qms/gauge/{gauge.pk}/change/',
+                    '/admin/qms/customerclaim/add/', f'/admin/core/workorder/{wo.pk}/change/'):
             self.assertEqual(self.client.get(url).status_code, 200, url)
         for url in ('/admin/qms/inspection/add/', f'/admin/qms/customerclaim/{claim.pk}/change/',
                     f'/admin/qms/inspectionspec/{self.spec.pk}/change/', '/admin/core/nonconformance/add/',

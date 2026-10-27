@@ -211,6 +211,10 @@ class WorkOrderAdmin(BaseAdmin):
     search_fields = ['number', 'item__code']
     autocomplete_fields = ['item', 'process']
     readonly_fields = ['progress_display']
+    fieldsets = [
+        (None, {'fields': ['number', 'item', 'planned_qty']}),
+        ('추가 정보', {'classes': ['collapse'], 'fields': ['process', 'due_date', 'status', 'progress_display']}),
+    ]
     inlines = [WorkResultInline]
 
     @admin.display(description='진도율')
