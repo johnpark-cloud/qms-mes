@@ -1,0 +1,29 @@
+{% extends "admin/base_site.html" %}
+{% block content %}
+<div class="toolbar">
+  <a class="button ghost" href="{% url 'admin:personal_leaveuse_add' %}">연차 사용 등록</a>
+  <a class="button ghost" href="{% url 'admin:personal_payslip_add' %}">급여명세 등록</a>
+  <a class="button ghost" href="{% url 'admin:personal_leaveprofile_changelist' %}">입사일 설정</a>
+</div>
+<section class="card">
+  <h2>연차</h2>
+  {% if leave %}
+  <p>{{ leave.period_start|date:"Y-m-d" }} ~ {{ leave.period_end|date:"Y-m-d" }}: 발생 {{ leave.accrued }}일 · 사용 {{ leave.used|floatformat:"-2" }}일 · <strong>잔여 {{ leave.remaining|floatformat:"-2" }}일</strong></p>
+  {% else %}<p class="help">입사일을 먼저 설정하세요.</p>{% endif %}
+  <table>
+    <thead><tr><th>{{ year }}년 사용일</th><th class="num">일수</th><th>사유</th></tr></thead>
+    <tbody>{% for u in uses %}<tr><td><a href="{% url 'admin:personal_leaveuse_change' u.pk %}">{{ u.used_on|date:"Y-m-d" }}</a></td><td class="num">{{ u.days|floatformat:"-2" }}</td><td>{{ u.reason }}</td></tr>
+    {% empty %}<tr><td colspan="3" class="empty">사용 내역이 없습니다.</td></tr>{% endfor %}</tbody>
+  </table>
+</section>
+<section class="card">
+  <h2>{{ year }}년 급여</h2>
+  <table>
+    <thead><tr><th>월</th><th class="num">지급 합계</th><th class="num">공제 합계</th><th class="num">실수령</th><th>파일</th></tr></thead>
+    <tbody>{% for s in slips %}<tr><td><a href="{% url 'admin:personal_payslip_change' s.pk %}">{{ s.month|date:"Y-m" }}</a></td><td class="num">{{ s.gross|floatformat:"0g" }}</td><td class="num">{{ s.deduction|floatformat:"0g" }}</td><td class="num">{{ s.net|floatformat:"0g" }}</td><td>{% if s.file %}<a href="{% url 'payslip_file' s.pk %}">받기</a>{% endif %}</td></tr>
+    {% empty %}<tr><td colspan="5" class="empty">등록된 급여명세가 없습니다.</td></tr>{% endfor %}</tbody>
+    {% if slips %}<tfoot><tr><th>연간 합계</th><th class="num">{{ total.gross|floatformat:"0g" }}</th><th class="num">{{ total.deduction|floatformat:"0g" }}</th><th class="num">{{ total.net|floatformat:"0g" }}</th><th></th></tr></tfoot>{% endif %}
+  </table>
+  <p class="help">이 화면의 내용은 본인만 볼 수 있습니다 (관리자 포함). 단, 서버 DB 백업에는 포함됩니다.</p>
+</section>
+{% endblock %}

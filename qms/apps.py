@@ -15,8 +15,9 @@ def ensure_roles(sender, **kwargs):
         'view_measurement', 'add_measurement', 'change_measurement', 'delete_measurement', 'view_gauge',
         'add_nonconformance', 'view_nonconformance', 'add_nonconformancephoto', 'view_routingstep', 'view_workresult', 'add_workresult',
         'add_memo', 'view_memo', 'add_memophoto', 'view_memophoto'])
+    mine = Permission.objects.filter(content_type__app_label='personal')  # 본인 것만 보이게 admin이 거른다
     for name, perms in (('품질엔지니어', engineer), ('품질팀장', engineer), ('검사원', inspector)):
-        Group.objects.get_or_create(name=name)[0].permissions.set(perms)
+        Group.objects.get_or_create(name=name)[0].permissions.set(list(perms) + list(mine))
 
 
 class QmsConfig(AppConfig):

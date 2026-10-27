@@ -53,6 +53,7 @@ INSTALLED_APPS = [
     'simple_history',
     'core',
     'qms',
+    'personal',
 ]
 
 MIDDLEWARE = [

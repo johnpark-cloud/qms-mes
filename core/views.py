@@ -121,6 +121,8 @@ def nc_quick(request):
 
 
 def _get_record(app_label, model_name, pk):
+    if app_label == 'personal':  # 개인 자료는 요청·인쇄·승인 경로로 열지 않는다
+        raise Http404
     try:
         model = apps.get_model(app_label, model_name)
     except LookupError:

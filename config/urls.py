@@ -6,11 +6,14 @@ from django.views.generic import RedirectView
 from django.views.static import serve
 
 from core import views as core_views
+from personal import views as personal_views
 from qms import views as qms_views
 
 urlpatterns = [
     path('', RedirectView.as_view(url='/todo/')),
     path('admin/', admin.site.urls),
+    path('me/', personal_views.me, name='me'),
+    path('me/payslip/<int:pk>/file/', personal_views.payslip_file, name='payslip_file'),
     path('todo/', qms_views.todo, name='todo'),
     path('brand/logo', core_views.brand_logo, name='brand_logo'),
     path('search/', core_views.search, name='search'),
@@ -38,5 +41,6 @@ urlpatterns = [
     path('inspect/<int:lot_id>/<int:spec_id>/submit/', qms_views.inspect_submit, name='inspect_submit'),
     path('inspect/check/<int:char_id>/', qms_views.inspect_check, name='inspect_check'),
     # 문서 원본은 로그인한 사용자에게만 (DEBUG=0 사내망 서비스에서도 동작)
-    re_path(r'^media/(?P<path>.*)$', staff_member_required(serve), {'document_root': settings.MEDIA_ROOT}),
+    # 급여 파일은 소유자 전용 화면(payslip_file)으로만 받는다
+    re_path(r'^media/(?P<path>(?!personal/).*)$', staff_member_required(serve), {'document_root': settings.MEDIA_ROOT}),
 ]
