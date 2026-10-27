@@ -7,6 +7,7 @@
 html[data-theme="light"],
 :root {
     --f-brand: #2c4d80;
+    --f-on-brand: #fff;
     --f-brand-strong: #213b63;
     --f-brand-soft: #e6ecf5;
     --f-link: #2c4d80;
@@ -43,6 +44,7 @@ html[data-theme="light"],
 @media (prefers-color-scheme: dark) {
     :root {
         --f-brand: #9db8e3;
+        --f-on-brand: #12171c;
         --f-brand-strong: #7e9fd3;
         --f-brand-soft: #1e2d44;
         --f-link: #9db8e3;
@@ -74,6 +76,7 @@ html[data-theme="light"],
 }
 html[data-theme="dark"] {
     --f-brand: #9db8e3;
+    --f-on-brand: #12171c;
     --f-brand-strong: #7e9fd3;
     --f-brand-soft: #1e2d44;
     --f-link: #9db8e3;
@@ -108,7 +111,7 @@ html[data-theme="light"], html[data-theme="dark"], html[data-theme="auto"], :roo
     --primary: var(--f-brand);
     --secondary: var(--f-brand-strong);
     --accent: var(--f-brand);
-    --primary-fg: #fff;
+    --primary-fg: var(--f-on-brand);
     --body-fg: var(--f-text);
     --body-bg: var(--f-card);
     --body-quiet-color: var(--f-label);
@@ -134,7 +137,7 @@ html[data-theme="light"], html[data-theme="dark"], html[data-theme="auto"], :roo
     --darkened-bg: var(--f-bg);
     --selected-bg: var(--f-selected);
     --selected-row: var(--f-selected);
-    --button-fg: #fff;
+    --button-fg: var(--f-on-brand);
     --button-bg: var(--f-brand-strong);
     --button-hover-bg: var(--f-brand);
     --default-button-bg: var(--f-brand-strong);
@@ -165,7 +168,7 @@ body { background: var(--f-bg); color: var(--f-text); }
 #branding #site-name a { color: var(--f-text); display: inline-flex; align-items: center; gap: .5rem; text-decoration: none; }
 .shell-logo {
     display: inline-grid; place-items: center; width: 1.75rem; height: 1.75rem; border-radius: var(--f-radius);
-    background: var(--f-brand-strong); color: #fff; font-weight: 700; font-size: .875rem;
+    background: var(--f-brand-strong); color: var(--f-on-brand); font-weight: 700; font-size: .875rem;
 }
 /* 셸바 배치: 로고 → (오른쪽 끝) 사용자 메뉴 */
 #header #branding { order: 0; }
@@ -270,7 +273,7 @@ input:hover, textarea:hover, select:hover { background: var(--f-hover); }
 }
 .button, input[type=submit], input[type=button], .submit-row input, a.button, button:not(.theme-toggle):not(#logout-form button):not(.toggle-nav-sidebar) {
     border-radius: var(--f-radius); padding: .5rem 1rem; font-weight: 600; font-size: .875rem; min-height: 2.25rem;
-    border: 1px solid var(--f-brand-strong); background: var(--f-brand-strong); color: #fff; cursor: pointer;
+    border: 1px solid var(--f-brand-strong); background: var(--f-brand-strong); color: var(--f-on-brand); cursor: pointer;
 }
 .button:hover, input[type=submit]:hover, a.button:hover, button:not(.theme-toggle):not(#logout-form button):not(.toggle-nav-sidebar):hover {
     background: var(--f-brand); border-color: var(--f-brand);
