@@ -74,6 +74,58 @@
     </table>
   </section>
 
+  {% if nc_incomplete %}
+  <section class="card" id="nc-incomplete">
+    <h2>부적합 보완 필요 <span class="count">필수 항목 미입력</span></h2>
+    <table><tbody>
+      {% for n in nc_incomplete %}<tr><td><a href="{% url 'admin:core_nonconformance_change' n.pk %}">{{ n }}</a></td><td>{{ n.missing_fields|join:", " }}</td></tr>{% endfor %}
+    </tbody></table>
+  </section>
+  {% endif %}
+
+  {% if nc_mail_pending %}
+  <section class="card" id="nc-mail">
+    <h2>메일 발송 대기 <span class="count">승인 후 미발송</span></h2>
+    <table><tbody>
+      {% for n in nc_mail_pending %}<tr><td><a href="{% url 'nc_mail' n.pk %}">{{ n }}</a></td><td>{{ n.approved_at|date:"Y-m-d" }} 승인</td></tr>{% endfor %}
+    </tbody></table>
+  </section>
+  {% endif %}
+
+  {% if nc_notify_pending %}
+  <section class="card" id="nc-notify">
+    <h2>고객 통보 미처리 <span class="count">통보 필요</span></h2>
+    <table><tbody>
+      {% for n in nc_notify_pending %}<tr><td><a href="{% url 'admin:core_nonconformance_change' n.pk %}">{{ n }}</a></td><td><span class="status status--critical">통보 전</span></td></tr>{% endfor %}
+    </tbody></table>
+  </section>
+  {% endif %}
+
+  {% if edit_requests %}
+  <section class="card" id="edit-requests">
+    <h2>삭제·수정 요청 대기 <span class="count">관리자 처리</span></h2>
+    <table><tbody>
+      {% for r in edit_requests %}<tr><td><a href="{% url 'edit_request_decide' r.pk %}">{{ r }}</a></td><td>{{ r.requested_by }} · {{ r.requested_at|date:"m-d H:i" }}</td></tr>{% endfor %}
+    </tbody></table>
+  </section>
+  {% endif %}
+
+  {% if my_rejected %}
+  <section class="card" id="my-rejected">
+    <h2>거절된 내 요청 <span class="count">최근 7일</span></h2>
+    <table><tbody>
+      {% for r in my_rejected %}<tr><td>{{ r }}</td><td>{{ r.reject_reason }}</td></tr>{% endfor %}
+    </tbody></table>
+  </section>
+  {% endif %}
+
+  {% if memos_unsorted %}
+  <section class="card" id="memos-unsorted">
+    <h2>미분류 메모 <span class="count">{{ memos_unsorted }}건</span></h2>
+    <p><a href="{% url 'memo_inbox' %}">메모 수신함에서 분류하기</a></p>
+  </section>
+  {% endif %}
+
   {% if first_articles %}
   <section class="card" id="fa">
     <h2>4M 변경 초품 미확인 <span class="status status--negative">출하 차단 중</span></h2>

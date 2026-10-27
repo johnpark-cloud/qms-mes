@@ -421,6 +421,33 @@ class QmsTest(TestCase):
             ppap.save()
         self.assertContains(self.client.get(f'/print/qms/ppapsubmission/{ppap.pk}/'), '부품 제출 보증서')
 
+    def test_due_items_nc_and_requests(self):
+        from core.models import EditRequest
+        from .due import digest, due_items
+        su = User.objects.create_superuser('su11', password='pw-su-123')
+        nc = Nonconformance.objects.create(lot=self.cell, description='x')  # 보완 필요 항목 있음
+        nc2 = Nonconformance.objects.create(lot=self.cell, description='y', approved_at=timezone.now(), customer_notify=True)
+        ct = ContentType.objects.get_for_model(Nonconformance)
+        EditRequest.objects.create(kind='EDIT', content_type=ct, object_id=nc.pk, object_repr='a', reason='r', requested_by=self.lead)
+        EditRequest.objects.create(kind='EDIT', content_type=ct, object_id=nc.pk, object_repr='b', reason='r', requested_by=self.lead,
+                                   status='REJECTED', decided_at=timezone.now(), reject_reason='no')
+        EditRequest.objects.create(kind='EDIT', content_type=ct, object_id=nc.pk, object_repr='c', reason='r', requested_by=self.lead,
+                                   status='REJECTED', decided_at=timezone.now() - datetime.timedelta(days=8))
+        from .models import Memo
+        Memo.objects.create(body='m', author=self.lead)
+        d = due_items(user=su)
+        self.assertIn(nc, d['nc_incomplete'])
+        self.assertEqual(d['nc_mail_pending'], [nc2])
+        self.assertEqual(d['nc_notify_pending'], [nc2])
+        self.assertEqual(len(d['edit_requests']), 1)
+        self.assertEqual(d['my_rejected'], [])
+        self.assertEqual(d['memos_unsorted'], 1)
+        self.assertEqual([r.object_repr for r in due_items(user=self.lead)['my_rejected']], ['b'])
+        self.assertEqual(due_items(user=self.lead)['edit_requests'], [])
+        titles = [t for t, _ in digest(due_items(approver=True))]
+        for t in ('부적합 보완 필요', '메일 발송 대기', '고객 통보 미처리', '삭제·수정 요청 대기'):
+            self.assertIn(t, titles)
+
     @override_settings(MAILERS={'default': {'BACKEND': 'django.core.mail.backends.locmem.EmailBackend'}})
     def test_notify(self):
         from django.core import mail

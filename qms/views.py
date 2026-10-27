@@ -40,7 +40,7 @@ def excel_report(request, template_id, pk):
 @staff_member_required
 def todo(request):
     """내 할 일: 기한 임박·초과 항목, 승인 대기, 열린 부적합, 보류 LOT (계산은 qms.due)."""
-    d = due_items(approver=is_approver(request.user))
+    d = due_items(approver=is_approver(request.user), user=request.user)
     d['claims_overdue'] = sum(c.overdue for c in d['claims'])
     d['capas_late'] = sum(c.status == '기한 초과' for c in d['capas'])
     return render(request, 'qms/todo.html', {'title': '내 할 일', **d})

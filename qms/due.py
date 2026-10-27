@@ -3,14 +3,14 @@ import datetime
 
 from django.utils import timezone
 
-from core.models import Hold, Nonconformance
+from core.models import EditRequest, Hold, Nonconformance
 
 from . import spc
 from .models import (AuditFinding, Capa, ChangeRequest, Characteristic, ControlPlan, CustomerClaim, DocumentRevision, Gauge,
-                     InspectionSpec, InternalAudit, PpapSubmission, Scar)
+                     InspectionSpec, InternalAudit, Memo, PpapSubmission, Scar)
 
 
-def due_items(approver=False):
+def due_items(approver=False, user=None):
     now, today = timezone.now(), timezone.localdate()
     soon = now + datetime.timedelta(days=2)
     claims = []
@@ -21,12 +21,23 @@ def due_items(approver=False):
             claims.append(c)
     capas = [c for c in Capa.objects.filter(closed_at__isnull=True).select_related('owner')
              if c.status in ('기한 초과', '유효성 확인 대기') or c.due_date <= today + datetime.timedelta(days=3)]
+    open_ncs = list(Nonconformance.objects.filter(closed_at__isnull=True).select_related('lot'))
+    admin = user is None or user.is_superuser  # notify(user=None)는 관리자용 목록을 쓴다
     return {
         'now': now,
         'today': today,
         'claims': claims,
         'scars': list(Scar.objects.filter(responded_at__isnull=True, response_due__lte=soon.date())),
-        'open_ncs': list(Nonconformance.objects.filter(closed_at__isnull=True).select_related('lot')),
+        'open_ncs': open_ncs,
+        'nc_incomplete': [n for n in open_ncs if n.missing_fields()],
+        'nc_mail_pending': list(Nonconformance.objects.filter(approved_at__isnull=False, mailed_at__isnull=True).select_related('lot')),
+        'nc_notify_pending': list(Nonconformance.objects.filter(customer_notify=True, customer_notified_on__isnull=True)
+                                  .select_related('lot')),
+        'edit_requests': list(EditRequest.objects.filter(status=EditRequest.PENDING)) if admin else [],
+        'my_rejected': list(EditRequest.objects.filter(requested_by=user, status=EditRequest.REJECTED,
+                                                       decided_at__gte=now - datetime.timedelta(days=7)))
+                       if user is not None else [],
+        'memos_unsorted': Memo.objects.filter(content_type__isnull=True).count(),
         'held_lots': Hold.objects.filter(released_at__isnull=True).values('lot').distinct().count(),
         'capas': capas,
         'audits': list(InternalAudit.objects.filter(performed_at__isnull=True, planned_date__lte=today + datetime.timedelta(days=14))),
@@ -78,6 +89,10 @@ def digest(d):
         ('내부심사 예정', [str(a) for a in d['audits']]),
         ('CAPA 미연결 심사 지적', [str(f) for f in d['findings']]),
         ('PPAP 제출 기한', [f'{p} · 기한 {p.due_date}' for p in d['ppaps']]),
+        ('부적합 보완 필요', [f'{n} · 없는 항목: {", ".join(n.missing_fields())}' for n in d['nc_incomplete']]),
+        ('메일 발송 대기', [str(n) for n in d['nc_mail_pending']]),
+        ('고객 통보 미처리', [str(n) for n in d['nc_notify_pending']]),
+        ('삭제·수정 요청 대기', [f'{r} · {r.requested_by}' for r in d['edit_requests']]),
         ('SPC 경보', [f'{a["char"].spec.item.code} {a["char"].name} · {a["lot"]} · {", ".join(a["alarms"])}'
                     for a in d['spc_alarms']]),
     ]
