@@ -1,4 +1,7 @@
+import shutil
+import tempfile
 from datetime import date
+from pathlib import Path
 from decimal import Decimal
 
 from django.contrib.auth.models import User
@@ -43,8 +46,13 @@ class PayTests(TestCase):
 class OwnerOnlyTests(TestCase):
     def tearDown(self):
         self.slip.file.delete(save=False)
+        self._ov.disable()
+        shutil.rmtree(self._tmp, ignore_errors=True)
 
     def setUp(self):
+        self._tmp = tempfile.mkdtemp()  # 실제 data/private를 건드리지 않는다
+        self._ov = override_settings(DATA_DIR=Path(self._tmp))
+        self._ov.enable()
         self.a = User.objects.create_superuser('a', password='x')
         self.b = User.objects.create_user('b', password='x', is_staff=True)
         self.slip = Payslip.objects.create(owner=self.b, month=date(2026, 1, 1), base_pay=7777777,

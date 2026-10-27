@@ -293,6 +293,8 @@ class QmsTest(TestCase):
                 con.execute(f'CREATE TABLE {t} (id INTEGER)')
             con.execute('INSERT INTO core_lot VALUES (1), (2)')
         con.close()
+        (live / 'private' / 'personal').mkdir(parents=True)
+        (live / 'private' / 'personal' / 's.pdf').write_bytes(b'pay')
         db = {'default': {'ENGINE': 'django.db.backends.sqlite3', 'NAME': live / 'db.sqlite3'}}
         with override_settings(DATABASES=db, DATA_DIR=live, MEDIA_ROOT=live / 'media'):
             call_command('backup', str(dest))
@@ -301,7 +303,10 @@ class QmsTest(TestCase):
             call_command('restore', str(backup), stdout=out)
             self.assertIn('리허설 통과', out.getvalue())
             self.assertIn('core_lot: 2건', out.getvalue())
+            self.assertEqual((backup / 'private' / 'personal' / 's.pdf').read_bytes(), b'pay')
+            (live / 'private' / 'personal' / 's.pdf').unlink()  # 운영 쪽 파일이 사라진 상황
             call_command('restore', str(backup), '--apply', stdout=StringIO())
+            self.assertEqual((live / 'private' / 'personal' / 's.pdf').read_bytes(), b'pay')
         self.assertTrue(any(p.name.startswith('pre-restore-') for p in live.iterdir()))
         (backup / 'db.sqlite3').write_bytes(b'not a db')
         with self.assertRaises(CommandError):

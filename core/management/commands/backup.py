@@ -34,6 +34,9 @@ class Command(BaseCommand):
         out.close()
         if Path(settings.MEDIA_ROOT).exists():
             shutil.copytree(settings.MEDIA_ROOT, target / 'media')
+        private = Path(settings.DATA_DIR) / 'private'  # 개인 급여 파일 (personal.models.private_storage)
+        if private.exists():
+            shutil.copytree(private, target / 'private')
         cutoff = datetime.datetime.now() - datetime.timedelta(days=KEEP_DAYS)
         for old in root.glob('qms-*'):
             try:
