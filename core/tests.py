@@ -477,6 +477,11 @@ class NcQuickTest(TestCase):
         self.assertEqual(nc.photos.count(), 1)
         self.assertEqual(self._post(lot='l1').status_code, 302)  # 대소문자 차이
 
+    def test_redirect_encodes_lot(self):
+        Lot.objects.create(number='A+1&2#3', item=self.lot.item)
+        r = self._post(lot='A+1&2#3')
+        self.assertEqual(r['Location'], '/trace/?lot=A%2B1%262%233')
+
     def test_bad_photo_rolls_back(self):
         from django.core.files.uploadedfile import SimpleUploadedFile
         r = self._post(photos=[SimpleUploadedFile('a.jpg', b'0'), SimpleUploadedFile('x.exe', b'0')])
@@ -617,3 +622,19 @@ class SearchTest(TestCase):
         Capa.objects.create(title='시정', due_date='2026-12-01', owner=self.su)
         self.assertTrue(any(r['sub'] == 'CAPA' for r in self.search(self.su, 'CAPA-')))
         self.assertFalse(any(r['sub'] == 'CAPA' for r in self.search(insp, 'CAPA-')))
+
+    def test_special_chars_lot_roundtrip(self):
+        from urllib.parse import parse_qs, urlparse
+        item = Item.objects.get(code='R1')
+        Lot.objects.create(number='A+1&2#3', item=item)
+        url = self.search(self.su, 'A+1&2#3')[0]['url']
+        self.assertEqual(parse_qs(urlparse(url).query)['lot'], ['A+1&2#3'])
+        from django.utils.http import urlencode
+        r = self.client.get('/search/?' + urlencode({'q': 'A+1&2#3', 'go': 1}))
+        self.assertEqual(r['Location'], url)
+        self.assertContains(self.client.get(r['Location']), 'A+1&amp;2#3')
+
+    def test_go_no_result_renders_page(self):
+        r = self.client.get('/search/?q=ZZZZ&go=1')
+        self.assertContains(r, '검색 결과가 없습니다')
+        self.assertContains(r, 'qms-sidebar')

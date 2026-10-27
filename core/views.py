@@ -17,6 +17,7 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.template.loader import render_to_string
 from django.urls import reverse
 from django.utils import timezone
+from django.utils.http import urlencode
 
 from .importer import run_import
 from .models import (Approvable, EditRequest, Hold, ImportProfile, Lot, Nonconformance, NonconformancePhoto, is_approver,
@@ -56,7 +57,10 @@ def search(request):
     results = run_search(request.user, q)
     if request.GET.get('go') and results:
         return redirect(results[0]['url'])
-    return render(request, 'core/search_results.html', {'results': results, 'q': q})
+    ctx = {'results': results, 'q': q}
+    if request.headers.get('HX-Request'):
+        return render(request, 'core/search_results.html', ctx)
+    return render(request, 'core/search_page.html', {**ctx, 'title': '검색'})
 
 
 class MultiPhotoInput(forms.ClearableFileInput):
@@ -110,7 +114,7 @@ def nc_quick(request):
             form.add_error(None, e)
         else:
             messages.success(request, f'{nc.number} 등록됨 — LOT {d["lot"].number} 보류. 나머지 항목은 부적합 화면에서 보완하세요.')
-            return redirect(f'{reverse("trace")}?lot={d["lot"].number}')
+            return redirect(f'{reverse("trace")}?{urlencode({"lot": d["lot"].number})}')
     return render(request, 'core/nc_quick.html', {'form': form, 'title': '부적합 등록'})
 
 

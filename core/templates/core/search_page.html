@@ -1,0 +1,7 @@
+{% extends "admin/base_site.html" %}
+{% block content %}
+<section class="card">
+  <h2>검색: {{ q }}</h2>
+  {% include "core/search_results.html" %}
+</section>
+{% endblock %}

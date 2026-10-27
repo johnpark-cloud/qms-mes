@@ -1,5 +1,6 @@
 from django.apps import apps
 from django.urls import reverse
+from django.utils.http import urlencode
 
 # (동작 이름, url 이름). 이후 태스크가 항목을 추가한다.
 ACTIONS = [('부적합 등록', 'nc_quick'), ('검사 입력', 'inspect'), ('LOT 추적', 'trace'), ('KPI', 'kpi')]
@@ -23,7 +24,7 @@ def search(user, q):
         out.append({'label': label, 'sub': sub, 'url': url})
 
     lots = apps.get_model('core', 'lot').objects if can('core', 'lot') else None
-    trace = lambda lot: f"{reverse('trace')}?lot={lot.number}"
+    trace = lambda lot: f"{reverse('trace')}?{urlencode({'lot': lot.number})}"
     if lots is not None and q:
         for lot in lots.filter(number__iexact=q).select_related('item')[:1]:
             add(lot.number, f'LOT · {lot.item.code}', trace(lot))

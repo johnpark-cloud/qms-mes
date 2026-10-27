@@ -1,6 +1,5 @@
 {% extends "admin/base_site.html" %}
 {% load static %}
-{% block extrahead %}<script src="{% static 'htmx.min.js' %}"></script>{% endblock %}
 {% block content %}
 <div class="insp" hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'>
   <section class="card">
