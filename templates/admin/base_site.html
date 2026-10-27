@@ -5,11 +5,19 @@
 {% block title %}{% if subtitle %}{{ subtitle }} | {% endif %}{{ title }} | {{ site_title|default:"QMS+MES" }}{% endblock %}
 
 {% block responsive %}{{ block.super }}
-<link rel="stylesheet" href="{% static 'qms/fiori.css' %}">{% endblock %}
+<link rel="stylesheet" href="{% static 'qms/fiori.css' %}">
+<script src="{% static 'htmx.min.js' %}"></script>{% endblock %}
 
 {% block branding %}
 <div id="site-name"><a href="{% url 'todo' %}">{% if brand_logo %}<img class="shell-brand" src="{% url 'brand_logo' %}" alt="{{ site_header|default:'QMS+MES' }}">{% else %}<span class="shell-logo" aria-hidden="true">Q</span>{{ site_header|default:"QMS+MES" }}{% endif %}</a></div>
-{% if user.is_anonymous %}{% include "admin/color_theme_toggle.html" %}{% endif %}
+{% if user.is_anonymous %}{% include "admin/color_theme_toggle.html" %}{% else %}
+<form class="shell-search" role="search" action="{% url 'search' %}" method="get">
+  <input type="hidden" name="go" value="1">
+  <input type="search" id="shell-search-input" name="q" autocomplete="off" placeholder="LOT·품번·부적합 번호 검색 (Ctrl+K)" aria-label="통합 검색"
+         role="combobox" aria-expanded="false" aria-controls="search-results"
+         hx-get="{% url 'search' %}" hx-trigger="input changed delay:200ms" hx-target="#search-results" hx-vals='{"go": ""}'>
+  <div id="search-results" aria-live="polite"></div>
+</form>{% endif %}
 {% endblock %}
 
 {# 관리 화면은 has_permission으로 사용자 메뉴를 그리는데, 직접 만든 화면(할 일·KPI 등)엔 그 값이 없어 로그아웃이 사라진다 #}

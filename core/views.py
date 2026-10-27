@@ -22,6 +22,7 @@ from .importer import run_import
 from .models import (Approvable, EditRequest, Hold, ImportProfile, Lot, Nonconformance, NonconformancePhoto, is_approver,
                      validate_photo)
 from .records import blockers, is_locked
+from .search import search as run_search
 
 
 def find_logo():
@@ -47,6 +48,15 @@ def trace(request):
     if lot:
         ctx.update(ancestors=lot.ancestors(), descendants=lot.descendants())
     return render(request, 'core/trace.html', ctx)
+
+
+@staff_member_required
+def search(request):
+    q = request.GET.get('q', '').strip()
+    results = run_search(request.user, q)
+    if request.GET.get('go') and results:
+        return redirect(results[0]['url'])
+    return render(request, 'core/search_results.html', {'results': results, 'q': q})
 
 
 class MultiPhotoInput(forms.ClearableFileInput):

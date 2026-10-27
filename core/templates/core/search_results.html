@@ -1,0 +1,5 @@
+{% if results %}
+<ul role="listbox" class="search-list">
+{% for r in results %}<li role="option"><a href="{{ r.url }}"><strong>{{ r.label }}</strong> <span>{{ r.sub }}</span></a></li>{% endfor %}
+</ul>
+{% elif q %}<p class="search-empty">검색 결과가 없습니다.</p>{% endif %}

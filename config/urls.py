@@ -13,6 +13,7 @@ urlpatterns = [
     path('admin/', admin.site.urls),
     path('todo/', qms_views.todo, name='todo'),
     path('brand/logo', core_views.brand_logo, name='brand_logo'),
+    path('search/', core_views.search, name='search'),
     path('trace/', core_views.trace, name='trace'),
     path('nc/new/', core_views.nc_quick, name='nc_quick'),
     path('nc/<int:pk>/mail/', core_views.nc_mail, name='nc_mail'),

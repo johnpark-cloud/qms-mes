@@ -356,3 +356,13 @@ td.w { width: 25%; }
 @media (max-width: 767px) {
     #content { padding: 1rem; }
 }
+
+/* ---------- 통합 검색 ---------- */
+.shell-search { position: relative; order: 1; flex: 0 1 26rem; margin-left: 1rem; }
+.shell-search input[type=search] { width: 100%; box-sizing: border-box; }
+#search-results { position: absolute; left: 0; right: 0; top: 100%; z-index: 20; background: var(--f-card); box-shadow: var(--f-shadow); border-radius: var(--f-radius); }
+.search-list { list-style: none; margin: 0; padding: .25rem 0; }
+.search-list a { display: flex; justify-content: space-between; gap: 1rem; padding: .5rem 1rem; color: var(--f-text); text-decoration: none; }
+.search-list a:hover, .search-list a:focus { background: var(--f-hover); }
+.search-list span, .search-empty { color: var(--f-label); font-size: .8125rem; }
+.search-empty { margin: 0; padding: .5rem 1rem; }

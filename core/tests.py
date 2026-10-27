@@ -588,3 +588,32 @@ class NcMailTest(TestCase):
         self.assertContains(r, '메일을 보내지 못했습니다')
         self.nc.refresh_from_db()
         self.assertIsNone(self.nc.mailed_at)
+
+
+class SearchTest(TestCase):
+    def setUp(self):
+        from .search import search
+        self.search = search
+        item = Item.objects.create(code='R1', name='양극재', item_type=Item.RAW)
+        Lot.objects.create(number='A-2310', item=item)
+        Lot.objects.create(number='A-23100', item=item)
+        self.su = User.objects.create_superuser('su', password='pw')
+        self.client.force_login(self.su)
+
+    def test_exact_lot_first(self):
+        self.assertEqual(self.search(self.su, ' a-2310 ')[0]['url'], '/trace/?lot=A-2310')
+
+    def test_go_redirect(self):
+        r = self.client.get('/search/?q=A-2310%0A&go=1')
+        self.assertRedirects(r, '/trace/?lot=A-2310', fetch_redirect_response=False)
+
+    def test_action_match(self):
+        self.assertIn('부적합 등록', [r['label'] for r in self.search(self.su, '부적')])
+
+    def test_permission_filter(self):
+        insp = User.objects.create_user('i', is_staff=True)
+        insp.groups.add(Group.objects.get(name='검사원'))
+        from qms.models import Capa
+        Capa.objects.create(title='시정', due_date='2026-12-01', owner=self.su)
+        self.assertTrue(any(r['sub'] == 'CAPA' for r in self.search(self.su, 'CAPA-')))
+        self.assertFalse(any(r['sub'] == 'CAPA' for r in self.search(insp, 'CAPA-')))

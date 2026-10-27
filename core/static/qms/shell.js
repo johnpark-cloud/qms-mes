@@ -6,3 +6,20 @@ document.addEventListener('click', function (e) {
     btn.setAttribute('aria-expanded', open);
     document.getElementById('qms-sidebar').classList.toggle('open', open);
 });
+
+// 통합 검색: Ctrl+K로 이동, 결과가 있으면 aria-expanded, 아래 화살표로 결과 이동, Esc로 닫기
+document.addEventListener('keydown', function (e) {
+    var input = document.getElementById('shell-search-input');
+    if (!input) return;
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') { e.preventDefault(); input.focus(); input.select(); }
+    else if (e.key === 'Escape' && document.activeElement.closest('.shell-search')) {
+        document.getElementById('search-results').innerHTML = ''; input.focus();
+    } else if (e.key === 'ArrowDown' && document.activeElement === input) {
+        var a = document.querySelector('#search-results a');
+        if (a) { e.preventDefault(); a.focus(); }
+    }
+});
+document.addEventListener('htmx:afterSwap', function (e) {
+    if (e.target.id !== 'search-results') return;
+    document.getElementById('shell-search-input').setAttribute('aria-expanded', e.target.querySelector('a') ? 'true' : 'false');
+});
