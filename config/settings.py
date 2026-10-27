@@ -170,4 +170,5 @@ if os.environ.get('QMS_SMTP_HOST'):  # 기한 알림(manage.py notify)용 회사
             'use_tls': os.environ.get('QMS_SMTP_TLS', '1') == '1',
         },
     }
+SMTP_ENABLED = bool(os.environ.get('QMS_SMTP_HOST'))  # 부적합 메일 '바로 보내기' 표시 여부
 DEFAULT_FROM_EMAIL = os.environ.get('QMS_MAIL_FROM', 'qms@localhost')

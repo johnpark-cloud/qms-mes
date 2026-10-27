@@ -496,3 +496,65 @@ class NcQuickTest(TestCase):
 
     def test_prefill(self):
         self.assertContains(self.client.get('/nc/new/?lot=L1'), 'value="L1"')
+
+
+class NcMailTest(TestCase):
+    def setUp(self):
+        import tempfile
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        from django.test import override_settings
+        media = override_settings(MEDIA_ROOT=tempfile.mkdtemp())
+        media.enable()
+        self.addCleanup(media.disable)
+        from django.utils import timezone
+        from .models import NonconformancePhoto
+        lot = Lot.objects.create(number='L1', item=Item.objects.create(code='R1', name='양극재', item_type=Item.RAW))
+        self.nc = Nonconformance.objects.create(lot=lot, description='찍힘')
+        for n in ('a.jpg', 'b.png'):
+            NonconformancePhoto.objects.create(nonconformance=self.nc, file=SimpleUploadedFile(n, b'0' * 50))
+        self.url = f'/nc/{self.nc.pk}/mail/'
+        self.client.force_login(User.objects.create_user('u', password='pw', is_staff=True, is_superuser=True))
+        self.approve = lambda: Nonconformance.objects.filter(pk=self.nc.pk).update(approved_at=timezone.now())
+
+    def test_unapproved_404(self):
+        self.assertEqual(self.client.get(self.url).status_code, 404)
+        self.assertEqual(self.client.get(f'/nc/{self.nc.pk}/photos.zip').status_code, 404)
+
+    def test_mark_sent(self):
+        self.approve()
+        self.assertContains(self.client.get(self.url), '본문 복사')
+        self.client.post(self.url, {'action': 'mark_sent'})
+        self.nc.refresh_from_db()
+        self.assertIsNotNone(self.nc.mailed_at)
+
+    def test_send_with_attachments(self):
+        from django.core import mail
+        from django.test import override_settings
+        self.approve()
+        with override_settings(SMTP_ENABLED=True, MAILERS={'default': {'BACKEND': 'django.core.mail.backends.locmem.EmailBackend'}}):
+            r = self.client.post(self.url, {'action': 'send', 'to': 'a@x.com, b@y.com'})
+            self.assertEqual(r.status_code, 302)
+            self.assertEqual(len(mail.outbox), 1)
+            self.assertEqual(len(mail.outbox[0].attachments), 2)
+            self.assertEqual(mail.outbox[0].to, ['a@x.com', 'b@y.com'])
+            self.assertIn(self.nc.number, mail.outbox[0].subject + mail.outbox[0].body)
+            self.nc.refresh_from_db()
+            self.assertIsNotNone(self.nc.mailed_at)
+
+    def test_send_invalid_address(self):
+        from django.core import mail
+        from django.test import override_settings
+        self.approve()
+        with override_settings(SMTP_ENABLED=True):
+            r = self.client.post(self.url, {'action': 'send', 'to': 'bad'})
+        self.assertContains(r, '메일 주소')
+        self.assertEqual(len(mail.outbox), 0)
+        self.nc.refresh_from_db()
+        self.assertIsNone(self.nc.mailed_at)
+
+    def test_zip(self):
+        import io, zipfile
+        self.approve()
+        r = self.client.get(f'/nc/{self.nc.pk}/photos.zip')
+        names = zipfile.ZipFile(io.BytesIO(b''.join(r.streaming_content) if r.streaming else r.content)).namelist()
+        self.assertEqual(names, [f'{self.nc.number}_1.jpg', f'{self.nc.number}_2.png'])

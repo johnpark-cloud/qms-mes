@@ -1,12 +1,20 @@
+import io
+import os
+import zipfile
+from smtplib import SMTPException
+
 from django import forms
 from django.apps import apps
 from django.conf import settings
 from django.contrib import admin, messages
 from django.contrib.admin.views.decorators import staff_member_required
 from django.core.exceptions import PermissionDenied, ValidationError
-from django.http import FileResponse, Http404
+from django.core.mail import EmailMessage
+from django.core.validators import validate_email
+from django.http import FileResponse, Http404, HttpResponse
 from django.db import transaction
 from django.shortcuts import get_object_or_404, redirect, render
+from django.template.loader import render_to_string
 from django.urls import reverse
 from django.utils import timezone
 
@@ -226,3 +234,65 @@ def print_view(request, app_label, model_name, pk):
     if hasattr(obj, 'print_table'):  # 예: 출하 → 출하성적서, PPAP → PSW 요소표
         ctx['title'], ctx['table_header'], ctx['table'] = obj.print_table()
     return render(request, getattr(obj, 'print_template', 'core/print.html'), ctx)
+
+
+def _approved_nc(pk):
+    nc = get_object_or_404(Nonconformance, pk=pk)
+    if not nc.is_approved:
+        raise Http404
+    return nc
+
+
+@staff_member_required
+def nc_mail(request, pk):
+    """승인된 부적합 보고 메일: 본문 복사(웹메일 붙여넣기)가 기본, SMTP가 있으면 바로 보내기도 된다."""
+    nc = _approved_nc(pk)
+    if not request.user.has_perm('core.view_nonconformance'):
+        raise PermissionDenied
+    title, header, rows = nc.print_table()
+    subject = f'[부적합 보고] {nc.number} {nc.lot}'
+    ctx = {'nc': nc, 'subject': subject, 'table_header': header, 'table': rows, 'title': '메일 보내기',
+           'photos': nc.photos.all(), 'smtp': settings.SMTP_ENABLED}
+    action = request.POST.get('action')
+    if request.method == 'POST' and action == 'mark_sent':
+        Nonconformance.objects.filter(pk=nc.pk).update(mailed_at=timezone.now())  # 승인 잠금(save)을 거치지 않는다
+        messages.success(request, '보냈음으로 표시했습니다.')
+        return redirect(request.path)
+    if request.method == 'POST' and action == 'send' and settings.SMTP_ENABLED:
+        ctx['to'] = request.POST.get('to', '')
+        to = [a.strip() for a in ctx['to'].split(',') if a.strip()]
+        try:
+            if not to:
+                raise ValidationError('수신자 메일 주소를 입력하세요.')
+            for a in to:
+                validate_email(a)
+        except ValidationError:
+            ctx['error'] = '메일 주소 형식이 올바르지 않습니다. 쉼표로 구분해 정확히 입력하세요.'
+            return render(request, 'core/nc_mail.html', ctx)
+        msg = EmailMessage(subject, render_to_string('core/_nc_mail_body.html', ctx), None, to)
+        msg.content_subtype = 'html'
+        for p in ctx['photos']:
+            with p.file.open('rb') as f:
+                msg.attach(os.path.basename(p.file.name), f.read())
+        try:
+            msg.send()
+        except (SMTPException, OSError) as e:
+            ctx['error'] = f'메일을 보내지 못했습니다 ({e}). 보냈음 표시는 하지 않았습니다.'
+            return render(request, 'core/nc_mail.html', ctx)
+        Nonconformance.objects.filter(pk=nc.pk).update(mailed_at=timezone.now())
+        messages.success(request, f'{", ".join(to)}로 보냈습니다.')
+        return redirect(request.path)
+    return render(request, 'core/nc_mail.html', ctx)
+
+
+@staff_member_required
+def nc_photos_zip(request, pk):
+    nc = _approved_nc(pk)
+    if not request.user.has_perm('core.view_nonconformance'):
+        raise PermissionDenied
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, 'w') as z:  # 사진은 이미 압축 포맷이라 저장만 한다
+        for i, p in enumerate(nc.photos.all(), 1):
+            z.write(p.file.path, f'{nc.number}_{i}{os.path.splitext(p.file.name)[1].lower()}')
+    return HttpResponse(buf.getvalue(), content_type='application/zip',
+                        headers={'Content-Disposition': f'attachment; filename="{nc.number}_photos.zip"'})

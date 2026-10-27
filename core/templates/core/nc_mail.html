@@ -1,0 +1,28 @@
+{% extends "admin/base_site.html" %}
+{% load static %}
+{% block extrahead %}{{ block.super }}<script src="{% static 'qms/copy_mail.js' %}" defer></script>{% endblock %}
+{% block content %}
+<section class="card" style="max-width:56rem">
+  <h2>{{ nc.number }} 메일 보내기</h2>
+  {% if nc.mailed_at %}<p>마지막 발송·복사 표시: {{ nc.mailed_at|date:"Y-m-d H:i" }}</p>{% endif %}
+  {% if error %}<p class="errornote">{{ error }}</p>{% endif %}
+  <p><strong>제목</strong> <span id="mail-subject">{{ subject }}</span></p>
+  <div id="mail-body">{% include "core/_nc_mail_body.html" %}</div>
+  <h3>사진 ({{ photos|length }}장)</h3>
+  <ul>{% for p in photos %}<li>{{ p }}</li>{% empty %}<li>등록된 사진이 없습니다.</li>{% endfor %}</ul>
+  <div class="toolbar">
+    <button type="button" id="copy-mail">본문 복사</button>
+    <a class="button" href="{% url 'nc_photos_zip' nc.pk %}">사진 ZIP</a>
+    <a class="button" href="{% url 'print' 'core' 'nonconformance' nc.pk %}" target="_blank">보고서 인쇄(PDF)</a>
+    <form method="post" style="display:inline">{% csrf_token %}<input type="hidden" name="action" value="mark_sent"><button type="submit">보냈음 표시</button></form>
+    <span id="copy-status" role="status"></span>
+  </div>
+  {% if smtp %}
+  <form method="post" class="toolbar">{% csrf_token %}<input type="hidden" name="action" value="send">
+    <label for="to">수신자 (쉼표로 구분)</label>
+    <input type="text" id="to" name="to" value="{{ to }}" size="40" required>
+    <button type="submit">바로 보내기</button>
+  </form>
+  {% endif %}
+</section>
+{% endblock %}

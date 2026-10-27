@@ -138,6 +138,8 @@ class ReportLinksMixin:
         links = [(reverse('print', args=[meta.app_label, meta.model_name, obj.pk]), '인쇄/PDF')]
         templates = apps.get_model('qms', 'ExcelTemplate').objects.filter(target=ContentType.objects.get_for_model(obj))
         links += [(reverse('excel_report', args=[t.pk, obj.pk]), f'엑셀: {t.name}') for t in templates]
+        if meta.model_name == 'nonconformance' and obj.is_approved:
+            links.append((reverse('nc_mail', args=[obj.pk]), '메일 보내기'))
         return format_html_join(' · ', '<a href="{}" target="_blank">{}</a>', links)
 
 

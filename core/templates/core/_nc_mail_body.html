@@ -1,0 +1,5 @@
+<p>{{ subject }}</p>
+<table border="1" cellspacing="0" cellpadding="4" style="border-collapse:collapse">
+  <tr>{% for h in table_header %}<th>{{ h }}</th>{% endfor %}</tr>
+  {% for row in table %}<tr>{% for c in row %}<td>{{ c }}</td>{% endfor %}</tr>{% endfor %}
+</table>
