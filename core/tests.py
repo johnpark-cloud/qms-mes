@@ -274,3 +274,36 @@ class EditRequestTest(TestCase):
         self.assertEqual(self.client.post(url, {'post': 'yes'}).status_code, 302)
         self.assertFalse(Nonconformance.objects.filter(pk=nc.pk).exists())
         self.assertFalse(Hold.objects.filter(nonconformance_id=nc.pk).exists())
+
+    def test_locked_save_without_unlock_says_locked(self):
+        from qms.models import InspectionSpec
+        before = InspectionSpec.history.filter(id=self.spec.pk).count()
+        self._spec_post(self.eng, '두께2')
+        html = self.client.get(f'/admin/qms/inspectionspec/{self.spec.pk}/change/').content.decode()
+        self.assertIn('잠긴 기록입니다. 수정 요청 후 승인받아야 수정할 수 있습니다.', html)
+        self.assertNotIn('성공적으로', html)
+        self.assertEqual(InspectionSpec.history.filter(id=self.spec.pk).count(), before)
+
+    def test_delete_selected_protected_and_holds(self):
+        from unittest import mock
+        from qms.models import Inspection
+        from .models import Hold
+        blocked = Nonconformance.objects.create(lot=self.lot, description='검사 참조')
+        Inspection.objects.create(lot=self.lot, spec=self.spec, nonconformance=blocked)
+        holds_only = Nonconformance.objects.create(lot=self.lot, description='보류만')
+        self.client.force_login(self.root)
+        url = '/admin/core/nonconformance/'
+        post = {'action': 'delete_selected', 'post': 'yes'}
+        # 확인 화면이 막는 경우와, 그 사이 참조가 생긴 경합(ProtectedError) 경우 모두 500이 아니다
+        self.assertContains(self.client.post(url, {**post, '_selected_action': [blocked.pk]}), '검사:')
+        with mock.patch('core.admin.blockers', return_value=[]):
+            resp = self.client.post(url, {**post, '_selected_action': [blocked.pk]})
+        self.assertEqual(resp.status_code, 302)
+        html = self.client.get(url).content.decode()
+        self.assertIn('먼저 지워야 할 기록', html)
+        self.assertNotIn('성공적으로', html)
+        self.assertTrue(Nonconformance.objects.filter(pk=blocked.pk).exists())
+        self.assertEqual(self.client.post(url, {**post, '_selected_action': [holds_only.pk]}).status_code, 302)
+        self.assertFalse(Nonconformance.objects.filter(pk=holds_only.pk).exists())
+        self.assertFalse(Hold.objects.filter(nonconformance_id=holds_only.pk).exists())
+        self.assertTrue(Hold.objects.filter(nonconformance=blocked).exists())

@@ -2,6 +2,7 @@ from django import forms
 from django.apps import apps
 from django.contrib import admin, messages
 from django.contrib.contenttypes.models import ContentType
+from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.db.models import ProtectedError
 from django.shortcuts import redirect
@@ -15,6 +16,9 @@ from .records import blockers, can_edit_locked, delete_record, edit_unlocked, is
 
 admin.site.site_header = admin.site.site_title = 'QMS+MES'
 admin.site.index_title = '메뉴'
+
+
+LOCKED_MSG = '잠긴 기록입니다. 수정 요청 후 승인받아야 수정할 수 있습니다.'
 
 
 class BaseAdmin(SimpleHistoryAdmin):
@@ -57,8 +61,15 @@ class BaseAdmin(SimpleHistoryAdmin):
     def save_model(self, request, obj, form, change):
         unlock = change and edit_unlocked(obj, request.user)
         obj._edit_unlocked = bool(unlock) or request.user.is_superuser
-        if change and is_locked(obj) and not obj._edit_unlocked and not form.has_changed():
-            return  # 잠긴 기록의 읽기 전용 폼을 그냥 저장하면 Approvable.save가 500을 낸다
+        if change and is_locked(obj) and not obj._edit_unlocked:
+            try:
+                if not form.has_changed():  # 읽기 전용 폼: 저장할 것이 없다
+                    raise ValidationError(LOCKED_MSG)
+                super().save_model(request, obj, form, change)  # PPAP 제출일처럼 승인 후에도 열린 칸만 통과한다
+            except ValidationError:
+                request._save_blocked = True
+                self.message_user(request, LOCKED_MSG, messages.ERROR)
+            return
         super().save_model(request, obj, form, change)
         if unlock:  # 저장이 성공했을 때만 잠금 해제를 소모한다 (changeform_view가 atomic이라 인라인 실패도 되돌린다)
             unlock.status = unlock.USED
@@ -70,26 +81,43 @@ class BaseAdmin(SimpleHistoryAdmin):
                 f.instance._edit_unlocked = True
         super().save_formset(request, form, formset, change)
 
+    def log_change(self, request, obj, message):
+        if not getattr(request, '_save_blocked', False):  # 저장되지 않은 변경은 기록하지 않는다
+            return super().log_change(request, obj, message)
+
+    def response_change(self, request, obj):
+        if getattr(request, '_save_blocked', False):
+            return redirect(request.path)
+        return super().response_change(request, obj)
+
+    def message_user(self, request, message, level=messages.INFO, *args, **kwargs):
+        # 막힌 저장·삭제 뒤에 Django가 붙이는 성공 메시지는 거짓이므로 뺀다
+        if level == messages.SUCCESS and (getattr(request, '_save_blocked', False) or getattr(request, '_delete_failed', False)):
+            return
+        super().message_user(request, message, level, *args, **kwargs)
+
     def get_deleted_objects(self, objs, request):
         # 부적합의 보류처럼 delete_record가 먼저 지우는 기록은 '삭제 불가' 목록에서 뺀다
         deleted, counts, perms_needed, _ = super().get_deleted_objects(objs, request)
         protected = [f'{o._meta.verbose_name}: {o}' for obj in objs for o in blockers(obj)]
         return deleted, counts, perms_needed - {Hold._meta.verbose_name}, protected
 
-    def _delete(self, request, objs):
+    def _delete(self, request, objs, in_view=False):
         try:
-            for obj in objs:
-                delete_record(obj)
+            with transaction.atomic():
+                for obj in objs:
+                    delete_record(obj)
         except ProtectedError as e:
-            transaction.set_rollback(True)  # 삭제 기록(LogEntry)까지 되돌린다
+            if in_view:
+                transaction.set_rollback(True)  # delete_view 자체의 atomic이라 삭제 기록(LogEntry)까지 되돌린다
             request._delete_failed = True
             self.message_user(request, '먼저 지워야 할 기록: ' + ', '.join(map(str, e.protected_objects)), messages.ERROR)
 
     def delete_model(self, request, obj):
-        self._delete(request, [obj])
+        self._delete(request, [obj], in_view=True)
 
     def delete_queryset(self, request, queryset):
-        # shortcut: 경합으로 여기서 막히면 '선택 항목 삭제'의 성공 메시지도 함께 뜬다, 자주 생기면 액션을 직접 구현
+        # shortcut: 경합으로 여기서 막히면 '선택 항목 삭제'의 삭제 기록(LogEntry)은 남는다, 감사에 문제되면 액션을 직접 구현
         self._delete(request, list(queryset))
 
     def response_delete(self, request, obj_display, obj_id):
