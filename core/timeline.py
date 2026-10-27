@@ -34,7 +34,8 @@ def lot_actions(lot, user):
     Nc = apps.get_model('core', 'Nonconformance')
     # 자기 부적합이 열려 있거나, 상위 LOT 부적합 등으로 보류가 걸린 경우의 부적합
     open_nc = (lot.nonconformances.filter(closed_at__isnull=True).first()
-               or Nc.objects.filter(holds__lot=lot, holds__released_at__isnull=True).first())
+               or Nc.objects.filter(holds__lot=lot, holds__released_at__isnull=True, closed_at__isnull=True)
+               .order_by('detected_at', 'pk').first())
     if open_nc and user.has_perm('core.change_nonconformance'):
         out.append(('처분 입력', reverse('admin:core_nonconformance_change', args=[open_nc.pk])))
     if not lot.inspections.exists() and user.has_perm('qms.add_inspection'):

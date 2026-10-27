@@ -569,3 +569,12 @@ class TimelineTest(TestCase):
         self.assertEqual(acts[0][0], '처분 입력')
         self.assertIn(f'/{nc.pk}/change/', acts[0][1])
         self.assertNotIn('출하 등록', [n for n, _ in acts])
+
+    def test_scrapped_lot_has_no_disposition_or_ship_action(self):
+        from core.timeline import lot_actions
+        nc = Nonconformance.objects.create(lot=self.raw, description='x')
+        nc.disposition, nc.approved_by = Nonconformance.SCRAP, self.lead
+        nc.save()
+        names = [n for n, _ in lot_actions(self.raw, self.admin)]
+        self.assertNotIn('처분 입력', names)
+        self.assertNotIn('출하 등록', names)
