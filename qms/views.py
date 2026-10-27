@@ -1,3 +1,7 @@
+import datetime
+import io
+import os
+import zipfile
 from decimal import Decimal, InvalidOperation
 from urllib.parse import urlencode
 
@@ -6,6 +10,7 @@ from django.contrib.admin.views.decorators import staff_member_required
 from django.contrib.contenttypes.models import ContentType
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import transaction
+from django.db.models import Q
 from django.http import Http404, HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
@@ -260,3 +265,128 @@ def memo_inbox(request):
         return redirect('memo_inbox')
     memos = Memo.objects.filter(content_type__isnull=True).select_related('author', 'audit').prefetch_related('photos')
     return render(request, 'qms/memo_inbox.html', {'title': '미분류 메모', 'memos': memos, 'kinds': TARGETS})
+
+
+
+# ---------- 심사 대응 묶음 ----------
+
+PACK_LIMIT = 500
+
+
+def _pack_data(request):
+    """품번·기간 조건으로 묶음에 들어갈 기록을 모은다. 보는 권한이 없는 절은 None으로 둔다."""
+    from core.models import Item, Nonconformance
+    from .models import Capa, ChangeRequest, ControlPlan, CustomerClaim, PpapElement, Scar
+    u, today, errors = request.user, timezone.localdate(), []
+    base = {'from': today - datetime.timedelta(days=90), 'to': today}
+    day = {}
+    for key, default in base.items():
+        raw = (request.GET.get(key) or '').strip()
+        try:
+            day[key] = datetime.date.fromisoformat(raw) if raw else default
+        except ValueError:
+            errors.append(f'날짜 형식이 올바르지 않습니다: {raw} (예: 2026-10-27)')
+            day[key] = default
+    if day['from'] > day['to']:
+        errors.append('시작일이 종료일보다 늦습니다. 기본 기간(최근 90일)으로 보여 줍니다.')
+        day = base
+    pk = request.GET.get('item') or ''
+    item = Item.objects.filter(pk=pk).first() if pk.isdigit() else None
+    d = {'items': Item.objects.order_by('code'), 'item': item, 'from': day['from'], 'to': day['to'],
+         'errors': errors, 'limit': PACK_LIMIT, 'truncated': False}
+    if item is None:
+        return d
+
+    def cap(qs):
+        rows = list(qs[:PACK_LIMIT + 1])  # shortcut: 앞 500건만, 기간을 줄여 다시 조회하게 한다
+        d['truncated'] |= len(rows) > PACK_LIMIT
+        return rows[:PACK_LIMIT]
+
+    def between(field):
+        return {f'{field}__date__gte': day['from'], f'{field}__date__lte': day['to']}
+
+    types = dict(InspectionSpec.TYPES)
+    summary = {}
+    for t, result in Inspection.objects.filter(lot__item=item, **between('inspected_at')) \
+            .values_list('spec__inspection_type', 'result'):
+        s = summary.setdefault(t, {'label': types.get(t, t), 'total': 0, 'passed': 0})
+        s['total'] += 1
+        s['passed'] += result == Inspection.PASS
+    for s in summary.values():
+        s['rate'] = round(s['passed'] * 100 / s['total'], 1)
+    d['summary'] = list(summary.values())
+    ncs = cap(Nonconformance.objects.filter(lot__item=item, **between('detected_at'))
+              .select_related('lot', 'approved_by').prefetch_related('photos').order_by('detected_at'))
+    d['ncs'] = ncs
+    nc_ids = [n.pk for n in ncs]
+    can = lambda m: u.has_perm(f'qms.view_{m}')
+    ct = ContentType.objects.get_for_model
+    d['claims'] = list(CustomerClaim.objects.filter(nonconformance_id__in=nc_ids)) if can('customerclaim') else None
+    d['scars'] = list(Scar.objects.filter(nonconformance_id__in=nc_ids)) if can('scar') else None
+    if can('capa'):
+        q = Q(source_type=ct(Nonconformance), source_id__in=nc_ids)
+        if d['claims']:
+            q |= Q(source_type=ct(CustomerClaim), source_id__in=[c.pk for c in d['claims']])
+        d['capas'] = list(Capa.objects.filter(q))
+    else:
+        d['capas'] = None
+    d['changes'] = cap(ChangeRequest.objects.filter(item=item, **between('effective_at'))
+                       .order_by('effective_at')) if can('changerequest') else None
+    d['plan'], d['plan_lines'], d['can_plan'] = None, [], can('controlplan')
+    if can('controlplan'):
+        d['plan'] = ControlPlan.objects.filter(item=item, approved_at__isnull=False).order_by('-approved_at').first()
+        d['plan_lines'] = list(d['plan'].lines.select_related('process')) if d['plan'] else []
+    # 문서는 품번에 직접 묶이지 않아, 이 품번 PPAP 요소가 인용한 문서의 유효본만 모은다
+    d['doc_revisions'] = []
+    if can('documentrevision'):
+        docs = {e.document for e in PpapElement.objects.filter(submission__item=item, document__isnull=False)
+                .select_related('document')}
+        d['doc_revisions'] = [r for r in (doc.current_revision for doc in docs) if r]
+    d['memos'] = None
+    if can('memo'):
+        pairs = [(Nonconformance, nc_ids), (Lot, {n.lot_id for n in ncs}), (Item, [item.pk]),
+                 (Capa, [c.pk for c in d['capas'] or []]), (CustomerClaim, [c.pk for c in d['claims'] or []]),
+                 (Scar, [s.pk for s in d['scars'] or []])]
+        q = Q(pk__in=[])
+        for model, ids in pairs:
+            q |= Q(content_type=ct(model), object_id__in=list(ids))
+        d['memos'] = cap(Memo.objects.filter(q).select_related('author').prefetch_related('photos').order_by('created_at'))
+    return d
+
+
+def _pack_allowed(request):
+    u = request.user
+    if not (u.has_perm('core.view_nonconformance') and u.has_perm('qms.view_inspection')):
+        raise PermissionDenied
+
+
+@staff_member_required
+def audit_pack(request):
+    _pack_allowed(request)
+    return render(request, 'qms/audit_pack.html', {'title': '심사 대응 묶음', 'obj': '', **_pack_data(request)})
+
+
+@staff_member_required
+def audit_pack_zip(request):
+    _pack_allowed(request)
+    d = _pack_data(request)
+    if d['item'] is None:
+        raise Http404
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, 'w') as z:  # 사진은 이미 압축 포맷이라 저장만 한다
+        def add(field, name):
+            try:  # 디스크에서 사라진 파일은 건너뛴다. 이름은 기록 번호+순번으로만 만든다
+                z.write(field.path, name + os.path.splitext(field.name)[1].lower())
+            except (OSError, ValueError):
+                pass
+        for n in d['ncs']:
+            for i, p in enumerate(n.photos.all(), 1):
+                add(p.file, f'부적합/{n.number}_{i}')
+        for m in d['memos'] or []:
+            for i, p in enumerate(m.photos.all(), 1):
+                add(p.file, f'메모/메모{m.pk}_{i}')
+        for r in d['doc_revisions']:
+            add(r.file, f'문서/{r.document.number}_Rev{r.revision}')
+    name = f"audit_{d['item'].code}_{d['from']}_{d['to']}.zip"
+    return HttpResponse(buf.getvalue(), content_type='application/zip',
+                        headers={'Content-Disposition': f'attachment; filename="{name}"'})

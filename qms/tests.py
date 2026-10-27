@@ -699,3 +699,45 @@ class MemoTest(TestCase):
         self.assertRedirects(r, f'/admin/core/nonconformance/{self.nc.pk}/change/')
         r = self.client.post(f'/memo/new/?ct=core.lot&id={self.lot.pk}', data)
         self.assertRedirects(r, '/trace/?lot=L1')
+
+
+class AuditPackTest(TestCase):
+    def setUp(self):
+        from core.models import NonconformancePhoto
+        self.media = tempfile.mkdtemp()
+        ov = override_settings(MEDIA_ROOT=self.media)
+        ov.enable()
+        self.addCleanup(ov.disable)
+        self.admin = User.objects.create_superuser('pack-admin')
+        self.client.force_login(self.admin)
+        self.i1 = Item.objects.create(code='I1', name='셀', item_type=Item.FINISHED)
+        i2 = Item.objects.create(code='I2', name='팩', item_type=Item.FINISHED)
+        now = timezone.now()
+        self.ncs = {}
+        for key, item, days in (('in', self.i1, 5), ('out', self.i1, 200), ('other', i2, 5)):
+            lot = Lot.objects.create(number=f'L-{key}', item=item)
+            nc = Nonconformance.objects.create(lot=lot, description=key, detected_at=now - datetime.timedelta(days=days))
+            NonconformancePhoto.objects.create(nonconformance=nc, file=SimpleUploadedFile(f'{key}.jpg', b'0' * 10))
+            self.ncs[key] = nc
+        self.url = f'?item={self.i1.pk}'
+
+    def test_pack_contents(self):
+        r = self.client.get('/audit-pack/' + self.url)
+        self.assertContains(r, self.ncs['in'].number)
+        self.assertNotContains(r, self.ncs['out'].number)
+        self.assertNotContains(r, self.ncs['other'].number)
+        r = self.client.get('/audit-pack/' + self.url + '&from=2026-13-40&to=x')
+        self.assertContains(r, '날짜 형식이 올바르지 않습니다')
+        r = self.client.get('/audit-pack/' + self.url + '&from=2026-10-27&to=2026-10-01')
+        self.assertContains(r, '시작일이 종료일보다 늦습니다')
+
+    def test_pack_zip(self):
+        import zipfile
+        r = self.client.get('/audit-pack/zip/' + self.url)
+        with zipfile.ZipFile(BytesIO(r.content)) as z:
+            names = z.namelist()
+        self.assertEqual(names, [f"부적합/{self.ncs['in'].number}_1.jpg"])
+
+    def test_pack_needs_permission(self):
+        self.client.force_login(User.objects.create_user('nobody', is_staff=True))
+        self.assertEqual(self.client.get('/audit-pack/' + self.url).status_code, 403)

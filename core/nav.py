@@ -6,5 +6,6 @@ NAV = [
              ('부적합 등록', 'nc_quick', 'core.add_nonconformance'),
              ('품질 KPI', 'kpi', None),
              ('협력사', 'suppliers', None),
+             ('심사 묶음', 'audit_pack', 'core.view_nonconformance'),
              ('미분류 메모', 'memo_inbox', 'qms.view_memo')]),
 ]
