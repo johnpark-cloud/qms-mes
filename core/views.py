@@ -5,12 +5,14 @@ from django.contrib import admin, messages
 from django.contrib.admin.views.decorators import staff_member_required
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.http import FileResponse, Http404
+from django.db import transaction
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
 
 from .importer import run_import
-from .models import Approvable, EditRequest, Hold, ImportProfile, Lot, is_approver
+from .models import (Approvable, EditRequest, Hold, ImportProfile, Lot, Nonconformance, NonconformancePhoto, is_approver,
+                     validate_photo)
 from .records import blockers, is_locked
 
 
@@ -37,6 +39,61 @@ def trace(request):
     if lot:
         ctx.update(ancestors=lot.ancestors(), descendants=lot.descendants())
     return render(request, 'core/trace.html', ctx)
+
+
+class MultiPhotoInput(forms.ClearableFileInput):
+    allow_multiple_selected = True
+
+    def __init__(self, attrs=None):
+        super().__init__({'accept': 'image/*', 'capture': 'environment', 'multiple': True, **(attrs or {})})
+
+
+class MultiPhotoField(forms.FileField):
+    widget = MultiPhotoInput
+
+    def clean(self, data, initial=None):
+        files = data if isinstance(data, (list, tuple)) else [data]
+        out = [super(MultiPhotoField, self).clean(f, initial) for f in files if f]
+        for f in out:
+            validate_photo(f)
+        return out
+
+
+class QuickNcForm(forms.Form):
+    lot = forms.CharField(label='LOT 번호', max_length=100)
+    origin = forms.ChoiceField(label='발생 유형', choices=Nonconformance.ORIGINS, initial='PROCESS')
+    description = forms.CharField(label='부적합 내용', widget=forms.Textarea(attrs={'rows': 4}))
+    defect_qty = forms.DecimalField(label='불량 수량', min_value=0, initial=1)
+    photos = MultiPhotoField(label='사진', required=False)
+
+    def clean_lot(self):
+        n = self.cleaned_data['lot'].strip()  # 스캐너가 붙이는 공백·줄바꿈 제거
+        lot = Lot.objects.filter(number=n).first() or Lot.objects.filter(number__iexact=n).first()
+        if not lot:
+            raise ValidationError('등록되지 않은 LOT입니다.')
+        return lot
+
+
+@staff_member_required
+def nc_quick(request):
+    """현장 간편 등록: 필수 5칸만 받고 나머지는 부적합 화면에서 보완한다. 저장하면 보류가 자동 생성된다."""
+    if not request.user.has_perm('core.add_nonconformance'):
+        raise PermissionDenied
+    form = QuickNcForm(request.POST or None, request.FILES or None, initial={'lot': request.GET.get('lot', '').strip()})
+    if request.method == 'POST' and form.is_valid():
+        d = form.cleaned_data
+        try:
+            with transaction.atomic():
+                nc = Nonconformance.objects.create(lot=d['lot'], origin=d['origin'], description=d['description'],
+                                                   defect_qty=d['defect_qty'], detected_by=request.user)
+                for f in d['photos']:
+                    NonconformancePhoto.objects.create(nonconformance=nc, file=f)
+        except ValidationError as e:
+            form.add_error(None, e)
+        else:
+            messages.success(request, f'{nc.number} 등록됨 — LOT {d["lot"].number} 보류. 나머지 항목은 부적합 화면에서 보완하세요.')
+            return redirect(f'{reverse("trace")}?lot={d["lot"].number}')
+    return render(request, 'core/nc_quick.html', {'form': form, 'title': '부적합 등록'})
 
 
 def _get_record(app_label, model_name, pk):

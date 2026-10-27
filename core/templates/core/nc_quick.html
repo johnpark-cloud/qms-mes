@@ -1,0 +1,15 @@
+{% extends "admin/base_site.html" %}
+{% block content %}
+<div class="insp">
+  <section class="card">
+    <form method="post" enctype="multipart/form-data" autocomplete="off">
+      {% csrf_token %}
+      {{ form.non_field_errors }}
+      {% for f in form %}
+      <p>{{ f.errors }}<label for="{{ f.id_for_label }}">{{ f.label }}</label>{{ f }}</p>
+      {% endfor %}
+      <button type="submit" class="default">등록</button>
+    </form>
+  </section>
+</div>
+{% endblock %}

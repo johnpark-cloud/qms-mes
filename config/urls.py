@@ -14,6 +14,7 @@ urlpatterns = [
     path('todo/', qms_views.todo, name='todo'),
     path('brand/logo', core_views.brand_logo, name='brand_logo'),
     path('trace/', core_views.trace, name='trace'),
+    path('nc/new/', core_views.nc_quick, name='nc_quick'),
     path('import/', core_views.import_view, name='import'),
     path('approve/<str:app_label>/<str:model_name>/<int:pk>/', core_views.approve, name='approve'),
     path('request/<str:kind>/<str:app_label>/<str:model_name>/<int:pk>/', core_views.edit_request, name='edit_request'),

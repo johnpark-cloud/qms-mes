@@ -46,6 +46,16 @@ powershell -ExecutionPolicy Bypass -File scripts\serve.ps1 -HostName QA-PC01   #
 - 서명·세션용 비밀키는 처음 실행할 때 `data/secret_key.txt`에 자동으로 만들어집니다(Git에 올라가지 않음). 이 파일을 지우면 모두 다시 로그인해야 합니다.
 - 첨부파일(문서 원본)은 로그인한 사용자만 내려받을 수 있습니다.
 
+## 휴대폰에서 사진 찍기
+
+QMS > "부적합 등록"(`/nc/new/`)에서 휴대폰 카메라로 바로 찍어 올릴 수 있습니다. 먼저 **회사 보안 정책(사내망 포트 개방 가능 여부)을 확인**하세요.
+
+1. `QMS_ALLOWED_HOSTS=<PC IP>` 환경변수를 설정합니다.
+2. `python manage.py runserver 0.0.0.0:8000`으로 띄웁니다(또는 `scripts\serve.ps1`의 host를 바꿉니다).
+3. 관리자 PowerShell에서 방화벽을 엽니다.
+   `New-NetFirewallRule -DisplayName QMS -Direction Inbound -LocalPort 8000 -Protocol TCP -Action Allow`
+4. 휴대폰(같은 사내망)에서 `http://<PC IP>:8000/nc/new/`로 접속합니다.
+
 ## 모듈
 
 - **MES**: 품번·BOM·공정 라우팅, 작업지시·작업 실적(투입·양품·불량, 이전 공정 실적 없으면 등록 차단, 진도율), LOT·계보(분할·병합), 출하

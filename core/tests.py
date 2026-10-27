@@ -448,3 +448,51 @@ class NcReportTest(TestCase):
         photo.refresh_from_db()
         photo.full_clean()
         self.assertTrue(NonconformancePhoto.history.filter(id=photo.pk).exists())
+
+
+class NcQuickTest(TestCase):
+    def setUp(self):
+        import tempfile
+        from django.test import override_settings
+        media = override_settings(MEDIA_ROOT=tempfile.mkdtemp())
+        media.enable()
+        self.addCleanup(media.disable)
+        item = Item.objects.create(code='R1', name='양극재', item_type=Item.RAW)
+        self.lot = Lot.objects.create(number='L1', item=item)
+        self.user = User.objects.create_user('insp', password='pw', is_staff=True)
+        self.user.groups.add(Group.objects.get(name='검사원'))
+        self.client.force_login(self.user)
+
+    def _post(self, lot=' L1 \n', photos=(), **extra):
+        return self.client.post('/nc/new/', {'lot': lot, 'origin': 'INCOMING', 'description': '찍힘', 'defect_qty': 2,
+                                             'photos': list(photos), **extra})
+
+    def test_quick_creates_nc_and_hold(self):
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        r = self._post(photos=[SimpleUploadedFile('a.heic', b'0' * 100)])
+        self.assertRedirects(r, '/trace/?lot=L1', fetch_redirect_response=False)
+        nc = Nonconformance.objects.get()
+        self.assertEqual(nc.detected_by, self.user)
+        self.assertEqual(nc.holds.count(), 1)
+        self.assertEqual(nc.photos.count(), 1)
+        self.assertEqual(self._post(lot='l1').status_code, 302)  # 대소문자 차이
+
+    def test_bad_photo_rolls_back(self):
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        r = self._post(photos=[SimpleUploadedFile('a.jpg', b'0'), SimpleUploadedFile('x.exe', b'0')])
+        self.assertEqual(r.status_code, 200)
+        self.assertContains(r, '사진 파일만')
+        self.assertEqual(Nonconformance.objects.count(), 0)
+
+    def test_unknown_lot(self):
+        r = self._post(lot='NOPE')
+        self.assertContains(r, '등록되지 않은 LOT')
+        self.assertEqual(Nonconformance.objects.count(), 0)
+
+    def test_needs_permission(self):
+        u = User.objects.create_user('nop', password='pw', is_staff=True)
+        self.client.force_login(u)
+        self.assertEqual(self.client.get('/nc/new/').status_code, 403)
+
+    def test_prefill(self):
+        self.assertContains(self.client.get('/nc/new/?lot=L1'), 'value="L1"')

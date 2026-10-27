@@ -3,6 +3,7 @@ NAV = [
     ('홈', [('내 할 일', 'todo', None)]),
     ('MES', [('LOT 이력', 'trace', None)]),
     ('QMS', [('검사 입력', 'inspect', 'qms.add_inspection'),
+             ('부적합 등록', 'nc_quick', 'core.add_nonconformance'),
              ('품질 KPI', 'kpi', None),
              ('협력사', 'suppliers', None)]),
 ]
