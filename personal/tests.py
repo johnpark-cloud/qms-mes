@@ -41,6 +41,9 @@ class PayTests(TestCase):
 
 
 class OwnerOnlyTests(TestCase):
+    def tearDown(self):
+        self.slip.file.delete(save=False)
+
     def setUp(self):
         self.a = User.objects.create_superuser('a', password='x')
         self.b = User.objects.create_user('b', password='x', is_staff=True)
@@ -62,7 +65,11 @@ class OwnerOnlyTests(TestCase):
         for url in (f'/print/personal/payslip/{self.slip.pk}/', f'/request/DELETE/personal/payslip/{self.slip.pk}/',
                     f'/approve/personal/payslip/{self.slip.pk}/', f'/me/payslip/{self.slip.pk}/file/'):
             self.assertEqual(self.client.get(url).status_code, 404, url)
-        self.assertEqual(self.client.get('/media/' + self.slip.file.name).status_code, 404)
+        n = self.slip.file.name
+        for p in (n, '/' + n, './' + n, 'x/../' + n, n.replace('personal', 'Personal', 1)):
+            for u in (self.a, self.b):
+                self.client.force_login(u)
+                self.assertEqual(self.client.get('/media/' + p).status_code, 404, p)
 
     def test_owner_sees_and_downloads(self):
         self.client.force_login(self.b)
@@ -75,3 +82,10 @@ class OwnerOnlyTests(TestCase):
         r = self.client.post('/admin/personal/leaveuse/add/', {'used_on': '2026-02-02', 'days': '1', 'reason': ''})
         self.assertEqual(r.status_code, 302)
         self.assertEqual(LeaveUse.objects.get(used_on=date(2026, 2, 2)).owner, self.a)
+
+    def test_duplicate_month_form_error_and_normalize(self):
+        r = self.client.post('/admin/personal/payslip/add/', {'month': '2026-03-15', 'base_pay': '1', 'lines-TOTAL_FORMS': '0', 'lines-INITIAL_FORMS': '0'})
+        self.assertEqual(r.status_code, 302)
+        self.assertEqual(Payslip.objects.get(owner=self.a).month, date(2026, 3, 1))
+        r = self.client.post('/admin/personal/payslip/add/', {'month': '2026-03-20', 'base_pay': '1', 'lines-TOTAL_FORMS': '0', 'lines-INITIAL_FORMS': '0'})
+        self.assertContains(r, '이미 등록된 급여월입니다.')

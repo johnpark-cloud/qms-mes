@@ -1,7 +1,14 @@
 from decimal import Decimal
 
 from django.conf import settings
+from django.core.exceptions import ValidationError
+from django.core.files.storage import FileSystemStorage
 from django.db import models
+
+def private_storage():
+    # MEDIA_ROOT 밖이라 어떤 /media/ 주소로도 닿지 않는다 (소유자 전용 화면만 연다)
+    return FileSystemStorage(location=settings.DATA_DIR / 'private')
+
 
 OWNER = dict(to=settings.AUTH_USER_MODEL, on_delete=models.CASCADE, verbose_name='소유자')
 
@@ -36,7 +43,7 @@ class Payslip(models.Model):
     owner = models.ForeignKey(**OWNER)
     month = models.DateField('급여월 (매월 1일)')
     base_pay = models.DecimalField('기본급 (원)', max_digits=14, decimal_places=0)
-    file = models.FileField('명세서 파일', upload_to='personal/%Y/', blank=True)
+    file = models.FileField('명세서 파일', upload_to='personal/%Y/', storage=private_storage, blank=True)
 
     class Meta:
         verbose_name = verbose_name_plural = '급여명세'
@@ -45,6 +52,12 @@ class Payslip(models.Model):
 
     def __str__(self):  # 금액은 로그에 남기지 않는다
         return f'{self.month:%Y-%m} 급여'
+
+    def clean(self):
+        if self.month:
+            self.month = self.month.replace(day=1)
+        if self.owner_id and self.month and Payslip.objects.filter(owner_id=self.owner_id, month=self.month).exclude(pk=self.pk).exists():
+            raise ValidationError('이미 등록된 급여월입니다.')
 
     def _sum(self, kind):
         return sum((l.amount for l in self.lines.all() if l.kind == kind), Decimal(0))

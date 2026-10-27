@@ -1,4 +1,6 @@
+from django import forms
 from django.contrib import admin
+from django.db import models
 from django.http import Http404
 
 from .models import LeaveProfile, LeaveUse, PayLine, Payslip
@@ -47,4 +49,16 @@ class LeaveUseAdmin(OwnerAdmin):
 @admin.register(Payslip)
 class PayslipAdmin(OwnerAdmin):
     list_display = ['month', 'base_pay']
+    formfield_overrides = {models.FileField: {'widget': forms.FileInput}}  # 기본 위젯의 /media/ 링크는 쓰지 않는다
+
+    def get_form(self, request, obj=None, **kwargs):
+        form = super().get_form(request, obj, **kwargs)
+        orig = form.__init__
+
+        def init(self, *a, instance=None, **kw):  # owner는 폼에 없으므로 검증 전에 넣는다
+            instance = instance or Payslip()
+            instance.owner = request.user
+            orig(self, *a, instance=instance, **kw)
+        form.__init__ = init
+        return form
     inlines = [PayLineInline]

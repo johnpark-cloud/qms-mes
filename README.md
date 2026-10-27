@@ -157,11 +157,11 @@ RAW-1,수입검사,외관,OK
 
 ### 개인 연차·급여 자료
 
-`/me/`의 연차·급여는 본인만 열람합니다(관리자도 다른 사람 것은 볼 수 없음). 다만 같은 DB에 저장되므로 서버 백업에는 포함됩니다. 회사를 옮길 때는 내보낸 뒤 지우세요. 명세서 파일은 `data/media/personal/`에 있습니다.
+`/me/`의 연차·급여는 본인만 열람합니다(관리자도 다른 사람 것은 볼 수 없음). 다만 같은 DB에 저장되므로 서버 백업에는 포함됩니다. 회사를 옮길 때는 내보낸 뒤 지우세요. 명세서 파일은 `data/private/personal/`에 있습니다(백업 대상 `data/`에 포함, 웹 주소로는 열리지 않음).
 
 ```powershell
 .\.venv\Scripts\python manage.py dumpdata personal --indent 2 -o my-personal.json   # 내보내기
-# 이후 /admin/ 에서 본인 기록을 삭제하고, data\media\personal 폴더를 지웁니다.
+# 이후 /admin/ 에서 본인 기록을 삭제하고, data\private\personal 폴더를 지웁니다.
 ```
 
 ## PostgreSQL 전환 (2단계: 팀 확장 또는 셀 시리얼 도입 시)

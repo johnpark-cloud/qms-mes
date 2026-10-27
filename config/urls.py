@@ -41,6 +41,5 @@ urlpatterns = [
     path('inspect/<int:lot_id>/<int:spec_id>/submit/', qms_views.inspect_submit, name='inspect_submit'),
     path('inspect/check/<int:char_id>/', qms_views.inspect_check, name='inspect_check'),
     # 문서 원본은 로그인한 사용자에게만 (DEBUG=0 사내망 서비스에서도 동작)
-    # 급여 파일은 소유자 전용 화면(payslip_file)으로만 받는다
-    re_path(r'^media/(?P<path>(?!personal/).*)$', staff_member_required(serve), {'document_root': settings.MEDIA_ROOT}),
+    re_path(r'^media/(?P<path>.*)$', staff_member_required(serve), {'document_root': settings.MEDIA_ROOT}),
 ]
