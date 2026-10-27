@@ -293,7 +293,7 @@ try:
         me = post_opener.open(BASE + '/me/'); me_code, me_html = me.status, me.read().decode()
     except urllib.error.HTTPError as e:
         me_code, me_html = e.code, ''
-    check('내 연차·급여 화면 200 (리다이렉트 아님)', me_code == 200 and '연차·급여' in me_html, me_code)
+    check('내 연차·급여 화면 200 (리다이렉트 아님)', me_code == 200 and '연차 사용 등록' in me_html, me_code)
     def save_layout(body):
         token = next(c.value for c in jar if c.name == 'csrftoken')
         try:
