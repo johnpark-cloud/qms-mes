@@ -1,4 +1,5 @@
 {% extends "admin/base_site.html" %}
+{% load memo_tags %}
 {% block title %}LOT 이력{% endblock %}
 {% block content %}
 <section class="card">
@@ -29,6 +30,7 @@
   </ol>
   {% if actions %}<p class="toolbar">{% for name, url in actions %}<a class="button" href="{{ url }}">{{ name }}</a> {% endfor %}</p>{% endif %}
 </section>
+{% memo_box lot %}
 <div class="cards">
   <section class="card"><h2>상위 계보 <span class="count">투입 자재</span></h2>{% include "core/lot_table.html" with lots=ancestors %}</section>
   <section class="card"><h2>하위 계보 <span class="count">영향 범위</span></h2>{% include "core/lot_table.html" with lots=descendants %}</section>

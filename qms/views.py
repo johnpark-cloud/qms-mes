@@ -1,11 +1,13 @@
 from decimal import Decimal, InvalidOperation
 from urllib.parse import urlencode
 
+from django.contrib import messages
 from django.contrib.admin.views.decorators import staff_member_required
+from django.contrib.contenttypes.models import ContentType
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import transaction
-from django.http import HttpResponse
-from django.shortcuts import get_object_or_404, render
+from django.http import Http404, HttpResponse
+from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
 from django.utils.html import format_html
@@ -14,7 +16,8 @@ from core.models import Lot, is_approver
 
 from . import kpi, spc
 from .due import due_items
-from .models import Characteristic, ExcelTemplate, Gauge, Inspection, InspectionSpec, Measurement
+from .memo import TARGETS, MemoForm, box_context, resolve_target, todays_audit
+from .models import Characteristic, ExcelTemplate, Gauge, Inspection, InspectionSpec, Measurement, Memo, MemoPhoto
 
 
 @staff_member_required
@@ -167,3 +170,88 @@ def spc_view(request, char_id):
     ctx.update(res=res, W=W, H=H, polyline=' '.join(f"{p['x']:.1f},{p['y']:.1f}" for p in pts),
                lines=[(name, y(lim[key])) for name, key in (('UCL', 'ucl'), ('CL', 'cl'), ('LCL', 'lcl'))])
     return render(request, 'qms/spc.html', ctx)
+
+
+# ---------- 현장 메모 ----------
+
+def _memo_target(request):
+    """?ct=app_label.model&id=pk → 대상 기록. ct가 없으면 미분류(None)."""
+    key = request.GET.get('ct')
+    if not key:
+        return None
+    try:
+        app_label, model = key.split('.')
+        ct = ContentType.objects.get_by_natural_key(app_label, model)
+        pk = int(request.GET.get('id', ''))
+    except (ValueError, ContentType.DoesNotExist):
+        raise Http404
+    if not request.user.has_perm(f'{app_label}.view_{model}'):
+        raise PermissionDenied
+    return get_object_or_404(ct.model_class(), pk=pk)
+
+
+def _memo_save(request, form, target):
+    """저장 후 htmx면 메모 상자를 다시 그리고, 미분류면 미분류함으로 보낸다."""
+    with transaction.atomic():
+        memo = form.save(commit=False)
+        if not memo.pk:
+            memo.author, memo.target = request.user, target
+        memo.save()
+        for f in form.cleaned_data['photos']:
+            MemoPhoto.objects.create(memo=memo, file=f)
+    if memo.target is None or not request.headers.get('HX-Request'):
+        messages.success(request, '메모를 저장했습니다.')
+        return redirect('memo_inbox')
+    resp = render(request, 'qms/memo_list.html', box_context(memo.target, request.user))
+    resp['HX-Retarget'], resp['HX-Reswap'] = '#memo-box', 'outerHTML'
+    return resp
+
+
+def _memo_form(request, form):
+    hx = bool(request.headers.get('HX-Request'))
+    ctx = {'form': form, 'action': request.get_full_path(), 'hx': hx, 'title': '메모'}
+    return render(request, 'qms/memo_form.html#form' if hx else 'qms/memo_form.html', ctx)
+
+
+@staff_member_required
+def memo_new(request):
+    if not request.user.has_perm('qms.add_memo'):
+        raise PermissionDenied
+    target = _memo_target(request)
+    form = MemoForm(request.POST or None, request.FILES or None, initial={'audit': todays_audit(timezone.localdate())})
+    if request.method == 'POST' and form.is_valid():
+        return _memo_save(request, form, target)
+    return _memo_form(request, form)
+
+
+@staff_member_required
+def memo_edit(request, pk):
+    memo = get_object_or_404(Memo, pk=pk)
+    if memo.author_id != request.user.pk:
+        raise PermissionDenied('메모는 작성자만 수정할 수 있습니다.')
+    form = MemoForm(request.POST or None, request.FILES or None, instance=memo)
+    if request.method == 'POST' and form.is_valid():
+        return _memo_save(request, form, memo.target)
+    return _memo_form(request, form)
+
+
+@staff_member_required
+def memo_inbox(request):
+    """미분류 메모: 종류 + 번호로 대상 기록을 찾아 연결한다 (작성자 본인만)."""
+    if not request.user.has_perm('qms.view_memo'):
+        raise PermissionDenied
+    if request.method == 'POST':
+        memo = get_object_or_404(Memo, pk=request.POST.get('memo'), content_type__isnull=True)
+        if memo.author_id != request.user.pk:
+            raise PermissionDenied('메모는 작성자만 연결할 수 있습니다.')
+        kind, number = request.POST.get('kind', ''), request.POST.get('number', '').strip()
+        target = resolve_target(kind, number)
+        if target is None:
+            messages.error(request, f'{kind} "{number}": 찾을 수 없습니다. 종류와 번호를 확인하세요.')
+        else:
+            memo.target = target
+            memo.save()
+            messages.success(request, f'{kind} {target}에 연결했습니다.')
+        return redirect('memo_inbox')
+    memos = Memo.objects.filter(content_type__isnull=True).select_related('author', 'audit').prefetch_related('photos')
+    return render(request, 'qms/memo_inbox.html', {'title': '미분류 메모', 'memos': memos, 'kinds': TARGETS})

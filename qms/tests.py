@@ -477,7 +477,7 @@ class QmsTest(TestCase):
         self.client.force_login(User.objects.create_superuser('admin', password='x'))
         req = self.client.get('/admin/qms/capa/add/').wsgi_request
         qs = admin.site._registry[Capa].get_form(req)().fields['source_type'].queryset
-        self.assertEqual(sorted(qs.values_list('model', flat=True)), ['auditfinding', 'customerclaim', 'nonconformance', 'scar'])
+        self.assertEqual(sorted(qs.values_list('model', flat=True)), ['auditfinding', 'customerclaim', 'memo', 'nonconformance', 'scar'])
 
     def test_pages_render(self):
         for v in ('9.9', '10.0', '10.1'):
@@ -578,3 +578,83 @@ class TimelineTest(TestCase):
         names = [n for n, _ in lot_actions(self.raw, self.admin)]
         self.assertNotIn('처분 입력', names)
         self.assertNotIn('출하 등록', names)
+
+
+@override_settings(MEDIA_ROOT=TMP_MEDIA)
+class MemoTest(TestCase):
+    def setUp(self):
+        self.admin = User.objects.create_superuser('memo-admin')
+        self.item = Item.objects.create(code='M1', name='셀', item_type=Item.FINISHED)
+        self.lot = Lot.objects.create(number='L1', item=self.item)
+        self.nc = Nonconformance.objects.create(lot=self.lot, description='찍힘')
+        self.client.force_login(self.admin)
+
+    def test_attached_to_record(self):
+        from .models import Memo
+        r = self.client.get(f'/memo/new/?ct=core.nonconformance&id={self.nc.pk}', HTTP_HX_REQUEST='true')
+        self.assertContains(r, 'hx-post=')
+        self.assertNotContains(r, '<html')
+        photo = SimpleUploadedFile('a.jpg', b'x', content_type='image/jpeg')
+        r = self.client.post(f'/memo/new/?ct=core.nonconformance&id={self.nc.pk}',
+                             {'body': '포장 라벨 확인 요청', 'speaker_kind': 'AUDITOR', 'photos': [photo]},
+                             HTTP_HX_REQUEST='true')
+        self.assertContains(r, '포장 라벨 확인 요청')
+        memo = Memo.objects.get()
+        self.assertEqual(memo.target, self.nc)
+        self.assertEqual(memo.author, self.admin)
+        self.assertEqual(memo.photos.count(), 1)
+        self.assertContains(self.client.get(f'/admin/core/nonconformance/{self.nc.pk}/change/'), '포장 라벨 확인 요청')
+        self.assertContains(self.client.get('/trace/', {'lot': 'L1'}), 'id="memo-box"')
+
+    def test_auto_audit(self):
+        from .memo import todays_audit
+        today = timezone.localdate()
+        self.assertIsNone(self.client.get('/memo/new/').context['form']['audit'].value())
+        planned = InternalAudit.objects.create(name='계획', planned_date=today, auditor='김')
+        done = InternalAudit.objects.create(name='실시', planned_date=today - datetime.timedelta(days=3),
+                                            performed_at=today, auditor='이', kind='CUSTOMER')
+        self.assertEqual(todays_audit(today), done)
+        self.assertEqual(self.client.get('/memo/new/').context['form']['audit'].value(), done.pk)
+        done.performed_at = today - datetime.timedelta(days=1)
+        done.save()
+        self.assertEqual(todays_audit(today), planned)
+        self.assertIsNone(todays_audit(today + datetime.timedelta(days=1)))
+
+    def test_inbox_assign(self):
+        from .models import Memo
+        r = self.client.post('/memo/new/', {'body': '창고 온도', 'speaker_kind': 'INSPECTOR'})
+        self.assertRedirects(r, '/memo/inbox/')
+        memo = Memo.objects.get()
+        self.assertIsNone(memo.target)
+        self.assertContains(self.client.get('/memo/inbox/'), '창고 온도')
+        r = self.client.post('/memo/inbox/', {'memo': memo.pk, 'kind': 'LOT', 'number': 'NOPE'}, follow=True)
+        self.assertContains(r, '찾을 수 없습니다')
+        memo.refresh_from_db()
+        self.assertIsNone(memo.target)
+        self.client.post('/memo/inbox/', {'memo': memo.pk, 'kind': 'LOT', 'number': ' L1 \n'})
+        memo.refresh_from_db()
+        self.assertEqual(memo.target, self.lot)
+
+    def test_audit_memo_list(self):
+        from .models import Memo
+        audit = InternalAudit.objects.create(name='고객 심사', planned_date=timezone.localdate(), auditor='김')
+        Memo.objects.create(body='라벨 위치 지적', target=self.nc, audit=audit, author=self.admin)
+        r = self.client.get(f'/admin/qms/internalaudit/{audit.pk}/change/')
+        self.assertContains(r, '이번 심사 메모')
+        self.assertContains(r, '라벨 위치 지적')
+        self.assertContains(r, 'CAPA 만들기')
+
+    def test_only_author_edits(self):
+        from .models import Memo
+        memo = Memo.objects.create(body='원문', author=self.admin)
+        other = User.objects.create_user('other', is_staff=True)
+        other.groups.add(Group.objects.get(name='품질엔지니어'))
+        self.client.force_login(other)
+        self.assertEqual(self.client.post(f'/memo/{memo.pk}/edit/', {'body': '바꿈', 'speaker_kind': 'OTHER'}).status_code, 403)
+        self.assertEqual(self.client.post(f'/admin/qms/memo/{memo.pk}/change/', {'body': '바꿈', 'speaker_kind': 'OTHER'}).status_code, 403)
+        memo.refresh_from_db()
+        self.assertEqual(memo.body, '원문')
+        self.client.force_login(self.admin)
+        self.client.post(f'/memo/{memo.pk}/edit/', {'body': '바꿈', 'speaker_kind': 'OTHER'})
+        memo.refresh_from_db()
+        self.assertEqual(memo.body, '바꿈')

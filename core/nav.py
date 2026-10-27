@@ -5,5 +5,6 @@ NAV = [
     ('QMS', [('검사 입력', 'inspect', 'qms.add_inspection'),
              ('부적합 등록', 'nc_quick', 'core.add_nonconformance'),
              ('품질 KPI', 'kpi', None),
-             ('협력사', 'suppliers', None)]),
+             ('협력사', 'suppliers', None),
+             ('미분류 메모', 'memo_inbox', 'qms.view_memo')]),
 ]

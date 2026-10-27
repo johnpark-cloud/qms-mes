@@ -8,7 +8,7 @@ from django.db import models, transaction
 from django.utils import timezone
 from simple_history.models import HistoricalRecords
 
-from core.models import Approvable, Item, Lot, Nonconformance
+from core.models import Approvable, Item, Lot, Nonconformance, validate_photo
 
 
 # ---------- 검사 ----------
@@ -535,7 +535,7 @@ class Capa(models.Model):
     title = models.CharField('제목', max_length=200)
     source = models.CharField('출처', max_length=10, choices=SOURCES)
     source_type = models.ForeignKey(ContentType, on_delete=models.PROTECT, null=True, blank=True, verbose_name='출처 기록 종류',
-                                    limit_choices_to=models.Q(app_label='qms', model__in=['customerclaim', 'scar', 'auditfinding'])
+                                    limit_choices_to=models.Q(app_label='qms', model__in=['customerclaim', 'scar', 'auditfinding', 'memo'])
                                     | models.Q(app_label='core', model='nonconformance'))
     source_id = models.PositiveIntegerField('출처 기록 ID', null=True, blank=True)
     source_record = GenericForeignKey('source_type', 'source_id')
@@ -581,7 +581,10 @@ class Capa(models.Model):
 
 class InternalAudit(models.Model):
     """내부심사 계획·실시 (IATF 9.2). 중·경부적합 지적은 CAPA가 연결돼야 종결된다."""
+    KINDS = [('INTERNAL', '내부'), ('CUSTOMER', '고객'), ('CERT', '인증')]
+
     name = models.CharField('심사명', max_length=200, help_text='예: 2026 상반기 공정심사 - 조립')
+    kind = models.CharField('구분', max_length=10, choices=KINDS, default='INTERNAL')
     scope = models.TextField('범위(공정·조항)', blank=True)
     checklist = models.ForeignKey(AuditChecklist, on_delete=models.SET_NULL, null=True, blank=True, verbose_name='체크리스트')
     planned_date = models.DateField('계획일')
@@ -770,3 +773,39 @@ class ExcelTemplate(models.Model):
         out = BytesIO()
         wb.save(out)
         return out.getvalue()
+
+
+# ---------- 현장 메모 ----------
+
+class Memo(models.Model):
+    """심사원·감독관·고객의 말을 그 자리에서 관련 기록에 남긴다. 대상이 비면 '미분류'."""
+    SPEAKERS = [('AUDITOR', '심사원'), ('INSPECTOR', '감독관'), ('CUSTOMER', '고객'), ('INTERNAL', '내부'), ('OTHER', '기타')]
+
+    body = models.TextField('내용')
+    speaker_kind = models.CharField('말한 사람', max_length=10, choices=SPEAKERS, default='AUDITOR')
+    speaker_name = models.CharField('이름', max_length=100, blank=True)
+    content_type = models.ForeignKey(ContentType, on_delete=models.PROTECT, null=True, blank=True, verbose_name='대상 기록 종류')
+    object_id = models.PositiveIntegerField('대상 기록 ID', null=True, blank=True)
+    target = GenericForeignKey('content_type', 'object_id')
+    audit = models.ForeignKey(InternalAudit, on_delete=models.SET_NULL, null=True, blank=True, related_name='memos',
+                              verbose_name='심사')
+    author = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name='+', verbose_name='작성자')
+    created_at = models.DateTimeField('작성 일시', default=timezone.now)
+    history = HistoricalRecords()
+
+    class Meta:
+        verbose_name = verbose_name_plural = '현장 메모'
+        ordering = ['created_at']
+        indexes = [models.Index(fields=['content_type', 'object_id'])]
+
+    def __str__(self):
+        return f'{self.get_speaker_kind_display()}: {self.body[:40]}'
+
+
+class MemoPhoto(models.Model):
+    memo = models.ForeignKey(Memo, on_delete=models.CASCADE, related_name='photos', verbose_name='메모')
+    file = models.FileField('사진', upload_to='memo/%Y/', validators=[validate_photo])
+    history = HistoricalRecords()
+
+    class Meta:
+        verbose_name = verbose_name_plural = '메모 사진'

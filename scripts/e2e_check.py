@@ -230,6 +230,13 @@ try:
     check('PPAP 제출 등록 → PSW 인쇄에 요소표', s == 302 and '외관 승인 보고서' in get('/print/qms/ppapsubmission/1/'), errors(html))
     s, html = post('/approve/qms/ppapsubmission/1/', {'password': 'e2e-pass-123'})
     check('외관승인(S) 증적 없이 PSW 서명 → 거부', s == 200 and '증적이 없습니다' in html)
+
+    # 현장 메모: 미분류 저장 → 미분류함에서 LOT 연결 → LOT 이력에 보임
+    s, html = post('/memo/new/', {'body': 'E2E 심사원 지적', 'speaker_kind': 'AUDITOR'})
+    check('미분류 메모 저장', s == 302 and 'E2E 심사원 지적' in get('/memo/inbox/'), errors(html))
+    memo_id = re.search(r'name="memo" value="(\d+)"', get('/memo/inbox/')).group(1)
+    post('/memo/inbox/', {'memo': memo_id, 'kind': 'LOT', 'number': ' CELL-A \n'})
+    check('미분류 메모 → LOT 연결, LOT 이력에 표시', 'E2E 심사원 지적' in get('/trace/?lot=CELL-A'))
 finally:
     server.terminate()
 

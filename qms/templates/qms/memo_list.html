@@ -1,0 +1,20 @@
+{% if not hide %}
+<section class="card" id="memo-box">
+  <h2>메모 <span class="count">{{ memos|length }}</span>
+    {% if can_add %}<button type="button" hx-get="{% url 'memo_new' %}?ct={{ ct }}&id={{ obj.pk }}" hx-target="#memo-slot">메모</button>{% endif %}</h2>
+  <div id="memo-slot"></div>
+  {% if memos %}
+  <ol class="timeline">
+    {% for m in memos %}
+    <li class="timeline__item">
+      <time datetime="{{ m.created_at|date:'c' }}">{{ m.created_at|date:'m-d H:i' }}</time>
+      <span><strong>{{ m.get_speaker_kind_display }}{% if m.speaker_name %} {{ m.speaker_name }}{% endif %}</strong>: {{ m.body|linebreaksbr }}
+        <span class="count">{{ m.author }}{% if m.audit %} · {{ m.audit.name }}{% endif %}</span>
+        {% if m.author_id == user.pk %}<button type="button" hx-get="{% url 'memo_edit' m.pk %}" hx-target="#memo-slot">수정</button>{% endif %}</span>
+      {% for p in m.photos.all %}<a href="{{ p.file.url }}" target="_blank"><img src="{{ p.file.url }}" alt="메모 사진" class="timeline__thumb" loading="lazy"></a>{% endfor %}
+    </li>
+    {% endfor %}
+  </ol>
+  {% else %}{% include "admin/empty_state.html" with message="아직 메모가 없습니다." %}{% endif %}
+</section>
+{% endif %}

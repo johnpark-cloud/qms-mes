@@ -13,7 +13,8 @@ def ensure_roles(sender, **kwargs):
         'view_lot', 'add_lot', 'add_lotlink', 'view_lotlink', 'add_shipment', 'view_shipment',
         'view_inspection', 'add_inspection', 'change_inspection',
         'view_measurement', 'add_measurement', 'change_measurement', 'delete_measurement', 'view_gauge',
-        'add_nonconformance', 'view_nonconformance', 'add_nonconformancephoto', 'view_routingstep', 'view_workresult', 'add_workresult'])
+        'add_nonconformance', 'view_nonconformance', 'add_nonconformancephoto', 'view_routingstep', 'view_workresult', 'add_workresult',
+        'add_memo', 'view_memo', 'add_memophoto', 'view_memophoto'])
     for name, perms in (('품질엔지니어', engineer), ('품질팀장', engineer), ('검사원', inspector)):
         Group.objects.get_or_create(name=name)[0].permissions.set(perms)
 

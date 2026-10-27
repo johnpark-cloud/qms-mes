@@ -3,7 +3,7 @@ from django.urls import reverse
 from django.utils.http import urlencode
 
 # (동작 이름, url 이름). 이후 태스크가 항목을 추가한다.
-ACTIONS = [('부적합 등록', 'nc_quick'), ('검사 입력', 'inspect'), ('LOT 이력 (추적)', 'trace'), ('KPI', 'kpi')]
+ACTIONS = [('부적합 등록', 'nc_quick'), ('검사 입력', 'inspect'), ('LOT 이력 (추적)', 'trace'), ('KPI', 'kpi'), ('메모', 'memo_new')]
 LIMIT = 10
 # (앱, 모델, 번호 필드, 표시 이름)
 NUMBERED = [('core', 'nonconformance', '부적합'), ('qms', 'capa', 'CAPA'), ('qms', 'customerclaim', '8D'), ('qms', 'scar', 'SCAR')]

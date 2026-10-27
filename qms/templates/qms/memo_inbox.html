@@ -1,0 +1,28 @@
+{% extends "admin/base_site.html" %}
+{% block content %}
+<section class="card">
+  <p class="toolbar"><a class="button" href="{% url 'memo_new' %}">메모</a></p>
+  {% if memos %}
+  <table>
+    <thead><tr><th>작성</th><th>말한 사람</th><th>내용</th><th>대상 연결</th></tr></thead>
+    <tbody>
+    {% for m in memos %}
+    <tr>
+      <td>{{ m.created_at|date:'Y-m-d H:i' }}<br><span class="count">{{ m.author }}{% if m.audit %} · {{ m.audit.name }}{% endif %}</span></td>
+      <td>{{ m.get_speaker_kind_display }}{% if m.speaker_name %} {{ m.speaker_name }}{% endif %}</td>
+      <td>{{ m.body|linebreaksbr }}{% for p in m.photos.all %} <a href="{{ p.file.url }}" target="_blank">사진{{ forloop.counter }}</a>{% endfor %}</td>
+      <td>{% if m.author_id == request.user.pk %}
+        <form method="post" class="toolbar">{% csrf_token %}
+          <input type="hidden" name="memo" value="{{ m.pk }}">
+          <select name="kind" aria-label="대상 종류">{% for k in kinds %}<option>{{ k }}</option>{% endfor %}</select>
+          <input name="number" aria-label="번호" placeholder="번호" required>
+          <button type="submit">연결</button>
+        </form>
+      {% else %}-{% endif %}</td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% else %}{% include "admin/empty_state.html" with message="미분류 메모가 없습니다." %}{% endif %}
+</section>
+{% endblock %}

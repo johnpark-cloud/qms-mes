@@ -1,4 +1,5 @@
 {% extends "admin/change_form.html" %}
+{% load memo_tags %}
 {% block object-tools-items %}
 {{ block.super }}
 {% if request_links_enabled %}
@@ -6,3 +7,4 @@
 {% if record_locked %}<li><a href="{% url 'edit_request' 'EDIT' opts.app_label opts.model_name original.pk %}">수정 요청</a></li>{% endif %}
 {% endif %}
 {% endblock %}
+{% block content %}{{ block.super }}{% if original.pk %}{% memo_box original %}{% endif %}{% endblock %}

@@ -1,0 +1,15 @@
+{% extends "admin/base_site.html" %}
+{% block content %}
+{% partialdef form inline %}
+<form class="card" method="post" enctype="multipart/form-data" action="{{ action }}" autocomplete="off"
+      {% if hx %}hx-post="{{ action }}" hx-encoding="multipart/form-data" hx-target="this" hx-swap="outerHTML"{% endif %}>
+  {% csrf_token %}
+  {{ form.non_field_errors }}
+  {% for f in form %}
+  <p>{{ f.errors }}<label for="{{ f.id_for_label }}">{{ f.label }}</label>{{ f }}</p>
+  {% endfor %}
+  <button type="submit" class="default">저장</button>
+  {% if hx %}<button type="button" onclick="this.closest('form').remove()">취소</button>{% endif %}
+</form>
+{% endpartialdef %}
+{% endblock %}

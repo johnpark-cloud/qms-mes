@@ -1,3 +1,4 @@
+from itertools import groupby
 from urllib.parse import urlencode
 
 from django.contrib import admin, messages
@@ -14,7 +15,7 @@ from core.records import can_edit_locked
 
 from .models import (AuditChecklist, AuditFinding, AuditItem, Capa, ChangeRequest, Characteristic, ControlPlan,
                      ControlPlanLine, CustomerClaim, CustomerRule, Document, DocumentRevision, Evidence, ExcelTemplate, Gauge,
-                     Inspection, InspectionSpec, InternalAudit, Measurement, PpapElement, PpapSubmission, Qualification, Scar)
+                     Inspection, InspectionSpec, InternalAudit, Measurement, Memo, MemoPhoto, PpapElement, PpapSubmission, Qualification, Scar)
 from .similar import similar_html
 
 
@@ -267,13 +268,31 @@ class AuditFindingInline(admin.TabularInline):
 
 @admin.register(InternalAudit)
 class InternalAuditAdmin(BaseAdmin):
-    list_display = ['name', 'planned_date', 'auditor', 'auditee', 'performed_at', 'open_findings', 'closed_at']
+    list_display = ['name', 'kind', 'planned_date', 'auditor', 'auditee', 'performed_at', 'open_findings', 'closed_at']
+    list_filter = ['kind']
     search_fields = ['name', 'auditee']
     inlines = [AuditFindingInline]
+    readonly_fields = ['memo_list']
     fieldsets = [
-        (None, {'fields': ['name', 'planned_date', 'auditor']}),
+        (None, {'fields': ['name', 'kind', 'planned_date', 'auditor']}),
         ('추가 정보', {'classes': ['collapse'], 'fields': ['scope', 'checklist', 'auditee', 'performed_at', 'closed_at']}),
+        ('이번 심사 메모', {'fields': ['memo_list']}),
     ]
+
+    @admin.display(description='이번 심사 메모')
+    def memo_list(self, obj):
+        """대상 기록별로 묶은 메모와 각 메모의 'CAPA 만들기'."""
+        if not obj or not obj.pk:
+            return '-'
+        memos = sorted(obj.memos.all(), key=lambda m: (m.content_type_id or 0, m.object_id or 0, m.created_at))
+        if not memos:
+            return '아직 메모가 없습니다.'
+        groups = [list(g) for _, g in groupby(memos, key=lambda m: (m.content_type_id, m.object_id))]
+        return format_html_join('', '<p><strong>{}</strong></p><ul>{}</ul>', (
+            (g[0].target or ('삭제된 기록' if g[0].content_type_id else '미분류'),
+             format_html_join('', '<li>{}: {} {}</li>', (
+                 (m.get_speaker_kind_display(), m.body, capa_links(m, 'AUDIT', f'{obj.name}: {m.body}')) for m in g)))
+            for g in groups))
 
     @admin.display(description='CAPA 미연결 지적')
     def open_findings(self, obj):
@@ -450,3 +469,28 @@ class AuditChecklistAdmin(BaseAdmin):
 @admin.register(ExcelTemplate)
 class ExcelTemplateAdmin(BaseAdmin):
     list_display = ['name', 'target']
+
+
+class MemoPhotoInline(admin.TabularInline):
+    model = MemoPhoto
+    extra = 0
+    fields = ['file']
+
+
+@admin.register(Memo)
+class MemoAdmin(BaseAdmin):
+    """메모 수정은 작성자 본인만. 삭제는 BaseAdmin의 요청 흐름."""
+    list_display = ['created_at', 'speaker_kind', 'speaker_name', 'body', 'target', 'audit', 'author']
+    list_filter = ['speaker_kind', 'audit']
+    search_fields = ['body', 'speaker_name']
+    fields = ['body', 'speaker_kind', 'speaker_name', 'audit', 'target', 'author', 'created_at']
+    readonly_fields = ['target', 'author', 'created_at']
+    inlines = [MemoPhotoInline]
+
+    def has_change_permission(self, request, obj=None):
+        return super().has_change_permission(request, obj) and (obj is None or obj.author_id == request.user.pk)
+
+    def save_model(self, request, obj, form, change):
+        if not change:
+            obj.author = request.user
+        super().save_model(request, obj, form, change)
