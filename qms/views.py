@@ -1,5 +1,7 @@
 import datetime
 import io
+import json
+import logging
 import os
 import zipfile
 from decimal import Decimal, InvalidOperation
@@ -11,18 +13,21 @@ from django.contrib.contenttypes.models import ContentType
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import transaction
 from django.db.models import Q
-from django.http import Http404, HttpResponse
+from django.http import Http404, HttpResponse, HttpResponseBadRequest, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
+from django.template.loader import render_to_string
 from django.urls import reverse
 from django.utils import timezone
 from django.utils.html import format_html
+from django.views.decorators.http import require_POST
 
 from core.models import Lot, is_approver
 
 from . import kpi, spc
 from .due import due_items
 from .memo import ATTACHABLE, TARGETS, MemoForm, box_context, resolve_target, target_url, todays_audit
-from .models import Characteristic, ExcelTemplate, Gauge, Inspection, InspectionSpec, Measurement, Memo, MemoPhoto
+from .models import Characteristic, DashboardLayout, ExcelTemplate, Gauge, Inspection, InspectionSpec, Measurement, Memo, MemoPhoto
+from .widgets import SIZES, WIDGETS, layout_for
 
 
 @staff_member_required
@@ -39,11 +44,42 @@ def excel_report(request, template_id, pk):
 
 @staff_member_required
 def todo(request):
-    """내 할 일: 기한 임박·초과 항목, 승인 대기, 열린 부적합, 보류 LOT (계산은 qms.due)."""
+    """내 할 일: 사용자별 위젯 배치(qms.widgets). 계산은 qms.due 한 번을 위젯이 나눠 쓴다."""
     d = due_items(approver=is_approver(request.user), user=request.user)
     d['claims_overdue'] = sum(c.overdue for c in d['claims'])
     d['capas_late'] = sum(c.status == '기한 초과' for c in d['capas'])
-    return render(request, 'qms/todo.html', {'title': '내 할 일', **d})
+    widgets = []
+    for w in layout_for(request.user):
+        widget = WIDGETS[w['key']]
+        try:
+            html = render_to_string(widget.template, {**d, 'title': widget.title, **widget.context(request, d)})
+        except Exception:  # 위젯 하나가 깨져도 첫 화면은 떠야 한다
+            logging.getLogger('qms').exception('위젯 불러오기 실패: %s', widget.key)
+            html = None
+        widgets.append({**w, 'title': widget.title, 'html': html})
+    available = [(k, w.title) for k, w in WIDGETS.items() if w.allowed(request.user)]
+    return render(request, 'qms/todo.html', {'title': '내 할 일', 'widgets': widgets, 'available': available})
+
+
+@staff_member_required
+@require_POST
+def dashboard_save(request):
+    """본문 JSON [{key, size}]로 내 배치를 저장한다. 빈 배열이면 저장값을 지워 기본 배치로 돌아간다."""
+    try:
+        items = json.loads(request.body)
+    except ValueError:
+        return HttpResponseBadRequest('배치 형식이 올바르지 않습니다.')
+    ok = isinstance(items, list) and all(
+        isinstance(w, dict) and isinstance(w.get('key'), str) and w['key'] in WIDGETS
+        and WIDGETS[w['key']].allowed(request.user) and w.get('size') in SIZES for w in items)
+    if not ok or len({w['key'] for w in items}) != len(items):
+        return HttpResponseBadRequest('저장할 수 없는 위젯 배치입니다.')
+    if items:
+        DashboardLayout.objects.update_or_create(user=request.user, defaults={
+            'widgets': [{'key': w['key'], 'size': w['size']} for w in items]})
+    else:
+        DashboardLayout.objects.filter(user=request.user).delete()
+    return JsonResponse({'ok': True})
 
 
 def _months(request):

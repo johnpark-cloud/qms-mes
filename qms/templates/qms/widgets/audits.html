@@ -1,0 +1,8 @@
+<section class="card">
+  <h2>내부심사 <span class="count">14일 내 예정 · CAPA 미연결 지적</span></h2>
+  <table><tbody>
+    {% for a in audits %}<tr><td><a href="{% url 'admin:qms_internalaudit_change' a.pk %}">{{ a.name }}</a></td><td>{{ a.planned_date|date:"Y-m-d" }} <span class="status status--info">예정</span></td></tr>{% endfor %}
+    {% for f in findings %}<tr><td><a href="{% url 'admin:qms_internalaudit_change' f.audit_id %}">{{ f }}</a></td><td><span class="status status--negative">CAPA 필요</span></td></tr>{% endfor %}
+    {% if not audits and not findings %}<tr><td colspan="2" class="empty">{% include "admin/empty_state.html" with message="예정된 심사가 없습니다." %}</td></tr>{% endif %}
+  </tbody></table>
+</section>

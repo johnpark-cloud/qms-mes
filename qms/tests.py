@@ -24,6 +24,7 @@ from core.models import ImportProfile, Item, Lot, LotLink, Nonconformance, Shipm
 from . import kpi, spc
 from .management.commands.collect import ingest
 from .models import (AuditChecklist, AuditFinding, AuditItem, Capa, ChangeRequest, Characteristic, ControlPlan, ControlPlanLine, CustomerClaim,
+                     DashboardLayout,
                      Document, ExcelTemplate, Gauge, Inspection, InspectionSpec, InternalAudit, Measurement, PpapSubmission,
                      Qualification, Scar)
 from .similar import similar
@@ -780,3 +781,76 @@ class AuditPackTest(TestCase):
     def test_pack_needs_permission(self):
         self.client.force_login(User.objects.create_user('nobody', is_staff=True))
         self.assertEqual(self.client.get('/audit-pack/' + self.url).status_code, 403)
+
+
+class DashboardTest(TestCase):
+    def setUp(self):
+        self.inspector = User.objects.create_user('insp', password='x', is_staff=True)
+        self.admin = User.objects.create_superuser('boss', password='x')
+        self.client.force_login(self.inspector)
+
+    def save(self, items):
+        return self.client.post('/dashboard/save/', json.dumps(items), content_type='application/json')
+
+    def keys(self, user):
+        from .widgets import layout_for
+        return [w['key'] for w in layout_for(user)]
+
+    def test_default_by_role(self):
+        self.assertNotIn('edit_requests', self.keys(self.inspector))
+        self.assertIn('edit_requests', self.keys(self.admin))
+
+    def test_every_widget_renders(self):
+        from .widgets import WIDGETS
+        self.client.force_login(self.admin)
+        self.assertEqual(self.save([{'key': k, 'size': 'normal'} for k in WIDGETS]).status_code, 200)
+        r = self.client.get('/todo/')
+        self.assertNotContains(r, '불러오기 실패')
+        for w in WIDGETS.values():
+            self.assertContains(r, w.title)
+
+    def test_save_and_load(self):
+        from .widgets import layout_for
+        items = [{'key': 'gauges', 'size': 'wide'}, {'key': 'held_lots', 'size': 'normal'}]
+        self.assertEqual(self.save(items).status_code, 200)
+        self.assertEqual(layout_for(self.inspector), items)
+
+    def test_rejects_bad_payload(self):
+        for items in ([{'key': 'nope', 'size': 'normal'}], [{'key': 'edit_requests', 'size': 'normal'}],
+                      [{'key': 'gauges', 'size': 'huge'}],
+                      [{'key': 'gauges', 'size': 'normal'}, {'key': 'gauges', 'size': 'wide'}]):
+            self.assertEqual(self.save(items).status_code, 400, items)
+        r = self.client.post('/dashboard/save/', 'not json', content_type='application/json')
+        self.assertEqual(r.status_code, 400)
+        self.assertFalse(DashboardLayout.objects.exists())
+
+    def test_stale_layout(self):
+        from .widgets import DEFAULT_LAYOUTS, layout_for
+        row = DashboardLayout.objects.create(user=self.inspector, widgets=[{'key': 'gone'}, {'key': 'held_lots'}])
+        self.assertEqual(self.keys(self.inspector), ['held_lots'])
+        row.widgets = 'not a list'
+        row.save()
+        self.assertEqual(layout_for(self.inspector), DEFAULT_LAYOUTS['inspector'])
+
+    def test_failing_widget_isolated(self):
+        from .widgets import WIDGETS
+        self.save([{'key': 'gauges', 'size': 'normal'}, {'key': 'held_lots', 'size': 'normal'}])
+
+        def boom(request, d):
+            raise RuntimeError('x')
+        with mock.patch.object(WIDGETS['gauges'], 'context', boom), self.assertLogs('qms', 'ERROR'):
+            r = self.client.get('/todo/')
+        self.assertEqual(r.status_code, 200)
+        self.assertContains(r, '불러오기 실패')
+        self.assertContains(r, '보류 LOT')
+
+    def test_reset(self):
+        self.save([{'key': 'gauges', 'size': 'normal'}])
+        self.assertEqual(self.save([]).status_code, 200)
+        self.assertFalse(DashboardLayout.objects.exists())
+
+    def test_leave_owner_only(self):
+        from personal.models import LeaveProfile
+        LeaveProfile.objects.create(owner=self.admin, hired_on=datetime.date(2020, 1, 1))
+        self.save([{'key': 'leave', 'size': 'normal'}])
+        self.assertContains(self.client.get('/todo/'), '연차 정보 없음')

@@ -1,0 +1,154 @@
+<div class="cards">
+  <section class="card" id="claims">
+    <h2>8D 기한 임박·초과 <span class="count">2일 이내</span></h2>
+    <table>
+      <thead><tr><th>클레임</th><th>LOT</th><th>현재 단계</th><th>기한</th></tr></thead>
+      <tbody>
+      {% for c in claims %}
+        <tr><td><a href="{% url 'admin:qms_customerclaim_change' c.pk %}">{{ c }}</a></td><td>{{ c.lot }}</td><td>{{ c.current_step }}</td>
+          <td>{{ c.due_label }} {{ c.due|date:"m-d H:i" }} {% if c.overdue %}<span class="status status--negative">초과</span>{% else %}<span class="status status--critical">임박</span>{% endif %}</td></tr>
+      {% empty %}<tr><td colspan="4" class="empty">{% include "admin/empty_state.html" with message="아직 기록이 없습니다." %}</td></tr>{% endfor %}
+      </tbody>
+    </table>
+  </section>
+
+  <section class="card" id="ncs">
+    <h2>열린 부적합 <span class="count">MRB 처분 대기</span></h2>
+    <table>
+      <thead><tr><th>부적합</th><th>내용</th><th>발견</th></tr></thead>
+      <tbody>
+      {% for nc in open_ncs %}
+        <tr><td><a href="{% url 'admin:core_nonconformance_change' nc.pk %}">{{ nc }}</a></td><td>{{ nc.description|truncatechars:50 }}</td><td>{{ nc.detected_at|date:"Y-m-d" }}</td></tr>
+      {% empty %}<tr><td colspan="3" class="empty">{% include "admin/empty_state.html" with message="아직 기록이 없습니다." %}</td></tr>{% endfor %}
+      </tbody>
+    </table>
+  </section>
+
+  <section class="card" id="capas">
+    <h2>CAPA <span class="count">지연·임박·유효성 확인 대기</span></h2>
+    <table>
+      <thead><tr><th>CAPA</th><th>담당</th><th>기한</th><th>상태</th></tr></thead>
+      <tbody>
+      {% for c in capas %}
+        <tr><td><a href="{% url 'admin:qms_capa_change' c.pk %}">{{ c }}</a></td><td>{{ c.owner }}</td><td>{{ c.due_date|date:"Y-m-d" }}</td>
+          <td><span class="status {% if c.status == '기한 초과' %}status--negative{% elif c.status == '유효성 확인 대기' %}status--info{% else %}status--critical{% endif %}">{{ c.status }}</span></td></tr>
+      {% empty %}<tr><td colspan="4" class="empty">{% include "admin/empty_state.html" with message="아직 기록이 없습니다." %}</td></tr>{% endfor %}
+      </tbody>
+    </table>
+  </section>
+
+  <section class="card">
+    <h2>SCAR 회신 기한 <span class="count">2일 이내·초과</span></h2>
+    <table>
+      <thead><tr><th>SCAR</th><th>협력사</th><th>회신 기한</th></tr></thead>
+      <tbody>
+      {% for s in scars %}
+        <tr><td><a href="{% url 'admin:qms_scar_change' s.pk %}">{{ s.number }}</a></td><td>{{ s.supplier }}</td>
+          <td>{{ s.response_due|date:"Y-m-d" }} {% if s.response_due < today %}<span class="status status--negative">초과</span>{% endif %}</td></tr>
+      {% empty %}<tr><td colspan="3" class="empty">{% include "admin/empty_state.html" with message="아직 기록이 없습니다." %}</td></tr>{% endfor %}
+      </tbody>
+    </table>
+  </section>
+
+  {% if nc_incomplete %}
+  <section class="card" id="nc-incomplete">
+    <h2>부적합 보완 필요 <span class="count">필수 항목 미입력</span></h2>
+    <table><tbody>
+      {% for n in nc_incomplete %}<tr><td><a href="{% url 'admin:core_nonconformance_change' n.pk %}">{{ n }}</a></td><td>{{ n.missing_fields|join:", " }}</td></tr>{% endfor %}
+    </tbody></table>
+  </section>
+  {% endif %}
+
+  {% if nc_mail_pending %}
+  <section class="card" id="nc-mail">
+    <h2>메일 발송 대기 <span class="count">승인 후 미발송</span></h2>
+    <table><tbody>
+      {% for n in nc_mail_pending %}<tr><td><a href="{% url 'nc_mail' n.pk %}">{{ n }}</a></td><td>{{ n.approved_at|date:"Y-m-d" }} 승인</td></tr>{% endfor %}
+    </tbody></table>
+  </section>
+  {% endif %}
+
+  {% if nc_notify_pending %}
+  <section class="card" id="nc-notify">
+    <h2>고객 통보 미처리 <span class="count">통보 필요</span></h2>
+    <table><tbody>
+      {% for n in nc_notify_pending %}<tr><td><a href="{% url 'admin:core_nonconformance_change' n.pk %}">{{ n }}</a></td><td><span class="status status--critical">통보 전</span></td></tr>{% endfor %}
+    </tbody></table>
+  </section>
+  {% endif %}
+
+  {% if edit_requests %}
+  <section class="card" id="edit-requests">
+    <h2>삭제·수정 요청 대기 <span class="count">관리자 처리</span></h2>
+    <table><tbody>
+      {% for r in edit_requests %}<tr><td><a href="{% url 'edit_request_decide' r.pk %}">{{ r }}</a></td><td>{{ r.requested_by }} · {{ r.requested_at|date:"m-d H:i" }}</td></tr>{% endfor %}
+    </tbody></table>
+  </section>
+  {% endif %}
+
+  {% if my_rejected %}
+  <section class="card" id="my-rejected">
+    <h2>거절된 내 요청 <span class="count">최근 7일</span></h2>
+    <table><tbody>
+      {% for r in my_rejected %}<tr><td>{{ r }}</td><td>{{ r.reject_reason }}</td></tr>{% endfor %}
+    </tbody></table>
+  </section>
+  {% endif %}
+
+  {% if memos_unsorted %}
+  <section class="card" id="memos-unsorted">
+    <h2>미분류 메모 <span class="count">{{ memos_unsorted }}건</span></h2>
+    <p><a href="{% url 'memo_inbox' %}">메모 수신함에서 분류하기</a></p>
+  </section>
+  {% endif %}
+
+  {% if first_articles %}
+  <section class="card" id="fa">
+    <h2>4M 변경 초품 미확인 <span class="status status--negative">출하 차단 중</span></h2>
+    <table><tbody>
+      {% for c in first_articles %}<tr><td><a href="{% url 'admin:qms_changerequest_change' c.pk %}">{{ c }}</a></td><td>적용 {{ c.effective_at|date:"Y-m-d H:i" }}</td></tr>{% endfor %}
+    </tbody></table>
+  </section>
+  {% endif %}
+
+  {% if gauges %}
+  <section class="card" id="gauges">
+    <h2>계측기 교정 <span class="count">14일 이내·초과</span></h2>
+    <table><tbody>
+      {% for g in gauges %}<tr><td><a href="{% url 'admin:qms_gauge_change' g.pk %}">{{ g }}</a></td>
+        <td>{{ g.next_due|date:"Y-m-d" }} {% if g.next_due < today %}<span class="status status--negative">초과</span>{% else %}<span class="status status--critical">임박</span>{% endif %}</td></tr>{% endfor %}
+    </tbody></table>
+  </section>
+  {% endif %}
+
+  {% if audits or findings %}
+  {% include "qms/widgets/audits.html" %}
+  {% endif %}
+
+  {% if ppaps %}
+  <section class="card">
+    <h2>PPAP 제출 기한 <span class="count">14일 이내</span></h2>
+    <table><tbody>
+      {% for p in ppaps %}<tr><td><a href="{% url 'admin:qms_ppapsubmission_change' p.pk %}">{{ p }}</a></td>
+        <td>{{ p.due_date|date:"Y-m-d" }} {% if p.due_date < today %}<span class="status status--negative">초과</span>{% endif %}</td></tr>{% endfor %}
+    </tbody></table>
+  </section>
+  {% endif %}
+
+  {% if spc_alarms %}
+  {% include "qms/widgets/spc_alarms.html" %}
+  {% endif %}
+
+  {% if pending_specs or pending_docs or pending_plans or pending_changes or pending_ppaps %}
+  <section class="card">
+    <h2>승인 대기 <span class="count">품질팀장 서명</span></h2>
+    <table><tbody>
+      {% for s in pending_specs %}<tr><td>검사기준</td><td><a href="{% url 'approve' 'qms' 'inspectionspec' s.pk %}">{{ s }}</a></td></tr>{% endfor %}
+      {% for d in pending_docs %}<tr><td>문서</td><td><a href="{% url 'approve' 'qms' 'documentrevision' d.pk %}">{{ d }}</a></td></tr>{% endfor %}
+      {% for p in pending_plans %}<tr><td>관리계획서</td><td><a href="{% url 'approve' 'qms' 'controlplan' p.pk %}">{{ p }}</a></td></tr>{% endfor %}
+      {% for c in pending_changes %}<tr><td>4M 변경</td><td><a href="{% url 'approve' 'qms' 'changerequest' c.pk %}">{{ c }}</a></td></tr>{% endfor %}
+      {% for p in pending_ppaps %}<tr><td>PSW</td><td><a href="{% url 'admin:qms_ppapsubmission_change' p.pk %}">{{ p }}</a></td></tr>{% endfor %}
+    </tbody></table>
+  </section>
+  {% endif %}
+</div>

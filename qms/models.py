@@ -809,3 +809,12 @@ class MemoPhoto(models.Model):
 
     class Meta:
         verbose_name = verbose_name_plural = '메모 사진'
+
+
+class DashboardLayout(models.Model):
+    """사용자별 첫 화면 위젯 배치. [{'key': 위젯 키, 'size': 'normal'|'wide'}] 순서대로 그린다."""
+    user = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, verbose_name='사용자')
+    widgets = models.JSONField('위젯 배치', default=list)
+
+    class Meta:
+        verbose_name = verbose_name_plural = '대시보드 배치'

@@ -379,3 +379,16 @@ td.w { width: 25%; }
     .timeline__item { border-top: 0; border-left: .25rem solid var(--f-brand); }
     .timeline__item--bad { border-left-color: var(--f-negative); }
 }
+
+/* ---------- 위젯 대시보드 (첫 화면) ---------- */
+.dash { display: grid; grid-template-columns: repeat(auto-fill, minmax(16rem, 1fr)); gap: 1rem; align-items: start; margin: 0 0 1rem; }
+.widget { min-width: 0; }
+.widget > .card { margin: 0; }
+.widget .cards { grid-template-columns: repeat(auto-fit, minmax(20rem, 1fr)); }
+@media (min-width: 768px) { .widget--wide { grid-column: span 2; } }
+@media (max-width: 767px) { .dash { grid-template-columns: 1fr; } }  /* 한 줄로 쌓되 저장된 순서 유지 */
+.widget__edit, .dash-editbar { display: none; }
+.dash-editing .dash-editbar { display: inline-flex; flex-wrap: wrap; align-items: center; gap: .5rem; }
+.dash-editing .widget__edit { display: flex; flex-wrap: wrap; align-items: center; gap: .25rem; margin: 0 0 .375rem; }
+.dash-editing .widget { outline: 1px dashed var(--f-border); outline-offset: .25rem; cursor: move; }
+.widget__name { margin-right: auto; font-size: .8125rem; font-weight: 600; color: var(--f-text); }
