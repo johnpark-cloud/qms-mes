@@ -737,6 +737,7 @@ class PpapElement(models.Model):
 # ---------- 보고서 ----------
 
 USER_FIELDS = {'username', 'first_name', 'last_name', 'get_full_name'}
+READ_METHODS = {'all', 'first', 'last', 'count', 'exists'}  # 관계 관리자·쿼리셋에서 부를 수 있는 메서드
 
 
 class ExcelTemplate(models.Model):
@@ -763,11 +764,17 @@ class ExcelTemplate(models.Model):
             sheet, _, ref = cell.rpartition('!')
             value = obj
             for attr in path.split('.'):
-                if attr == 'password' or isinstance(value, AbstractBaseUser) and attr not in USER_FIELDS:
+                if attr.startswith('_') or attr == 'password' or isinstance(value, AbstractBaseUser) and attr not in USER_FIELDS:
                     value = None  # 사용자 계정은 이름만 내보낸다 (암호·메일·개인 자료 차단)
                     break
-                value = getattr(value, attr, None) if value is not None else None
-                value = value() if callable(value) else value
+                prev, value = value, getattr(value, attr, None) if value is not None else None
+                if callable(value) and not isinstance(value, models.Manager):  # 관계 관리자 자체는 호출하지 않는다
+                    # 읽기 전용만 호출한다: save·delete·update 등이 보고서 출력으로 기록을 바꾸지 못하게
+                    safe = (isinstance(prev, (models.Manager, models.QuerySet)) and attr in READ_METHODS
+                            or isinstance(prev, models.Model) and attr.startswith('get_') and attr.endswith('_display')
+                            or isinstance(prev, AbstractBaseUser) and attr == 'get_full_name'
+                            or getattr(value, 'report_safe', False))
+                    value = value() if safe else None
             ws = wb[sheet] if sheet else wb.active
             if isinstance(value, list):  # 표(예: coa_rows)는 지정 셀부터 오른쪽·아래로 채운다
                 top = ws[ref]

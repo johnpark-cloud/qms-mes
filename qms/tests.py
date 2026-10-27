@@ -261,6 +261,37 @@ class QmsTest(TestCase):
         ws = load_workbook(BytesIO(tpl.fill(capa))).active
         self.assertEqual([ws[f'A{i}'].value for i in range(1, 8)], [None, 'lead', None, None, '길동', '길동', '시정'])
 
+    def test_excel_fill_calls_only_read_methods(self):
+        from .models import Memo, MemoPhoto
+        wb = Workbook()
+        buf = BytesIO()
+        wb.save(buf)
+        xlsx = buf.getvalue()
+        claim = CustomerClaim.objects.create(number='CL-7', customer='A사', lot=self.cell, description='x')
+        history = claim.history.count()
+        claim.description = '저장 안 함'
+        tpl = ExcelTemplate.objects.create(name='악성', target=ContentType.objects.get_for_model(CustomerClaim),
+                                           file=SimpleUploadedFile('x.xlsx', xlsx),
+                                           mapping={'A1': 'save', 'A2': 'refresh_from_db', 'A3': '_meta', 'A4': 'lot.delete',
+                                                    'A5': 'delete', 'A6': 'number'})
+        ws = load_workbook(BytesIO(tpl.fill(claim))).active
+        self.assertEqual([ws[f'A{i}'].value for i in range(1, 7)], [None, None, None, None, None, 'CL-7'])
+        self.assertEqual(claim.description, '저장 안 함')
+        self.assertEqual(claim.history.count(), history)
+        self.assertTrue(CustomerClaim.objects.filter(pk=claim.pk, description='x').exists())
+        self.assertTrue(Lot.objects.filter(pk=self.cell.pk).exists())
+
+        memo = Memo.objects.create(body='메모', speaker_kind='CUSTOMER', author=self.lead)
+        MemoPhoto.objects.create(memo=memo, file='memo/a.jpg')
+        tpl = ExcelTemplate.objects.create(name='메모', target=ContentType.objects.get_for_model(Memo),
+                                           file=SimpleUploadedFile('m.xlsx', xlsx),
+                                           mapping={'A1': 'photos.update', 'A2': 'photos.count', 'A3': 'photos.first.memo.body',
+                                                    'A4': 'get_speaker_kind_display', 'A5': 'photos.all.delete',
+                                                    'A6': 'photos.exists'})
+        ws = load_workbook(BytesIO(tpl.fill(memo))).active
+        self.assertEqual([ws[f'A{i}'].value for i in range(1, 7)], [None, 1, '메모', '고객', None, True])
+        self.assertEqual(memo.photos.count(), 1)
+
     def test_coa(self):
         out_spec = InspectionSpec.objects.create(item=self.raw_item, inspection_type=InspectionSpec.OUTGOING)
         cap = Characteristic.objects.create(spec=out_spec, name='수분', usl=Decimal('200'), unit='ppm', special='SC')

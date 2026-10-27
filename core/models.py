@@ -459,6 +459,7 @@ class Shipment(models.Model):
             value = m.value if c.is_variable else ('OK' if m.ok else 'NG')
             rows.append([c.name, c.special or None, c.lsl, c.usl, c.unit or None, value, '합격' if m.passed else '불합격'])
         return rows
+    coa_rows.report_safe = True  # 엑셀 양식(ExcelTemplate.fill)이 호출해도 되는 읽기 전용 메서드
 
     def clean(self):
         if self.lot_id and self._state.adding:
