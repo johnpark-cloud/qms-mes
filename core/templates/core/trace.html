@@ -1,5 +1,5 @@
 {% extends "admin/base_site.html" %}
-{% block title %}LOT 추적{% endblock %}
+{% block title %}LOT 이력{% endblock %}
 {% block content %}
 <section class="card">
   <form method="get" class="toolbar">
@@ -16,6 +16,18 @@
   <h2>{{ lot }} <span class="count">{{ lot.item }}</span>
     {% if lot.on_hold %}<span class="status status--negative">보류 중</span>{% else %}<span class="status status--positive">정상</span>{% endif %}
     {% if lot.lineage_gap %}<span class="status status--critical">계보 미등록</span>{% endif %}</h2>
+</section>
+<section class="card">
+  <ol class="timeline">
+    {% for e in timeline %}
+    <li class="timeline__item{% if e.bad %} timeline__item--bad{% endif %}">
+      <time datetime="{{ e.at|date:'c' }}">{{ e.at|date:'m-d H:i' }}</time>
+      {% if e.url %}<a href="{{ e.url }}">{{ e.label }}</a>{% else %}<span>{{ e.label }}</span>{% endif %}
+      {% if e.thumb %}<img src="{{ e.thumb }}" alt="{{ e.label }} 사진" class="timeline__thumb" loading="lazy">{% endif %}
+    </li>
+    {% endfor %}
+  </ol>
+  {% if actions %}<p class="toolbar">{% for name, url in actions %}<a class="button" href="{{ url }}">{{ name }}</a> {% endfor %}</p>{% endif %}
 </section>
 <div class="cards">
   <section class="card"><h2>상위 계보 <span class="count">투입 자재</span></h2>{% include "core/lot_table.html" with lots=ancestors %}</section>

@@ -20,6 +20,7 @@ from django.utils import timezone
 from django.utils.http import urlencode
 
 from .importer import run_import
+from .timeline import lot_actions, lot_timeline
 from .models import (Approvable, EditRequest, Hold, ImportProfile, Lot, Nonconformance, NonconformancePhoto, is_approver,
                      validate_photo)
 from .records import blockers, is_locked
@@ -45,9 +46,10 @@ def brand_logo(request):
 def trace(request):
     number = request.GET.get('lot', '').strip()
     lot = Lot.objects.filter(number=number).select_related('item').first() if number else None
-    ctx = {'number': number, 'lot': lot, 'title': 'LOT 추적'}
+    ctx = {'number': number, 'lot': lot, 'title': 'LOT 이력'}
     if lot:
-        ctx.update(ancestors=lot.ancestors(), descendants=lot.descendants())
+        ctx.update(ancestors=lot.ancestors(), descendants=lot.descendants(),
+                   timeline=lot_timeline(lot), actions=lot_actions(lot, request.user))
     return render(request, 'core/trace.html', ctx)
 
 

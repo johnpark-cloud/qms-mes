@@ -513,3 +513,39 @@ class QmsTest(TestCase):
                     f'/admin/qms/inspectionspec/{self.spec.pk}/change/', '/admin/core/nonconformance/add/',
                     '/admin/qms/auditchecklist/add/', '/admin/qms/document/add/', '/import/', '/admin/'):
             self.assertEqual(self.client.get(url).status_code, 200, url)
+
+
+@override_settings(MEDIA_ROOT=TMP_MEDIA)
+class TimelineTest(TestCase):
+    inspect = QmsTest.inspect  # 같은 픽스처를 쓰되 QmsTest의 테스트는 다시 돌리지 않는다
+
+    def setUp(self):
+        QmsTest.setUp(self)
+        self.admin = User.objects.create_superuser('tl-admin')
+
+    def test_order(self):
+        from core.timeline import lot_timeline
+        nc = self.inspect('11.0').nonconformance
+        self.inspect('10.0')
+        nc.disposition, nc.approved_by = Nonconformance.REWORK, self.lead
+        nc.save()
+        Shipment.objects.create(lot=self.raw, customer='A사', qty=1)
+        self.assertEqual([e['kind'] for e in lot_timeline(self.raw)],
+                         ['created', 'inspection', 'nc', 'inspection', 'disposition', 'shipment'])
+
+    def test_actions_held(self):
+        from core.timeline import lot_actions
+        self.inspect('11.0')
+        names = [n for n, _ in lot_actions(self.raw, self.admin)]
+        self.assertEqual(names[0], '처분 입력')
+        self.assertNotIn('출하 등록', names)
+
+    def test_actions_fresh_and_perms(self):
+        from core.timeline import lot_actions
+        self.assertEqual([n for n, _ in lot_actions(self.raw, self.admin)], ['검사 입력', '부적합 등록'])
+        self.assertEqual(lot_actions(self.raw, User.objects.create_user('nobody', is_staff=True)), [])
+
+    def test_trace_page(self):
+        self.client.force_login(self.admin)
+        r = self.client.get('/trace/', {'lot': 'RAW-1'})
+        self.assertContains(r, 'class="timeline"')

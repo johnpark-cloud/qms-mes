@@ -74,7 +74,7 @@ def _can_inspect(request):
 @staff_member_required
 def inspect_home(request):
     _can_inspect(request)
-    return render(request, 'qms/inspect.html', {'title': '검사 입력'})
+    return render(request, 'qms/inspect.html', {'title': '검사 입력', 'number': request.GET.get('lot', '').strip()})
 
 
 @staff_member_required

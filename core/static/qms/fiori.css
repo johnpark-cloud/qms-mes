@@ -366,3 +366,16 @@ td.w { width: 25%; }
 .search-list a:hover, .search-list a:focus { background: var(--f-hover); }
 .search-list span, .search-empty { color: var(--f-label); font-size: .8125rem; }
 .search-empty { margin: 0; padding: .5rem 1rem; }
+
+/* ---------- LOT 이력 타임라인: 가로, 960px 미만은 세로 ---------- */
+.timeline { list-style: none; margin: 0 0 1rem; padding: 0; display: flex; gap: 1rem; overflow-x: auto; }
+.timeline__item { flex: 0 0 auto; min-width: 8rem; padding: .5rem .75rem; border-top: .25rem solid var(--f-brand); background: var(--f-card); color: var(--f-text); display: flex; flex-direction: column; gap: .25rem; }
+.timeline__item--bad { border-top-color: var(--f-negative); }
+.timeline__item--bad a, .timeline__item--bad span { color: var(--f-negative); font-weight: 600; }
+.timeline time { color: var(--f-label); font-size: .8125rem; }
+.timeline__thumb { width: 4rem; height: 4rem; object-fit: cover; border: 1px solid var(--f-border); }
+@media (max-width: 960px) {
+    .timeline { flex-direction: column; overflow-x: visible; }
+    .timeline__item { border-top: 0; border-left: .25rem solid var(--f-brand); }
+    .timeline__item--bad { border-left-color: var(--f-negative); }
+}

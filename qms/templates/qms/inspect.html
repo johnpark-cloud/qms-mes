@@ -3,9 +3,9 @@
 {% block content %}
 <div class="insp" hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'>
   <section class="card">
-    <form hx-get="{% url 'inspect_lot' %}" hx-target="#step" autocomplete="off">
+    <form hx-get="{% url 'inspect_lot' %}" hx-target="#step" autocomplete="off"{% if number %} hx-trigger="submit, load"{% endif %}>
       <label for="lot">LOT 번호 — 바코드를 스캔하거나 입력 후 Enter</label>
-      <input id="lot" name="lot" autofocus required>
+      <input id="lot" name="lot" value="{{ number }}" autofocus required>
     </form>
   </section>
   <div id="step" aria-live="polite"></div>
