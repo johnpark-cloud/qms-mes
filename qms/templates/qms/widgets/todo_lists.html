@@ -121,10 +121,6 @@
   </section>
   {% endif %}
 
-  {% if audits or findings %}
-  {% include "qms/widgets/audits.html" %}
-  {% endif %}
-
   {% if ppaps %}
   <section class="card">
     <h2>PPAP 제출 기한 <span class="count">14일 이내</span></h2>
@@ -135,12 +131,8 @@
   </section>
   {% endif %}
 
-  {% if spc_alarms %}
-  {% include "qms/widgets/spc_alarms.html" %}
-  {% endif %}
-
   {% if pending_specs or pending_docs or pending_plans or pending_changes or pending_ppaps %}
-  <section class="card">
+  <section class="card" id="approvals">
     <h2>승인 대기 <span class="count">품질팀장 서명</span></h2>
     <table><tbody>
       {% for s in pending_specs %}<tr><td>검사기준</td><td><a href="{% url 'approve' 'qms' 'inspectionspec' s.pk %}">{{ s }}</a></td></tr>{% endfor %}

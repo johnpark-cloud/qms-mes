@@ -19,7 +19,7 @@ from django.utils import timezone
 from openpyxl import Workbook, load_workbook
 
 from core.importer import run_import
-from core.models import ImportProfile, Item, Lot, LotLink, Nonconformance, Shipment, WorkOrder
+from core.models import APPROVER_GROUP, ImportProfile, Item, Lot, LotLink, Nonconformance, Shipment, WorkOrder
 
 from . import kpi, spc
 from .management.commands.collect import ingest
@@ -799,6 +799,19 @@ class DashboardTest(TestCase):
     def test_default_by_role(self):
         self.assertNotIn('edit_requests', self.keys(self.inspector))
         self.assertIn('edit_requests', self.keys(self.admin))
+        self.assertNotIn('approvals', self.keys(self.inspector))
+        self.assertIn('approvals', self.keys(self.admin))
+        lead = User.objects.create_user('lead', is_staff=True)
+        lead.groups.add(Group.objects.get_or_create(name=APPROVER_GROUP)[0])
+        self.assertIn('approvals', self.keys(lead))
+
+    def test_spc_card_once(self):
+        from types import SimpleNamespace
+        char = SimpleNamespace(pk=1, name='두께', spec=SimpleNamespace(item=SimpleNamespace(code='P-1')))
+        alarm = {'char': char, 'lot': 'LOT-X', 'alarms': ['규칙1-UNIQUE']}
+        with mock.patch('qms.due.recent_spc_alarms', return_value=[alarm]):
+            html = self.client.get('/todo/').content.decode()
+        self.assertEqual(html.count('규칙1-UNIQUE'), 1)
 
     def test_every_widget_renders(self):
         from .widgets import WIDGETS
@@ -817,6 +830,7 @@ class DashboardTest(TestCase):
 
     def test_rejects_bad_payload(self):
         for items in ([{'key': 'nope', 'size': 'normal'}], [{'key': 'edit_requests', 'size': 'normal'}],
+                      [{'key': 'approvals', 'size': 'normal'}],
                       [{'key': 'gauges', 'size': 'huge'}],
                       [{'key': 'gauges', 'size': 'normal'}, {'key': 'gauges', 'size': 'wide'}]):
             self.assertEqual(self.save(items).status_code, 400, items)

@@ -57,6 +57,7 @@ def leave_context(request, d):
 
 
 TILE = 'qms/widgets/tile.html'
+PENDING = ('pending_specs', 'pending_docs', 'pending_plans', 'pending_changes', 'pending_ppaps')  # due_items의 승인 대기 묶음
 WIDGETS = {w.key: w for w in [
     Widget('held_lots', '보류 LOT', TILE, tile(lambda d: d['held_lots'], '출하·투입 차단 중', 'admin:core_hold_changelist', 'negative'),
            everyone),
@@ -67,6 +68,8 @@ WIDGETS = {w.key: w for w in [
            everyone),
     Widget('edit_requests', '삭제·수정 요청', TILE, tile(lambda d: len(d['edit_requests']), '관리자 처리 대기', '#edit-requests'),
            lambda u: u.is_superuser),
+    Widget('approvals', '승인 대기', TILE, tile(lambda d: sum(len(d[k]) for k in PENDING), '품질팀장 서명', '#approvals'),
+           is_approver),
     Widget('memos_unsorted', '미분류 메모', TILE, tile(lambda d: d['memos_unsorted'], '수신함에서 분류', 'memo_inbox'), everyone),
     Widget('capa', 'CAPA', TILE, tile(lambda d: len(d['capas']), '지연·임박·확인 대기', 'admin:qms_capa_changelist',
                                        lambda d: 'negative' if d['capas_late'] else 'critical'), everyone),
@@ -89,8 +92,8 @@ def _layout(*keys):
 
 DEFAULT_LAYOUTS = {
     'inspector': _layout('held_lots', 'nc_open', 'nc_incomplete', 'memos_unsorted', 'gauges', 'leave', 'todo_lists', 'spc_alarms'),
-    'approver': _layout('held_lots', 'nc_open', 'nc_mail_pending', 'capa', 'kpi_ppm', 'kpi_fpy', 'todo_lists', 'audits'),
-    'admin': _layout('held_lots', 'nc_open', 'edit_requests', 'nc_mail_pending', 'capa', 'gauges', 'kpi_ppm', 'kpi_fpy',
+    'approver': _layout('held_lots', 'approvals', 'nc_open', 'nc_mail_pending', 'capa', 'kpi_ppm', 'kpi_fpy', 'todo_lists', 'audits'),
+    'admin': _layout('held_lots', 'approvals', 'nc_open', 'edit_requests', 'nc_mail_pending', 'capa', 'gauges', 'kpi_ppm', 'kpi_fpy',
                      'todo_lists', 'kpi_yield'),
 }
 
