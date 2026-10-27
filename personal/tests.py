@@ -5,6 +5,8 @@ from pathlib import Path
 from decimal import Decimal
 
 from django.contrib.auth.models import User
+from django.conf import settings
+from django.core.files.storage import FileSystemStorage
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase, override_settings
 
@@ -46,13 +48,14 @@ class PayTests(TestCase):
 class OwnerOnlyTests(TestCase):
     def tearDown(self):
         self.slip.file.delete(save=False)
-        self._ov.disable()
         shutil.rmtree(self._tmp, ignore_errors=True)
 
     def setUp(self):
         self._tmp = tempfile.mkdtemp()  # 실제 data/private를 건드리지 않는다
-        self._ov = override_settings(DATA_DIR=Path(self._tmp))
-        self._ov.enable()
+        field = Payslip._meta.get_field('file')  # 콜러블 저장소는 import 때 한 번만 평가되므로 인스턴스를 바꾼다
+        orig = field.storage
+        self.addCleanup(setattr, field, 'storage', orig)
+        field.storage = FileSystemStorage(location=Path(self._tmp) / 'private')
         self.a = User.objects.create_superuser('a', password='x')
         self.b = User.objects.create_user('b', password='x', is_staff=True)
         self.slip = Payslip.objects.create(owner=self.b, month=date(2026, 1, 1), base_pay=7777777,
@@ -78,6 +81,10 @@ class OwnerOnlyTests(TestCase):
             for u in (self.a, self.b):
                 self.client.force_login(u)
                 self.assertEqual(self.client.get('/media/' + p).status_code, 404, p)
+
+    def test_files_use_temp_storage(self):
+        self.assertTrue(self.slip.file.path.startswith(self._tmp))
+        self.assertFalse((Path(settings.DATA_DIR) / 'private' / self.slip.file.name).exists())
 
     def test_owner_sees_and_downloads(self):
         self.client.force_login(self.b)

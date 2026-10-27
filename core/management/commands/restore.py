@@ -54,7 +54,7 @@ class Command(BaseCommand):
             shutil.copy2(current, keep / 'db.sqlite3')
         if media.exists():
             shutil.move(media, keep / 'media')
-        if private.exists():
+        if (src / 'private').exists() and private.exists():  # 옛 백업(private 없음)이면 현재 파일을 그대로 둔다
             shutil.move(private, keep / 'private')
         shutil.copy2(src / 'db.sqlite3', current)
         if (src / 'media').exists():

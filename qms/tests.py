@@ -1,6 +1,7 @@
 import datetime
 import json
 import re
+import shutil
 import sqlite3
 import tempfile
 from decimal import Decimal
@@ -308,6 +309,12 @@ class QmsTest(TestCase):
             call_command('restore', str(backup), '--apply', stdout=StringIO())
             self.assertEqual((live / 'private' / 'personal' / 's.pdf').read_bytes(), b'pay')
         self.assertTrue(any(p.name.startswith('pre-restore-') for p in live.iterdir()))
+        for p in live.glob('pre-restore-*'):  # 같은 초에 만든 보관 폴더와 겹치지 않게
+            shutil.rmtree(p)
+        shutil.rmtree(backup / 'private')  # 옛 백업: private 없음 -> 현재 파일 유지
+        with override_settings(DATABASES=db, DATA_DIR=live, MEDIA_ROOT=live / 'media'):
+            call_command('restore', str(backup), '--apply', stdout=StringIO())
+        self.assertEqual((live / 'private' / 'personal' / 's.pdf').read_bytes(), b'pay')
         (backup / 'db.sqlite3').write_bytes(b'not a db')
         with self.assertRaises(CommandError):
             call_command('restore', str(backup), stdout=StringIO())
