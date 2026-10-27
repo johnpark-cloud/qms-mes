@@ -10,7 +10,7 @@
       <td>{% for s in l.shipments.all %}{{ s.customer }} {{ s.shipped_at|date:"Y-m-d" }}{% if not forloop.last %}, {% endif %}{% endfor %}</td>
     </tr>
   {% empty %}
-    <tr><td colspan="4" class="empty">없음</td></tr>
+    <tr><td colspan="4" class="empty">{% include "admin/empty_state.html" with message="아직 기록이 없습니다." %}</td></tr>
   {% endfor %}
   </tbody>
 </table>

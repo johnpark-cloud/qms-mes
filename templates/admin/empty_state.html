@@ -1,0 +1,4 @@
+<div class="empty-state">
+  <p>{{ message|default:"아직 기록이 없습니다." }}</p>
+  {% if add_url %}<a class="button" href="{{ add_url }}">등록</a>{% endif %}
+</div>

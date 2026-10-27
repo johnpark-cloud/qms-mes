@@ -85,3 +85,37 @@ class InterlockTest(TestCase):
             LotLink.objects.create(parent=self.cell_b, child=self.raw)
         self.assertTrue(self.orphan.lineage_gap)
         self.assertFalse(self.raw.lineage_gap)
+
+
+class ShellTest(TestCase):
+    def test_logo_served_from_data_dir(self):
+        import tempfile
+        from pathlib import Path
+        from django.test import override_settings
+        self.client.force_login(User.objects.create_superuser('admin'))
+        with tempfile.TemporaryDirectory() as tmp:
+            with override_settings(DATA_DIR=Path(tmp)):
+                self.assertEqual(self.client.get('/brand/logo').status_code, 404)
+                self.assertIn('QMS+MES', self.client.get('/todo/').content.decode())
+                (Path(tmp) / 'brand').mkdir()
+                (Path(tmp) / 'brand' / 'logo.png').write_bytes(b'\x89PNG\r\n\x1a\n')
+                self.assertEqual(self.client.get('/brand/logo').status_code, 200)
+                self.assertIn('src="/brand/logo"', self.client.get('/todo/').content.decode())
+
+    def test_sidebar_filters_by_permission(self):
+        def side(html):
+            return html.split('id="qms-sidebar"')[1].split('</nav>')[0]
+        insp = User.objects.create_user('insp', is_staff=True)
+        insp.groups.add(Group.objects.get(name='검사원'))
+        self.client.force_login(insp)
+        html = side(self.client.get('/todo/').content.decode())
+        self.assertIn('검사 입력', html)
+        self.assertIn('전체 메뉴', html)
+        self.assertIn('aria-current="page"', html)  # /todo/ = 내 할 일
+        plain = User.objects.create_user('plain', is_staff=True)
+        self.client.force_login(plain)
+        html = side(self.client.get('/todo/').content.decode())
+        self.assertNotIn('검사 입력', html)
+        self.assertIn('LOT 이력', html)
+        self.client.force_login(User.objects.create_superuser('root'))
+        self.assertIn('검사 입력', side(self.client.get('/todo/').content.decode()))

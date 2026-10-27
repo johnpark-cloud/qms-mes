@@ -57,7 +57,7 @@
         <tr><td>{{ y.process }}</td><td class="num">{{ y.n }}</td><td class="num">{{ y.input|floatformat:"0g" }}</td>
           <td class="num">{{ y.good|floatformat:"0g" }}</td><td class="num">{{ y.defect|floatformat:"0g" }}</td>
           <td class="num">{% if y.yield is None %}-{% else %}{{ y.yield|floatformat:1 }}{% endif %}</td></tr>
-      {% empty %}<tr><td colspan="6" class="empty">작업 실적이 없습니다.</td></tr>{% endfor %}
+      {% empty %}<tr><td colspan="6" class="empty">{% include "admin/empty_state.html" with message="작업 실적이 없습니다." %}</td></tr>{% endfor %}
       </tbody>
     </table>
   </section>
@@ -76,7 +76,7 @@
           <td class="num">{{ p.cum|floatformat:1 }}</td>
           <td class="w"><div class="bar" style="width:{{ p.share|floatformat:0 }}%"></div></td>
         </tr>
-      {% empty %}<tr><td colspan="6" class="empty">불량유형이 입력된 부적합이 없습니다.</td></tr>{% endfor %}
+      {% empty %}<tr><td colspan="6" class="empty">{% include "admin/empty_state.html" with message="불량유형이 입력된 부적합이 없습니다." %}</td></tr>{% endfor %}
       </tbody>
     </table>
   </section>

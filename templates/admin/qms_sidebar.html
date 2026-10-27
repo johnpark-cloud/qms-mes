@@ -1,0 +1,12 @@
+{% if user.is_authenticated and user.is_staff %}
+<div class="qms-side">
+  <button type="button" class="qms-side__toggle" aria-expanded="false" aria-controls="qms-sidebar">메뉴</button>
+  <nav id="qms-sidebar" class="qms-sidebar" aria-label="주 메뉴">
+    {% for g in nav_groups %}
+    <h2>{{ g.name }}</h2>
+    {% for l in g.links %}<a href="{{ l.url }}" {% if l.current %}aria-current="page"{% endif %}>{{ l.label }}</a>{% endfor %}
+    {% endfor %}
+    <a class="qms-sidebar__all" href="{% url 'admin:index' %}" {% if request.path == '/admin/' %}aria-current="page"{% endif %}>전체 메뉴</a>
+  </nav>
+</div>
+{% endif %}

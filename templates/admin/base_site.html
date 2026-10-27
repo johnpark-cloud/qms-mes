@@ -8,7 +8,7 @@
 <link rel="stylesheet" href="{% static 'qms/fiori.css' %}">{% endblock %}
 
 {% block branding %}
-<div id="site-name"><a href="{% url 'todo' %}"><span class="shell-logo" aria-hidden="true">Q</span>{{ site_header|default:"QMS+MES" }}</a></div>
+<div id="site-name"><a href="{% url 'todo' %}">{% if brand_logo %}<img class="shell-brand" src="{% url 'brand_logo' %}" alt="{{ site_header|default:'QMS+MES' }}">{% else %}<span class="shell-logo" aria-hidden="true">Q</span>{{ site_header|default:"QMS+MES" }}{% endif %}</a></div>
 {% if user.is_anonymous %}{% include "admin/color_theme_toggle.html" %}{% endif %}
 {% endblock %}
 
@@ -24,16 +24,7 @@
 {% endif %}
 {% endblock %}
 
-{% block nav-global %}
-{% if user.is_authenticated and user.is_staff %}
-<nav class="shell-nav" aria-label="주 메뉴">
-  {% url 'todo' as u_todo %}{% url 'inspect' as u_insp %}{% url 'trace' as u_trace %}{% url 'kpi' as u_kpi %}{% url 'suppliers' as u_sup %}{% url 'admin:index' as u_admin %}
-  <a href="{{ u_todo }}" {% if request.path == u_todo %}aria-current="page"{% endif %}>내 할 일</a>
-  <a href="{{ u_insp }}" {% if request.path == u_insp %}aria-current="page"{% endif %}>검사 입력</a>
-  <a href="{{ u_trace }}" {% if request.path == u_trace %}aria-current="page"{% endif %}>LOT 추적</a>
-  <a href="{{ u_kpi }}" {% if request.path == u_kpi %}aria-current="page"{% endif %}>품질 KPI</a>
-  <a href="{{ u_sup }}" {% if request.path == u_sup %}aria-current="page"{% endif %}>협력사</a>
-  <a href="{{ u_admin }}" {% if request.path == u_admin %}aria-current="page"{% endif %}>전체 메뉴</a>
-</nav>
-{% endif %}
-{% endblock %}
+{# 기본 상단 메뉴·Django 사이드바 대신 남색 사이드바 #}
+{% block nav-global %}{% endblock %}
+{% block nav-sidebar %}{% include "admin/qms_sidebar.html" %}{% endblock %}
+{% block extrabody %}{{ block.super }}<script src="{% static 'qms/shell.js' %}" defer></script>{% endblock %}

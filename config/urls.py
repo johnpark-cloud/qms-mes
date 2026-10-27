@@ -12,6 +12,7 @@ urlpatterns = [
     path('', RedirectView.as_view(url='/todo/')),
     path('admin/', admin.site.urls),
     path('todo/', qms_views.todo, name='todo'),
+    path('brand/logo', core_views.brand_logo, name='brand_logo'),
     path('trace/', core_views.trace, name='trace'),
     path('import/', core_views.import_view, name='import'),
     path('approve/<str:app_label>/<str:model_name>/<int:pk>/', core_views.approve, name='approve'),

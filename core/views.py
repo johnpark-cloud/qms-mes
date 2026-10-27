@@ -1,15 +1,31 @@
 from django import forms
 from django.apps import apps
+from django.conf import settings
 from django.contrib import messages
 from django.contrib.admin.views.decorators import staff_member_required
 from django.core.exceptions import PermissionDenied, ValidationError
-from django.http import Http404
+from django.http import FileResponse, Http404
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
 
 from .importer import run_import
 from .models import Approvable, ImportProfile, Lot, is_approver
+
+
+def find_logo():
+    for ext in ('svg', 'png', 'jpg'):
+        path = settings.DATA_DIR / 'brand' / f'logo.{ext}'
+        if path.is_file():
+            return path
+
+
+def brand_logo(request):
+    # 로그인 화면에서도 보여야 해서 인증 없이 제공한다
+    path = find_logo()
+    if path is None:
+        raise Http404
+    return FileResponse(open(path, 'rb'))
 
 
 @staff_member_required

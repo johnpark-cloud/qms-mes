@@ -31,7 +31,7 @@
       {% for c in claims %}
         <tr><td><a href="{% url 'admin:qms_customerclaim_change' c.pk %}">{{ c }}</a></td><td>{{ c.lot }}</td><td>{{ c.current_step }}</td>
           <td>{{ c.due_label }} {{ c.due|date:"m-d H:i" }} {% if c.overdue %}<span class="status status--negative">초과</span>{% else %}<span class="status status--critical">임박</span>{% endif %}</td></tr>
-      {% empty %}<tr><td colspan="4" class="empty">없음</td></tr>{% endfor %}
+      {% empty %}<tr><td colspan="4" class="empty">{% include "admin/empty_state.html" with message="아직 기록이 없습니다." %}</td></tr>{% endfor %}
       </tbody>
     </table>
   </section>
@@ -43,7 +43,7 @@
       <tbody>
       {% for nc in open_ncs %}
         <tr><td><a href="{% url 'admin:core_nonconformance_change' nc.pk %}">{{ nc }}</a></td><td>{{ nc.description|truncatechars:50 }}</td><td>{{ nc.detected_at|date:"Y-m-d" }}</td></tr>
-      {% empty %}<tr><td colspan="3" class="empty">없음</td></tr>{% endfor %}
+      {% empty %}<tr><td colspan="3" class="empty">{% include "admin/empty_state.html" with message="아직 기록이 없습니다." %}</td></tr>{% endfor %}
       </tbody>
     </table>
   </section>
@@ -56,7 +56,7 @@
       {% for c in capas %}
         <tr><td><a href="{% url 'admin:qms_capa_change' c.pk %}">{{ c }}</a></td><td>{{ c.owner }}</td><td>{{ c.due_date|date:"Y-m-d" }}</td>
           <td><span class="status {% if c.status == '기한 초과' %}status--negative{% elif c.status == '유효성 확인 대기' %}status--info{% else %}status--critical{% endif %}">{{ c.status }}</span></td></tr>
-      {% empty %}<tr><td colspan="4" class="empty">없음</td></tr>{% endfor %}
+      {% empty %}<tr><td colspan="4" class="empty">{% include "admin/empty_state.html" with message="아직 기록이 없습니다." %}</td></tr>{% endfor %}
       </tbody>
     </table>
   </section>
@@ -69,7 +69,7 @@
       {% for s in scars %}
         <tr><td><a href="{% url 'admin:qms_scar_change' s.pk %}">{{ s.number }}</a></td><td>{{ s.supplier }}</td>
           <td>{{ s.response_due|date:"Y-m-d" }} {% if s.response_due < today %}<span class="status status--negative">초과</span>{% endif %}</td></tr>
-      {% empty %}<tr><td colspan="3" class="empty">없음</td></tr>{% endfor %}
+      {% empty %}<tr><td colspan="3" class="empty">{% include "admin/empty_state.html" with message="아직 기록이 없습니다." %}</td></tr>{% endfor %}
       </tbody>
     </table>
   </section>
