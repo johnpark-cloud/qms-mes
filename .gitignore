@@ -2,3 +2,5 @@
 __pycache__/
 # 회사 데이터: 절대 커밋하지 않는다
 data/
+
+.superpowers/
