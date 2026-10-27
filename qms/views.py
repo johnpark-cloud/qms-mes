@@ -16,7 +16,7 @@ from core.models import Lot, is_approver
 
 from . import kpi, spc
 from .due import due_items
-from .memo import TARGETS, MemoForm, box_context, resolve_target, todays_audit
+from .memo import ATTACHABLE, TARGETS, MemoForm, box_context, resolve_target, target_url, todays_audit
 from .models import Characteristic, ExcelTemplate, Gauge, Inspection, InspectionSpec, Measurement, Memo, MemoPhoto
 
 
@@ -185,6 +185,8 @@ def _memo_target(request):
         pk = int(request.GET.get('id', ''))
     except (ValueError, ContentType.DoesNotExist):
         raise Http404
+    if key not in ATTACHABLE or ct.model_class() is None:
+        raise Http404
     if not request.user.has_perm(f'{app_label}.view_{model}'):
         raise PermissionDenied
     return get_object_or_404(ct.model_class(), pk=pk)
@@ -201,7 +203,7 @@ def _memo_save(request, form, target):
             MemoPhoto.objects.create(memo=memo, file=f)
     if memo.target is None or not request.headers.get('HX-Request'):
         messages.success(request, '메모를 저장했습니다.')
-        return redirect('memo_inbox')
+        return redirect(target_url(memo.target) if memo.target else 'memo_inbox')
     resp = render(request, 'qms/memo_list.html', box_context(memo.target, request.user))
     resp['HX-Retarget'], resp['HX-Reswap'] = '#memo-box', 'outerHTML'
     return resp
@@ -237,15 +239,18 @@ def memo_edit(request, pk):
 
 @staff_member_required
 def memo_inbox(request):
-    """미분류 메모: 종류 + 번호로 대상 기록을 찾아 연결한다 (작성자 본인만)."""
+    """미분류 메모: 종류 + 번호로 대상 기록을 찾아 연결한다 (작성자 또는 메모 수정 권한자)."""
     if not request.user.has_perm('qms.view_memo'):
         raise PermissionDenied
     if request.method == 'POST':
-        memo = get_object_or_404(Memo, pk=request.POST.get('memo'), content_type__isnull=True)
-        if memo.author_id != request.user.pk:
-            raise PermissionDenied('메모는 작성자만 연결할 수 있습니다.')
+        memo_id = request.POST.get('memo', '')
+        if not memo_id.isdigit():
+            raise Http404
+        memo = get_object_or_404(Memo, pk=memo_id, content_type__isnull=True)
+        if memo.author_id != request.user.pk and not request.user.has_perm('qms.change_memo'):
+            raise PermissionDenied('메모는 작성자나 메모 수정 권한자만 연결할 수 있습니다.')
         kind, number = request.POST.get('kind', ''), request.POST.get('number', '').strip()
-        target = resolve_target(kind, number)
+        target = resolve_target(kind, number, request.user)
         if target is None:
             messages.error(request, f'{kind} "{number}": 찾을 수 없습니다. 종류와 번호를 확인하세요.')
         else:

@@ -477,7 +477,7 @@ class QmsTest(TestCase):
         self.client.force_login(User.objects.create_superuser('admin', password='x'))
         req = self.client.get('/admin/qms/capa/add/').wsgi_request
         qs = admin.site._registry[Capa].get_form(req)().fields['source_type'].queryset
-        self.assertEqual(sorted(qs.values_list('model', flat=True)), ['auditfinding', 'customerclaim', 'memo', 'nonconformance', 'scar'])
+        self.assertEqual(sorted(qs.values_list('model', flat=True)), ['auditfinding', 'customerclaim', 'nonconformance', 'scar'])
 
     def test_pages_render(self):
         for v in ('9.9', '10.0', '10.1'):
@@ -658,3 +658,44 @@ class MemoTest(TestCase):
         self.client.post(f'/memo/{memo.pk}/edit/', {'body': '바꿈', 'speaker_kind': 'OTHER'})
         memo.refresh_from_db()
         self.assertEqual(memo.body, '바꿈')
+
+    def test_audit_memo_capa_links(self):
+        from .models import Memo
+        audit = InternalAudit.objects.create(name='심사A', planned_date=timezone.localdate(), auditor='김')
+        Memo.objects.create(body='부적합 건', target=self.nc, audit=audit, author=self.admin)
+        Memo.objects.create(body='LOT 건', target=self.lot, audit=audit, author=self.admin)
+        html = self.client.get(f'/admin/qms/internalaudit/{audit.pk}/change/').content.decode()
+        nc_ct = ContentType.objects.get_for_model(Nonconformance).pk
+        self.assertIn(f'source_type={nc_ct}', html)
+        self.assertEqual(html.count('source_type='), 1)  # LOT 메모는 출처 기록 없이
+        self.assertIn('source=AUDIT&amp;title=%EC%8B%AC%EC%82%ACA%3A+LOT', html)
+
+    def test_inbox_bad_id_and_permissions(self):
+        from .models import Memo
+        self.assertEqual(self.client.post('/memo/inbox/', {'memo': 'abc', 'kind': 'LOT', 'number': 'L1'}).status_code, 404)
+        capa = Capa.objects.create(title='t', source='OTHER', action='a', owner=self.admin, due_date=timezone.localdate())
+        inspector = User.objects.create_user('insp', is_staff=True)
+        inspector.groups.add(Group.objects.get(name='검사원'))
+        own = Memo.objects.create(body='검사원 메모', author=inspector)
+        self.client.force_login(inspector)
+        r = self.client.post('/memo/inbox/', {'memo': own.pk, 'kind': 'CAPA', 'number': capa.number}, follow=True)
+        self.assertContains(r, '찾을 수 없습니다')
+        own.refresh_from_db()
+        self.assertIsNone(own.target)
+        others = Memo.objects.create(body='남의 메모', author=self.admin)
+        self.assertEqual(self.client.post('/memo/inbox/', {'memo': others.pk, 'kind': 'LOT', 'number': 'L1'}).status_code, 403)
+        eng = User.objects.create_user('eng', is_staff=True)
+        eng.groups.add(Group.objects.get(name='품질엔지니어'))
+        self.client.force_login(eng)
+        self.client.post('/memo/inbox/', {'memo': others.pk, 'kind': 'LOT', 'number': 'L1'})
+        others.refresh_from_db()
+        self.assertEqual(others.target, self.lot)
+
+    def test_ct_allow_list_and_no_js_redirect(self):
+        self.assertEqual(self.client.get(f'/memo/new/?ct=core.hold&id={self.lot.holds.get().pk}').status_code, 404)
+        self.assertEqual(self.client.get(f'/memo/new/?ct=auth.user&id={self.admin.pk}').status_code, 404)
+        data = {'body': 'x', 'speaker_kind': 'OTHER'}
+        r = self.client.post(f'/memo/new/?ct=core.nonconformance&id={self.nc.pk}', data)
+        self.assertRedirects(r, f'/admin/core/nonconformance/{self.nc.pk}/change/')
+        r = self.client.post(f'/memo/new/?ct=core.lot&id={self.lot.pk}', data)
+        self.assertRedirects(r, '/trace/?lot=L1')

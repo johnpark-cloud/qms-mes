@@ -535,7 +535,7 @@ class Capa(models.Model):
     title = models.CharField('제목', max_length=200)
     source = models.CharField('출처', max_length=10, choices=SOURCES)
     source_type = models.ForeignKey(ContentType, on_delete=models.PROTECT, null=True, blank=True, verbose_name='출처 기록 종류',
-                                    limit_choices_to=models.Q(app_label='qms', model__in=['customerclaim', 'scar', 'auditfinding', 'memo'])
+                                    limit_choices_to=models.Q(app_label='qms', model__in=['customerclaim', 'scar', 'auditfinding'])
                                     | models.Q(app_label='core', model='nonconformance'))
     source_id = models.PositiveIntegerField('출처 기록 ID', null=True, blank=True)
     source_record = GenericForeignKey('source_type', 'source_id')

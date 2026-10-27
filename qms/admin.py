@@ -291,8 +291,16 @@ class InternalAuditAdmin(BaseAdmin):
         return format_html_join('', '<p><strong>{}</strong></p><ul>{}</ul>', (
             (g[0].target or ('삭제된 기록' if g[0].content_type_id else '미분류'),
              format_html_join('', '<li>{}: {} {}</li>', (
-                 (m.get_speaker_kind_display(), m.body, capa_links(m, 'AUDIT', f'{obj.name}: {m.body}')) for m in g)))
+                 (m.get_speaker_kind_display(), m.body, self._memo_capa(obj, m)) for m in g)))
             for g in groups))
+
+    def _memo_capa(self, audit, memo):
+        """CAPA 출처로 고를 수 있는 기록에 붙은 메모는 그 기록을 출처로, 나머지는 출처 기록 없이 만든다."""
+        title = f'{audit.name}: {memo.body}'
+        if memo.content_type and memo.content_type.model in ('nonconformance', 'customerclaim', 'scar') and memo.target:
+            return capa_links(memo.target, 'AUDIT', title)
+        url = reverse('admin:qms_capa_add') + '?' + urlencode({'source': 'AUDIT', 'title': title[:200]})
+        return format_html('<a class="button" href="{}">CAPA 만들기</a>', url)
 
     @admin.display(description='CAPA 미연결 지적')
     def open_findings(self, obj):

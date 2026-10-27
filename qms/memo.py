@@ -2,6 +2,8 @@
 from django import forms
 from django.apps import apps
 from django.contrib.contenttypes.models import ContentType
+from django.urls import reverse
+from django.utils.http import urlencode
 
 from core.views import MultiPhotoField
 
@@ -18,6 +20,16 @@ TARGETS = {
     '품번': ('core.item', 'code'),
 }
 
+# 메모를 붙일 수 있는 기록: 연결 대상 + 메모 상자가 보이는 상세 화면
+ATTACHABLE = {label for label, _ in TARGETS.values()} | {'qms.inspection', 'qms.internalaudit', 'qms.auditfinding'}
+
+
+def target_url(obj):
+    """기록 상세 화면 주소. LOT은 이력(타임라인) 화면."""
+    if obj._meta.label_lower == 'core.lot':
+        return f"{reverse('trace')}?{urlencode({'lot': obj.number})}"
+    return reverse(f'admin:{obj._meta.app_label}_{obj._meta.model_name}_change', args=[obj.pk])
+
 
 def todays_audit(today):
     """오늘 실시한 심사, 없으면 오늘 계획된 미실시 심사."""
@@ -25,14 +37,18 @@ def todays_audit(today):
             or InternalAudit.objects.filter(performed_at__isnull=True, planned_date=today).first())
 
 
-def resolve_target(kind, number):
+def resolve_target(kind, number, user=None):
+    """종류 + 번호 → 기록. user를 주면 그 사용자가 볼 수 없는 기록은 None."""
     if kind not in TARGETS:
         return None
     label, field = TARGETS[kind]
     n = (number or '').strip()  # 스캐너가 붙이는 공백·줄바꿈 제거
     if not n:
         return None
-    qs = apps.get_model(label).objects
+    model = apps.get_model(label)
+    if user is not None and not user.has_perm(f'{model._meta.app_label}.view_{model._meta.model_name}'):
+        return None
+    qs = model.objects
     return qs.filter(**{field: n}).first() or qs.filter(**{f'{field}__iexact': n}).first()
 
 

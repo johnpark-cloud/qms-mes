@@ -27,16 +27,6 @@ class Migration(migrations.Migration):
             name='kind',
             field=models.CharField(choices=[('INTERNAL', '내부'), ('CUSTOMER', '고객'), ('CERT', '인증')], default='INTERNAL', max_length=10, verbose_name='구분'),
         ),
-        migrations.AlterField(
-            model_name='capa',
-            name='source_type',
-            field=models.ForeignKey(blank=True, limit_choices_to=models.Q(models.Q(('app_label', 'qms'), ('model__in', ['customerclaim', 'scar', 'auditfinding', 'memo'])), models.Q(('app_label', 'core'), ('model', 'nonconformance')), _connector='OR'), null=True, on_delete=django.db.models.deletion.PROTECT, to='contenttypes.contenttype', verbose_name='출처 기록 종류'),
-        ),
-        migrations.AlterField(
-            model_name='historicalcapa',
-            name='source_type',
-            field=models.ForeignKey(blank=True, db_constraint=False, limit_choices_to=models.Q(models.Q(('app_label', 'qms'), ('model__in', ['customerclaim', 'scar', 'auditfinding', 'memo'])), models.Q(('app_label', 'core'), ('model', 'nonconformance')), _connector='OR'), null=True, on_delete=django.db.models.deletion.DO_NOTHING, related_name='+', to='contenttypes.contenttype', verbose_name='출처 기록 종류'),
-        ),
         migrations.CreateModel(
             name='HistoricalMemo',
             fields=[
