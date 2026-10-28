@@ -19,6 +19,7 @@ from django.template.loader import render_to_string
 from django.urls import reverse
 from django.utils import timezone
 from django.utils.html import format_html
+from django.utils.http import content_disposition_header
 from django.views.decorators.http import require_POST
 
 from core.models import Lot, is_approver
@@ -38,7 +39,7 @@ def excel_report(request, template_id, pk):
     if not request.user.has_perm(f'{model._meta.app_label}.view_{model._meta.model_name}'):
         raise PermissionDenied
     resp = HttpResponse(tpl.fill(obj), content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
-    resp['Content-Disposition'] = f"attachment; filename*=UTF-8''{tpl.name}_{pk}.xlsx".replace(' ', '_')
+    resp['Content-Disposition'] = content_disposition_header(True, f'{tpl.name}_{pk}.xlsx')
     return resp
 
 
@@ -89,8 +90,14 @@ def _months(request):
         return 6
 
 
+def _need(request, perm):
+    if not request.user.has_perm(perm):
+        raise PermissionDenied
+
+
 @staff_member_required
 def kpi_view(request):
+    _need(request, 'qms.view_customerclaim')  # PPM·COPQ는 클레임·비용 자료라 검사원에게는 보이지 않는다
     months = _months(request)
     rows = kpi.monthly(months)
     for key in ('ppm', 'copq'):  # 막대 길이(%)는 기간 내 최댓값 기준
@@ -103,6 +110,7 @@ def kpi_view(request):
 
 @staff_member_required
 def suppliers_view(request):
+    _need(request, 'qms.view_scar')
     months = _months(request)
     return render(request, 'qms/suppliers.html', {'title': '협력사 성적표', 'months': months,
                                                    'rows': kpi.suppliers(months)})
@@ -143,9 +151,10 @@ def _measurement(char, raw):
     """입력칸 값 → 저장 전 측정값. 계량형은 숫자, 계수형은 OK/NG."""
     if char.is_variable:
         try:
-            return Measurement(characteristic=char, value=Decimal(raw.strip()))
+            value = Decimal(raw.strip())
         except (InvalidOperation, AttributeError):
             return None
+        return Measurement(characteristic=char, value=value) if value.is_finite() else None  # NaN·Infinity 거부
     return Measurement(characteristic=char, ok={'OK': True, 'NG': False}.get(raw)) if raw in ('OK', 'NG') else None
 
 
@@ -188,6 +197,7 @@ def inspect_submit(request, lot_id, spec_id):
 
 @staff_member_required
 def spc_view(request, char_id):
+    _need(request, 'qms.view_measurement')
     char = get_object_or_404(Characteristic.objects.select_related('spec__item'), pk=char_id)
     ctx = {'title': f'SPC · {char.spec.item.code} {char.name}', 'char': char}
     try:

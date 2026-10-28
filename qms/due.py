@@ -1,13 +1,14 @@
 """기한·대기 항목 계산. '내 할 일' 화면과 알림(manage.py notify)이 같은 기준을 쓴다."""
 import datetime
 
+from django.db.models import Exists, OuterRef
 from django.utils import timezone
 
 from core.models import EditRequest, Hold, Nonconformance
 
 from . import spc
 from .models import (AuditFinding, Capa, ChangeRequest, Characteristic, ControlPlan, CustomerClaim, DocumentRevision, Gauge,
-                     InspectionSpec, InternalAudit, Memo, PpapSubmission, Scar)
+                     Inspection, InspectionSpec, InternalAudit, Memo, PpapSubmission, Scar)
 
 
 def due_items(approver=False, user=None):
@@ -45,8 +46,10 @@ def due_items(approver=False, user=None):
         'ppaps': list(PpapSubmission.objects.filter(submitted_at__isnull=True, due_date__lte=today + datetime.timedelta(days=14))
                       .select_related('item')),
         'gauges': [g for g in Gauge.objects.filter(active=True) if g.next_due <= today + datetime.timedelta(days=14)],
-        'first_articles': [c for c in ChangeRequest.objects.filter(approved_at__isnull=False).select_related('item')
-                           if not c.first_article],
+        'first_articles': list(ChangeRequest.objects.filter(approved_at__isnull=False, effective_at__lte=now).annotate(
+            fa=Exists(Inspection.objects.filter(lot__item=OuterRef('item'), result=Inspection.PASS,
+                                                inspected_at__gte=OuterRef('effective_at')))).filter(fa=False)
+                               .select_related('item')),  # ChangeRequest.awaiting_first_article과 같은 기준
         'spc_alarms': recent_spc_alarms(now),
         'pending_specs': list(InspectionSpec.objects.filter(approved_at__isnull=True)) if approver else [],
         'pending_docs': list(DocumentRevision.objects.filter(approved_at__isnull=True)) if approver else [],

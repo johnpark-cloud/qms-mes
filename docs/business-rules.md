@@ -53,7 +53,7 @@
 
 | 규칙 | 위치 |
 | --- | --- |
-| 승인된 검사기준으로만 검사할 수 있고, 검사기준 품번 = LOT 품번이어야 한다. | `qms/models.py` `Inspection.clean` |
+| 승인된 검사기준으로만 검사할 수 있고, 검사기준 품번 = LOT 품번이어야 한다. 새 검사는 그 품번·검사구분의 승인된 최신 개정(`InspectionSpec.current`)으로만 만든다(지난 개정 금지). | `qms/models.py` `Inspection.clean` |
 | 판정은 모든 검사항목에 측정값이 있어야 한다. 하나라도 규격(LSL/USL) 밖이면 불합격이다. | `Inspection.finalize`, `Measurement.passed` |
 | 불합격이면 부적합을 자동 생성한다(→ 계보 보류). | `Inspection.finalize` |
 | 판정된 검사와 그 측정값은 수정할 수 없다. | `Inspection.save`, `Measurement.clean` |
@@ -68,18 +68,21 @@
 | 측정값에 계측기를 적으면, 검사일이 다음 교정일을 지났거나 사용 중지된 계측기는 거부한다. | `Gauge.usable_on`, `Measurement.clean` |
 | 교정 14일 전부터 내 할 일·알림에 표시한다. | `qms/due.py` |
 
+측정값 입력(검사 입력 화면, `collect` 자동 수집)은 NaN·무한대 값을 거부한다. `collect`는 읽을 수 없는 CSV를 `error/` 폴더로 옮기고 다음 파일을 계속 처리한다(`qms/views.py` `_measurement`, `qms/management/commands/collect.py`).
+
 ## 7. SPC
 
 | 규칙 | 위치 |
 | --- | --- |
 | 부분군 n=1이면 I-MR, 2~10이면 X̄-R. 경보는 관리한계 이탈, R/MR 이탈, 중심선 한쪽 연속 9점이다. | `qms/spc.py` `control_chart` |
+| 부분군 크기가 섞이면 가장 최근 부분군과 같은 크기의 부분군만 관리도에 쓴다(섞인 채로는 관리도를 못 그려 경보가 꺼지므로). | `Characteristic.spc_series` |
 | 특별특성(CC·SC)은 합격 검사라도 그 검사에서 경보가 나면 부적합을 등록한다(→ 보류). 일반 항목은 내 할 일에만 표시한다. | `Inspection._special_spc_check`, `qms/due.py` |
 
 ## 8. 4M 변경과 초품
 
 | 규칙 | 위치 |
 | --- | --- |
-| 승인되고 적용 일시가 지난 4M 변경은, 적용 일시 이후 그 품번의 합격 검사(초품)가 나올 때까지 출하를 막는다. | `ChangeRequest.awaiting_first_article`, `core/models.py` `Shipment.clean` |
+| 승인되고 적용 일시가 지난 4M 변경은, 적용 일시 이후 그 품번의 합격 검사(초품)가 나올 때까지 출하를 막는다. | `ChangeRequest.awaiting_first_article`, `core/models.py` `Shipment.clean`, 내 할 일 표시는 같은 기준으로 `qms/due.py` |
 
 ## 9. 클레임·SCAR·CAPA·내부심사
 
@@ -100,7 +103,8 @@
 | 첨부 파일은 로그인한 스태프만 받을 수 있다. | `config/urls.py` `/media/` |
 | 엑셀 일괄 등록은 대상(품번·작업지시)의 추가·변경 권한이 모두 있어야 올릴 수 있다(기존 행을 덮어쓰므로). 각 행은 모델 검증(`full_clean`)을 거치고, 한 행이라도 틀리면 전체를 되돌린다. | `core/views.py` `import_view`, `core/importer.py` |
 | 인쇄·승인·삭제 요청 경로는 개인 자료와 계정·세션 등 시스템 기록(`personal`, `auth`, `admin`, `sessions`, `contenttypes`)을 열지 않는다. | `core/views.py` `_get_record` |
-| 엑셀 양식 출력은 읽기 전용 메서드만 호출한다. 개인 앱·인증 모델은 대상에서 제외한다. | `qms/models.py` `ExcelTemplate`, `report_safe` |
+| 엑셀 양식 출력은 읽기 전용 메서드만 호출한다. 개인·인증 앱(`PRIVATE_APPS`)은 양식 대상과 심사 증적·PPAP 요소의 기록 종류에서 제외하고, 값을 따라가다 그 앱 기록에 닿으면 칸을 비운다. | `qms/models.py` `PRIVATE_APPS`, `ExcelTemplate.fill`, `report_safe` |
+| 품질 KPI(실패비용 포함)는 `qms.view_customerclaim`, 협력사 성적표는 `qms.view_scar`, SPC 관리도는 `qms.view_measurement`, 내 할 일 목록 위젯은 `core.view_nonconformance` 권한이 있어야 본다. 검사원은 KPI·협력사 화면을 볼 수 없다. | `qms/views.py`, `qms/widgets.py`, `core/nav.py` |
 
 ## 11. 이력
 

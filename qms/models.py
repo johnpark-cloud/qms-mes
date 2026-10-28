@@ -12,6 +12,9 @@ from simple_history.models import HistoricalRecords
 from core.models import Approvable, Item, Lot, Nonconformance, validate_photo
 
 
+PRIVATE_APPS = ['personal', 'auth', 'admin', 'sessions', 'contenttypes']  # 증적·엑셀 양식으로 내보내지 않는 앱
+
+
 # ---------- 검사 ----------
 
 class InspectionSpec(Approvable):
@@ -72,16 +75,19 @@ class Characteristic(models.Model):
 
     def spc_series(self, limit=30):
         """판정된 측정값을 검사(부분군)별로 시간순으로 묶는다. 같은 품번·검사구분·항목명이면 기준 개정이 달라도 같은 특성."""
-        ms = (Measurement.objects
-              .filter(characteristic__spec__item=self.spec.item_id, characteristic__spec__inspection_type=self.spec.inspection_type,
-                      characteristic__name=self.name, value__isnull=False, inspection__result__in=['PASS', 'FAIL'])
-              .select_related('inspection__lot').order_by('-inspection__inspected_at', '-inspection_id', 'pk'))
+        ms = Measurement.objects.filter(
+            characteristic__spec__item=self.spec.item_id, characteristic__spec__inspection_type=self.spec.inspection_type,
+            characteristic__name=self.name, value__isnull=False, inspection__result__in=['PASS', 'FAIL'])
+        # shortcut: 최근 limit개 부분군만 읽는다, 장기 추세가 필요하면 기간 선택을 추가
+        ids = list(Inspection.objects.filter(pk__in=ms.values('inspection_id')).order_by('-inspected_at', '-pk')
+                   .values_list('pk', flat=True)[:limit])
         groups = {}
-        for m in ms:  # shortcut: 최근 limit개 부분군만 읽는다, 장기 추세가 필요하면 기간 선택을 추가
-            if m.inspection not in groups and len(groups) >= limit:
-                break
+        for m in ms.filter(inspection_id__in=ids).select_related('inspection__lot').order_by(
+                '-inspection__inspected_at', '-inspection_id', 'pk'):
             groups.setdefault(m.inspection, []).append(m.value)
-        return list(reversed(groups.items()))
+        groups = list(reversed(groups.items()))
+        # 부분군 크기가 섞이면 관리도를 못 그려 경보가 꺼진다 → 최근 부분군과 같은 크기만 쓴다
+        return [g for g in groups if len(g[1]) == len(groups[-1][1])] if groups else groups
 
 
 class Inspection(models.Model):
@@ -108,6 +114,10 @@ class Inspection(models.Model):
             raise ValidationError('승인되지 않은 검사기준으로는 검사할 수 없습니다.')
         if self.spec_id and self.lot_id and self.spec.item_id != self.lot.item_id:
             raise ValidationError('검사기준의 품번과 LOT의 품번이 다릅니다.')
+        if self._state.adding and self.spec_id and self.lot_id:
+            current = InspectionSpec.current(self.lot.item, self.spec.inspection_type)
+            if current != self.spec:
+                raise ValidationError(f'{self.spec}은(는) 유효본이 아닙니다. 승인된 최신 개정({current})으로 검사하세요.')
 
     def save(self, *args, **kwargs):
         if self.pk and Inspection.objects.filter(pk=self.pk).exclude(result='').exists() and not getattr(self, '_finalizing', False):
@@ -503,7 +513,8 @@ class AuditItem(models.Model):
 class Evidence(models.Model):
     item = models.ForeignKey(AuditItem, on_delete=models.CASCADE, related_name='evidences', verbose_name='심사 항목')
     document = models.ForeignKey(Document, on_delete=models.PROTECT, null=True, blank=True, verbose_name='문서')
-    record_type = models.ForeignKey(ContentType, on_delete=models.PROTECT, null=True, blank=True, verbose_name='기록 종류')
+    record_type = models.ForeignKey(ContentType, on_delete=models.PROTECT, null=True, blank=True, verbose_name='기록 종류',
+                                    limit_choices_to=~models.Q(app_label__in=PRIVATE_APPS))
     record_id = models.PositiveIntegerField('기록 ID', null=True, blank=True)
     record = GenericForeignKey('record_type', 'record_id')
     note = models.CharField('설명', max_length=200, blank=True)
@@ -711,7 +722,8 @@ class PpapElement(models.Model):
     name = models.CharField('요소', max_length=100)
     requirement = models.CharField('요구', max_length=1, choices=REQUIREMENTS)
     document = models.ForeignKey(Document, on_delete=models.PROTECT, null=True, blank=True, verbose_name='문서')
-    record_type = models.ForeignKey(ContentType, on_delete=models.PROTECT, null=True, blank=True, verbose_name='기록 종류')
+    record_type = models.ForeignKey(ContentType, on_delete=models.PROTECT, null=True, blank=True, verbose_name='기록 종류',
+                                    limit_choices_to=~models.Q(app_label__in=PRIVATE_APPS))
     record_id = models.PositiveIntegerField('기록 ID', null=True, blank=True)
     record = GenericForeignKey('record_type', 'record_id')
     note = models.CharField('비고', max_length=200, blank=True)
@@ -744,7 +756,7 @@ class ExcelTemplate(models.Model):
     """고객사 엑셀 양식에 값을 채운다. 양식이 바뀌면 매핑만 고친다."""
     name = models.CharField('양식 이름', max_length=100)
     target = models.ForeignKey(ContentType, on_delete=models.PROTECT, verbose_name='대상 기록',
-                               limit_choices_to=~models.Q(app_label__in=['personal', 'auth', 'admin', 'sessions', 'contenttypes']))
+                               limit_choices_to=~models.Q(app_label__in=PRIVATE_APPS))
     file = models.FileField('엑셀 양식', upload_to='templates/')
     mapping = models.JSONField('셀 매핑', help_text='예: {"B3": "number", "B4": "lot.number", "Sheet2!C5": "d4_root_cause"}')
     history = HistoricalRecords()
@@ -768,6 +780,10 @@ class ExcelTemplate(models.Model):
                     value = None  # 사용자 계정은 이름만 내보낸다 (암호·메일·개인 자료 차단)
                     break
                 prev, value = value, getattr(value, attr, None) if value is not None else None
+                cls = value.model if isinstance(value, (models.Manager, models.QuerySet)) else type(value)
+                if getattr(getattr(cls, '_meta', None), 'app_label', None) in PRIVATE_APPS and not isinstance(value, AbstractBaseUser):
+                    value = None  # 증적 기록 등으로 급여·연차·인증 기록에 닿으면 비운다 (사용자 이름은 위 규칙으로)
+                    break
                 if callable(value) and not isinstance(value, models.Manager):  # 관계 관리자 자체는 호출하지 않는다
                     # 읽기 전용만 호출한다: save·delete·update 등이 보고서 출력으로 기록을 바꾸지 못하게
                     safe = (isinstance(prev, (models.Manager, models.QuerySet)) and attr in READ_METHODS

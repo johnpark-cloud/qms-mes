@@ -120,6 +120,9 @@ class ShellTest(TestCase):
         self.assertIn('검사 입력', html)
         self.assertIn('전체 메뉴', html)
         self.assertIn('aria-current="page"', html)  # /todo/ = 내 할 일
+        self.assertNotIn('품질 KPI', html)  # 검사원은 KPI·협력사 화면 권한이 없다 (누르면 403)
+        self.assertNotIn('협력사', html)
+        self.assertNotIn('엑셀 일괄 등록', self.client.get('/todo/').content.decode())
         plain = User.objects.create_user('plain', is_staff=True)
         self.client.force_login(plain)
         html = side(self.client.get('/todo/').content.decode())

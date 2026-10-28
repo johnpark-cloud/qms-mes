@@ -25,7 +25,7 @@ from . import kpi, spc
 from .management.commands.collect import ingest
 from .models import (AuditChecklist, AuditFinding, AuditItem, Capa, ChangeRequest, Characteristic, ControlPlan, ControlPlanLine, CustomerClaim,
                      DashboardLayout,
-                     Document, ExcelTemplate, Gauge, Inspection, InspectionSpec, InternalAudit, Measurement, PpapSubmission,
+                     Document, Evidence, ExcelTemplate, Gauge, Inspection, InspectionSpec, InternalAudit, Measurement, PpapElement, PpapSubmission,
                      Qualification, Scar)
 from .similar import similar
 
@@ -65,6 +65,19 @@ class QmsTest(TestCase):
         with self.assertRaises(ValidationError):
             Inspection.objects.create(lot=self.raw, spec=draft)
         self.assertEqual(InspectionSpec.current(self.raw_item, InspectionSpec.INCOMING), self.spec)
+
+    def test_superseded_spec_rejected(self):
+        pending = Inspection.objects.create(lot=self.raw, spec=self.spec)  # Rev.2 승인 전에 시작한 검사
+        Measurement.objects.create(inspection=pending, characteristic=self.thk, value=Decimal('10.0'))
+        Measurement.objects.create(inspection=pending, characteristic=self.look, ok=True)
+        rev2 = InspectionSpec.objects.create(item=self.raw_item, inspection_type=InspectionSpec.INCOMING, revision=2)
+        Characteristic.objects.create(spec=rev2, name='두께', lsl=Decimal('9.5'), usl=Decimal('10.5'))
+        approve(rev2, self.lead)
+        with self.assertRaisesMessage(ValidationError, '유효본이 아닙니다'):
+            Inspection.objects.create(lot=self.raw, spec=self.spec)
+        pending.finalize()  # 이미 만든 검사는 그대로 판정된다
+        self.assertEqual(pending.result, Inspection.PASS)
+        Inspection.objects.create(lot=self.raw, spec=rev2)
 
     def test_approved_spec_locked(self):
         self.spec.sampling = '바꿈'
@@ -149,6 +162,29 @@ class QmsTest(TestCase):
         self.assertIn('SPC 경보', insp.nonconformance.description)
         self.assertTrue(self.cell.on_hold)
 
+    def test_spc_mixed_subgroup_sizes_still_alarm(self):
+        spec = InspectionSpec.objects.create(item=self.raw_item, inspection_type=InspectionSpec.PROCESS)
+        cc = Characteristic.objects.create(spec=spec, name='용량', lsl=0, usl=100, special='CC')
+        approve(spec, self.lead)
+
+        def run(*values):
+            insp = Inspection.objects.create(lot=self.raw, spec=spec)
+            for v in values:
+                Measurement.objects.create(inspection=insp, characteristic=cc, value=Decimal(v))
+            insp.finalize()
+            return insp
+        run('50', '50.4')  # 크기가 다른 부분군(n=2)이 섞여 있다
+        for v in ('50', '50.5', '49.5', '50.2', '49.8', '50'):
+            self.assertIsNone(run(v).nonconformance)
+        insp = run('70')
+        self.assertIn('SPC 경보', insp.nonconformance.description)
+
+    def test_spc_series_latest_subgroups(self):
+        a, b, c = (self.inspect(v) for v in ('9.9', '10.0', '10.1'))
+        with self.assertNumQueries(2):
+            self.assertEqual(self.thk.spc_series(), [(a, [Decimal('9.9')]), (b, [Decimal('10.0')]), (c, [Decimal('10.1')])])
+        self.assertEqual(self.thk.spc_series(limit=2), [(b, [Decimal('10.0')]), (c, [Decimal('10.1')])])
+
     # 계측기 · 자격
     def test_expired_gauge_rejected(self):
         g = Gauge.objects.create(number='MC-01', name='마이크로미터', interval_days=365,
@@ -208,6 +244,18 @@ class QmsTest(TestCase):
             Shipment.objects.create(lot=self.raw, customer='A사', qty=1)
         self.inspect('10.0')  # 초품 합격
         Shipment.objects.create(lot=self.raw, customer='A사', qty=1)
+
+    def test_due_first_articles_only_effective(self):
+        from .due import due_items
+        now = timezone.now()
+        future, past = (ChangeRequest.objects.create(number=n, item=self.raw_item, category='MAN', description='x',
+                                                     customer_notice=False, effective_at=now + d)
+                        for n, d in (('4M-F', datetime.timedelta(days=1)), ('4M-P', -datetime.timedelta(hours=1))))
+        approve(future, self.lead)
+        approve(past, self.lead)
+        self.assertEqual(due_items()['first_articles'], [past])
+        self.inspect('10.0')  # 초품 합격
+        self.assertEqual(due_items()['first_articles'], [])
 
     # 엑셀 가져오기
     def test_import_work_orders_and_rollback(self):
@@ -292,6 +340,36 @@ class QmsTest(TestCase):
         self.assertEqual([ws[f'A{i}'].value for i in range(1, 7)], [None, 1, '메모', '고객', None, True])
         self.assertEqual(memo.photos.count(), 1)
 
+    def test_excel_fill_blocks_private_records(self):
+        from personal.models import Payslip
+        pay = Payslip.objects.create(owner=self.lead, month=datetime.date(2026, 10, 1), base_pay=5000000)
+        item = AuditItem.objects.create(checklist=AuditChecklist.objects.create(name='QSA'), clause='1', requirement='x')
+        ev = Evidence.objects.create(item=item, record_type=ContentType.objects.get_for_model(Payslip), record_id=pay.pk, note='증적')
+        wb = Workbook()
+        buf = BytesIO()
+        wb.save(buf)
+        tpl = ExcelTemplate.objects.create(name='증적', target=ContentType.objects.get_for_model(Evidence),
+                                           file=SimpleUploadedFile('e.xlsx', buf.getvalue()),
+                                           mapping={'A1': 'record.net', 'A2': 'record.base_pay', 'A3': 'record_type.model',
+                                                    'A4': 'note', 'A5': 'item.clause'})
+        ws = load_workbook(BytesIO(tpl.fill(ev))).active
+        self.assertEqual([ws[f'A{i}'].value for i in range(1, 6)], [None, None, None, '증적', '1'])
+        for model in (Evidence, PpapElement):  # 관리 화면에서 개인·인증 기록을 증적으로 고를 수 없다
+            qs = ContentType.objects.complex_filter(model._meta.get_field('record_type').get_limit_choices_to())
+            self.assertFalse(qs.filter(app_label__in=['personal', 'auth']).exists())
+            self.assertTrue(qs.filter(app_label='qms').exists())
+
+    def test_excel_report_korean_filename(self):
+        wb = Workbook()
+        buf = BytesIO()
+        wb.save(buf)
+        claim = CustomerClaim.objects.create(number='CL-8', customer='A사', lot=self.cell, description='x')
+        tpl = ExcelTemplate.objects.create(name='A사 8D', target=ContentType.objects.get_for_model(CustomerClaim),
+                                           file=SimpleUploadedFile('8d.xlsx', buf.getvalue()), mapping={'A1': 'number'})
+        self.client.force_login(self.lead)
+        r = self.client.get(f'/report/{tpl.pk}/{claim.pk}/')
+        self.assertEqual(r['Content-Disposition'], f"attachment; filename*=utf-8''A%EC%82%AC%208D_{claim.pk}.xlsx")
+
     def test_coa(self):
         out_spec = InspectionSpec.objects.create(item=self.raw_item, inspection_type=InspectionSpec.OUTGOING)
         cap = Characteristic.objects.create(spec=out_spec, name='수분', usl=Decimal('200'), unit='ppm', special='SC')
@@ -321,6 +399,28 @@ class QmsTest(TestCase):
         path.write_text('lot,type,characteristic,value\nRAW-1,수입검사,없는항목,1\n', encoding='utf-8')
         with self.assertRaises(ValueError):
             ingest(path)
+
+    def test_collect_bad_files_go_to_error(self):
+        inbox = Path(tempfile.mkdtemp())
+        head = 'lot,type,characteristic,value\n'
+        (inbox / 'a_short.csv').write_text(head + 'RAW-1,수입검사\n', encoding='utf-8')  # 열 부족
+        (inbox / 'b_nan.csv').write_text(head + 'RAW-1,수입검사,두께,NaN\nRAW-1,수입검사,외관,OK\n', encoding='utf-8')
+        (inbox / 'c_ok.csv').write_text(head + 'RAW-1,수입검사,두께,10.1\nRAW-1,수입검사,외관,OK\n', encoding='utf-8')
+        call_command('collect', inbox=str(inbox), stdout=StringIO(), stderr=StringIO())
+        self.assertEqual(list(inbox.glob('*.csv')), [])
+        self.assertTrue((inbox / 'error' / 'a_short.csv.err.txt').exists())
+        self.assertIn('숫자가 아님', (inbox / 'error' / 'b_nan.csv.err.txt').read_text('utf-8'))
+        self.assertTrue((inbox / 'done' / 'c_ok.csv').exists())
+        self.assertEqual(Inspection.objects.count(), 1)  # 실패한 파일은 아무것도 남기지 않는다
+
+    def test_inspect_rejects_non_finite(self):
+        self.client.force_login(self.lead)
+        for raw in ('NaN', 'Infinity', 'sNaN'):
+            r = self.client.post(f'/inspect/check/{self.thk.pk}/', {f'c{self.thk.pk}': raw})
+            self.assertEqual((r.status_code, r.content), (200, b''))
+            r = self.client.post(f'/inspect/{self.raw.pk}/{self.spec.pk}/submit/', {f'c{self.thk.pk}': raw, f'c{self.look.pk}': 'OK'})
+            self.assertContains(r, '값을 입력하세요')
+        self.assertFalse(Inspection.objects.exists())
 
     def test_backup_command(self):
         dest = tempfile.mkdtemp()
@@ -545,6 +645,19 @@ class QmsTest(TestCase):
         outsider = User.objects.create_user('viewer', password='x', is_staff=True)
         self.client.force_login(outsider)
         self.assertEqual(self.client.get('/inspect/').status_code, 403)
+
+    def test_kpi_suppliers_spc_permissions(self):
+        from .widgets import WIDGETS
+        plain = User.objects.create_user('plain', is_staff=True)
+        clerk = User.objects.create_user('clerk2', is_staff=True)
+        clerk.groups.add(Group.objects.get(name='검사원'))
+        eng = User.objects.create_user('eng', is_staff=True)
+        eng.groups.add(Group.objects.get(name='품질엔지니어'))
+        for user, codes in ((plain, (403, 403, 403)), (clerk, (403, 403, 200)), (eng, (200, 200, 200))):
+            self.client.force_login(user)
+            got = tuple(self.client.get(u).status_code for u in ('/kpi/', '/suppliers/', f'/spc/{self.thk.pk}/'))
+            self.assertEqual(got, codes, user)
+        self.assertEqual([WIDGETS['todo_lists'].allowed(u) for u in (plain, clerk, eng)], [False, True, True])
 
     # 화면 · 승인 서명
     def test_approve_requires_password(self):
@@ -835,6 +948,7 @@ class AuditPackTest(TestCase):
 class DashboardTest(TestCase):
     def setUp(self):
         self.inspector = User.objects.create_user('insp', password='x', is_staff=True)
+        self.inspector.groups.add(Group.objects.get(name='검사원'))
         self.admin = User.objects.create_superuser('boss', password='x')
         self.client.force_login(self.inspector)
 

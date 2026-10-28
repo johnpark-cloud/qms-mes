@@ -43,5 +43,5 @@
   </div>
 </template>
 
-<p class="help"><a href="{% url 'import' %}">엑셀 일괄 등록</a> · 이 목록은 <code>manage.py notify</code>로 메일·Teams에도 보낼 수 있습니다.</p>
+<p class="help">{% if perms.core.change_item or perms.core.change_workorder %}<a href="{% url 'import' %}">엑셀 일괄 등록</a> · {% endif %}이 목록은 <code>manage.py notify</code>로 메일·Teams에도 보낼 수 있습니다.</p>
 {% endblock %}

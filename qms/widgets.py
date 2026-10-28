@@ -75,7 +75,8 @@ WIDGETS = {w.key: w for w in [
                                        lambda d: 'negative' if d['capas_late'] else 'critical'), everyone),
     Widget('gauges', '계측기 교정', TILE, tile(lambda d: len(d['gauges']), '14일 이내·초과', 'admin:qms_gauge_changelist'),
            everyone),
-    Widget('todo_lists', '할 일 목록', 'qms/widgets/todo_lists.html', lambda request, d: {}, everyone),
+    Widget('todo_lists', '할 일 목록', 'qms/widgets/todo_lists.html', lambda request, d: {},
+           lambda u: u.has_perm('core.view_nonconformance')),
     Widget('spc_alarms', 'SPC 경보', 'qms/widgets/spc_alarms.html', lambda request, d: {}, everyone),
     Widget('audits', '내부심사', 'qms/widgets/audits.html', lambda request, d: {}, everyone),
     Widget('kpi_ppm', '고객 PPM', TILE, kpi_tile('ppm', '{:,.0f}', '이번 달 · 클레임 수량 기준'), everyone),
@@ -110,4 +111,4 @@ def layout_for(user):
                if isinstance(w, dict) and isinstance(w.get('key'), str) and w['key'] in WIDGETS and WIDGETS[w['key']].allowed(user)]
         if out:
             return out
-    return DEFAULT_LAYOUTS[role(user)]
+    return [w for w in DEFAULT_LAYOUTS[role(user)] if WIDGETS[w['key']].allowed(user)]

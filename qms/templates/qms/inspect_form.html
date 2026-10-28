@@ -1,6 +1,6 @@
 <section class="card">
 <h2>{{ lot.number }} <span class="count">{{ spec }}{% if spec.sampling %} · 샘플링 {{ spec.sampling }}{% endif %}</span></h2>
-<form hx-post="{% url 'inspect_submit' lot.pk spec.pk %}" hx-target="#step" autocomplete="off">
+<form hx-post="{% url 'inspect_submit' lot.pk spec.pk %}" hx-target="#step" hx-disabled-elt="find button[type=submit]" autocomplete="off">
   {% if gauges %}
   <p><label for="gauge">계측기</label>
     <select id="gauge" name="gauge">

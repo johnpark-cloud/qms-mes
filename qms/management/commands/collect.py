@@ -11,7 +11,6 @@ from decimal import Decimal, InvalidOperation
 from pathlib import Path
 
 from django.conf import settings
-from django.core.exceptions import ValidationError
 from django.core.management.base import BaseCommand
 from django.db import transaction
 
@@ -45,9 +44,12 @@ def ingest(path):
                     raise ValueError(f'{line}행: 검사항목 "{name}"이(가) {spec}에 없음')
                 if c.is_variable:
                     try:
-                        Measurement.objects.create(inspection=insp, characteristic=c, value=Decimal(value))
+                        number = Decimal(value)
                     except InvalidOperation:
+                        number = None
+                    if number is None or not number.is_finite():  # NaN·Infinity는 판정을 깨뜨린다
                         raise ValueError(f'{line}행: 숫자가 아님 "{value}"')
+                    Measurement.objects.create(inspection=insp, characteristic=c, value=number)
                 else:
                     Measurement.objects.create(inspection=insp, characteristic=c, ok=value.upper() in ('OK', '1', 'PASS', '합격'))
             insp.finalize()
@@ -70,7 +72,7 @@ class Command(BaseCommand):
                 made = ingest(path)
                 shutil.move(path, inbox / 'done' / path.name)
                 self.stdout.write(self.style.SUCCESS(f'{path.name}: {", ".join(made)}'))
-            except (ValueError, KeyError, ValidationError) as e:
+            except Exception as e:  # 깨진 파일 하나가 inbox에 남아 뒤 파일까지 막지 않게 모두 error/로 옮긴다
                 shutil.move(path, inbox / 'error' / path.name)
                 (inbox / 'error' / f'{path.name}.err.txt').write_text(str(e), encoding='utf-8')
                 self.stderr.write(f'{path.name}: {e}')
