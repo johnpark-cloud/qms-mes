@@ -303,7 +303,7 @@ try:
     check('대시보드 저장: 깨진 JSON → 400', save_layout(b'{oops') == 400)
     check('대시보드 저장: 빈 배치 → 200 (기본 배치로)', save_layout(b'[]') == 200)
     css = get('/static/qms/fiori.css')
-    check('fiori.css에 CI 색 #2c4d80', '#2c4d80' in css.lower())
+    check('fiori.css에 대표색 #0057d2', '#0057d2' in css.lower())
 finally:
     server.terminate()
 

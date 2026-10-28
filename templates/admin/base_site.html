@@ -32,7 +32,7 @@
 {% endif %}
 {% endblock %}
 
-{# 기본 상단 메뉴·Django 사이드바 대신 남색 사이드바 #}
+{# 기본 상단 메뉴·Django 사이드바 대신 회색 틀 사이드바 #}
 {% block nav-global %}{% endblock %}
 {% block nav-sidebar %}{% include "admin/qms_sidebar.html" %}{% endblock %}
 {% block extrabody %}{{ block.super }}<script src="{% static 'qms/shell.js' %}" defer></script>{% endblock %}

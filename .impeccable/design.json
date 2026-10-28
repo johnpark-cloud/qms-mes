@@ -1,0 +1,137 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-10-28T00:00:00+09:00",
+  "title": "Design System: QMS+MES",
+  "extensions": {
+    "colorMeta": {
+      "primary": { "role": "primary", "displayName": "누름 파랑 (Action Blue)", "canonical": "#0057d2", "tonalRamp": ["#001a40", "#002a66", "#0040b0", "#0057d2", "#3b82e6", "#6bc0ff", "#b8dcff", "#ebf8ff"] },
+      "primary-deep": { "role": "primary", "displayName": "눌린 파랑 (Pressed Blue)", "canonical": "#0040b0" },
+      "band-blue": { "role": "primary", "displayName": "연한 파랑 띠 (Selection Wash)", "canonical": "#ebf8ff" },
+      "canvas": { "role": "neutral", "displayName": "업무 면 (Canvas)", "canonical": "#ffffff" },
+      "chrome": { "role": "neutral", "displayName": "창틀 회색 (Chrome)", "canonical": "#f5f6f7", "tonalRamp": ["#1d232a", "#2d3540", "#545454", "#8396a8", "#c5cbd1", "#eaecee", "#f5f6f7", "#ffffff"] },
+      "band": { "role": "neutral", "displayName": "띠 회색 (Band)", "canonical": "#eaecee" },
+      "ink": { "role": "neutral", "displayName": "제목 검정 (Ink)", "canonical": "#000000" },
+      "ink-body": { "role": "neutral", "displayName": "본문 slate (Ink Body)", "canonical": "#223548" },
+      "ink-list": { "role": "neutral", "displayName": "목록 slate (Ink List)", "canonical": "#354a5f" },
+      "ink-meta": { "role": "neutral", "displayName": "보조 slate (Ink Meta)", "canonical": "#475e75" },
+      "ink-nav": { "role": "neutral", "displayName": "틀 회색 글자 (Ink Nav)", "canonical": "#545454" },
+      "positive": { "role": "status", "displayName": "정상", "canonical": "#256f3a" },
+      "critical": { "role": "status", "displayName": "주의", "canonical": "#a33f00" },
+      "negative": { "role": "status", "displayName": "이상", "canonical": "#aa0808" }
+    },
+    "typographyMeta": {
+      "page-title": { "displayName": "Page Title", "purpose": "화면마다 하나인 h1." },
+      "lead": { "displayName": "Lead", "purpose": "검사 판정 배너." },
+      "subhead": { "displayName": "Subhead", "purpose": "카드·모듈 제목." },
+      "body": { "displayName": "Body", "purpose": "본문 기본." },
+      "button": { "displayName": "Button", "purpose": "버튼 라벨." },
+      "field": { "displayName": "Field", "purpose": "입력칸 값." },
+      "nav-link": { "displayName": "Nav Link", "purpose": "사이드바·경로·사용자 메뉴." },
+      "list-item": { "displayName": "List Item", "purpose": "표 칸·타임라인·검색 결과(350)." },
+      "caption": { "displayName": "Caption", "purpose": "표 머리·배지·도움말." }
+    },
+    "shadows": [
+      { "name": "floating-list", "value": "0 8px 24px rgba(34, 53, 72, .12)", "purpose": "통합 검색 결과 목록에만. 그 밖에는 그림자 없음." }
+    ],
+    "motion": [],
+    "breakpoints": [
+      { "name": "mobile", "value": "767px" },
+      { "name": "sidebar-collapse", "value": "959px" },
+      { "name": "timeline-stack", "value": "960px" }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "채운 파랑 버튼. 화면의 주 동작.",
+      "html": "<button class=\"ds-btn-primary\">저장</button>",
+      "css": ".ds-btn-primary { background: #0057d2; color: #fff; border: 1px solid #0057d2; border-radius: 8px; padding: 12px 14px; min-height: 44px; font: 500 16px/17.6px 'Segoe UI', 'Malgun Gothic', system-ui, sans-serif; cursor: pointer; } .ds-btn-primary:hover { background: #0040b0; border-color: #0040b0; } .ds-btn-primary:focus-visible { outline: 2px solid #0057d2; outline-offset: 1px; }"
+    },
+    {
+      "name": "Outline Button",
+      "kind": "button",
+      "refersTo": "button-outline",
+      "description": "보조 동작·상단 도구(이력, 삭제 요청).",
+      "html": "<button class=\"ds-btn-outline\">삭제 요청</button>",
+      "css": ".ds-btn-outline { background: #fff; color: #0040b0; border: 1px solid #475e75; border-radius: 8px; padding: 12px 14px; min-height: 44px; font: 500 16px/17.6px 'Segoe UI', 'Malgun Gothic', system-ui, sans-serif; cursor: pointer; } .ds-btn-outline:hover { background: #ebf8ff; border-color: #0040b0; } .ds-btn-outline:focus-visible { outline: 2px solid #0057d2; outline-offset: 1px; }"
+    },
+    {
+      "name": "Text Field",
+      "kind": "input",
+      "refersTo": "text-field",
+      "description": "입력칸. 44px, 8px 모서리, 파랑 포커스.",
+      "html": "<input class=\"ds-input\" placeholder=\"LOT 번호\">",
+      "css": ".ds-input { background: #fff; color: #223548; border: 1px solid #475e75; border-radius: 8px; padding: 9px 12px; min-height: 44px; font: 400 16px/24px 'Segoe UI', 'Malgun Gothic', system-ui, sans-serif; caret-color: #0057d2; } .ds-input::placeholder { color: #475e75; } .ds-input:hover { background: #f5f6f7; } .ds-input:focus { outline: 2px solid #0057d2; outline-offset: 1px; }"
+    },
+    {
+      "name": "Side Navigation",
+      "kind": "nav",
+      "refersTo": "side-nav-link",
+      "description": "회색 창틀 사이드바. 현재 화면만 흰 바탕 파랑 글자.",
+      "html": "<nav class=\"ds-side\"><h2>QMS</h2><a href=\"#\" aria-current=\"page\">검사 입력</a><a href=\"#\">부적합 등록</a><a href=\"#\">품질 KPI</a></nav>",
+      "css": ".ds-side { background: #f5f6f7; width: 240px; padding: 12px 8px; display: flex; flex-direction: column; font-family: 'Segoe UI', 'Malgun Gothic', system-ui, sans-serif; } .ds-side h2 { color: #475e75; font: 500 14px/21px inherit; margin: 16px 12px 4px; } .ds-side a { color: #545454; text-decoration: none; padding: 9px 12px; font-size: 15px; line-height: 21px; border-radius: 8px; } .ds-side a:hover { background: #eaecee; color: #000; } .ds-side a[aria-current=page] { background: #fff; color: #0057d2; font-weight: 500; box-shadow: inset 0 0 0 1px #eaecee; } .ds-side a:focus-visible { outline: 2px solid #0057d2; outline-offset: -2px; }"
+    },
+    {
+      "name": "Status Badge",
+      "kind": "chip",
+      "refersTo": "status-badge",
+      "description": "품질 상태 배지. 4px 모서리, 글자가 상태를 말한다.",
+      "html": "<span class=\"ds-status ds-status--negative\">CAPA 필요</span> <span class=\"ds-status ds-status--critical\">관리한계 이탈</span> <span class=\"ds-status ds-status--positive\">합격</span>",
+      "css": ".ds-status { display: inline-flex; padding: 2px 8px; border-radius: 4px; border: 1px solid currentColor; font: 500 14px/21px 'Segoe UI', 'Malgun Gothic', system-ui, sans-serif; } .ds-status--negative { color: #aa0808; background: #ffeaf4; } .ds-status--critical { color: #a33f00; background: #fff8d6; } .ds-status--positive { color: #256f3a; background: #f5fae5; }"
+    },
+    {
+      "name": "Card",
+      "kind": "card",
+      "refersTo": "card",
+      "description": "흰 면 + 1px 띠색 테두리, 그림자 없음.",
+      "html": "<section class=\"ds-card\"><h2>열린 부적합</h2><p>MRB 처분 대기 5건</p></section>",
+      "css": ".ds-card { background: #fff; border: 1px solid #eaecee; border-radius: 8px; padding: 24px; font-family: 'Segoe UI', 'Malgun Gothic', system-ui, sans-serif; color: #223548; } .ds-card h2 { margin: 0 0 16px; color: #000; font: 500 20px/22px inherit; } .ds-card p { margin: 0; font-size: 18px; line-height: 27px; }"
+    },
+    {
+      "name": "KPI Tile",
+      "kind": "custom",
+      "refersTo": "kpi-tile",
+      "description": "회색 면 타일. 상태는 숫자 색으로.",
+      "html": "<a class=\"ds-tile\" href=\"#\"><span class=\"ds-tile__title\">부적합 보완 필요</span><span class=\"ds-tile__sub\">필수 항목 미입력</span><span class=\"ds-tile__value\">3</span></a>",
+      "css": ".ds-tile { display: flex; flex-direction: column; gap: 8px; width: 12rem; min-height: 8rem; padding: 20px; background: #f5f6f7; border-radius: 8px; text-decoration: none; font-family: 'Segoe UI', 'Malgun Gothic', system-ui, sans-serif; } .ds-tile:hover { background: #eaecee; } .ds-tile:focus-visible { outline: 2px solid #0057d2; outline-offset: 1px; } .ds-tile__title { color: #000; font: 500 15px/21px inherit; } .ds-tile__sub { color: #475e75; font-size: 14px; } .ds-tile__value { margin-top: auto; color: #a33f00; font: 500 36px/39.6px inherit; font-variant-numeric: tabular-nums; }"
+    }
+  ],
+  "narrative": {
+    "northStar": "현장의 업무 창 (The Plant Window)",
+    "overview": "화면은 홍보물이 아니라 업무를 담는 창이다. 연한 회색 틀(상단 바 60px와 왼쪽 메뉴)이 창틀 역할을 하고, 그 안의 흰 면에 기록과 할 일이 놓인다. 틀은 회색 글자로 조용히 물러나 있고, 사용자의 눈은 흰 면 위의 기록으로 간다. 기준은 SAP 웹 디자인 분석(`DESIGN-sap.md`)이다. 이 시스템은 그 구조와 수치를 업무 화면에 옮겨 쓴다.\n\n색은 거의 쓰지 않는다. 흰색이 바탕, 회색 두 단계(틀·띠)가 구조를 맡고, 파랑 한 가지가 \"누를 수 있다\"는 뜻만 맡는다. 품질 상태(정상·주의·이상)는 녹색·주황·빨강으로 따로 표시하며, 파랑과 섞어 쓰지 않는다. 깊이는 그림자가 아니라 평평한 면의 색 차이로 만든다.\n\n글자는 SAP 수치를 그대로 쓴다. 본문 18px, 페이지 제목 32px다. 크기가 비슷한 글자끼리는 굵기로 구분한다. 메뉴 글자는 15px·400 회색이고, 표 칸 글자는 15px·350 slate다.",
+    "keyCharacteristics": [
+      "회색 틀(`chrome`) + 흰 업무 면(`canvas`)의 2층 구조",
+      "파랑 한 가지(`primary`)는 버튼·링크·현재 메뉴에만 쓴다",
+      "제목은 검정, 본문은 slate, 틀은 중립 회색. 색상 계열이 바뀌면서 위계가 생긴다",
+      "그림자 없음. 카드는 얇은 띠색 테두리, KPI 타일은 회색 면",
+      "모서리는 컨트롤 8px, 사진 12px, 배지 4px. 알약 모양은 쓰지 않는다",
+      "오프라인 시스템 글꼴, 자간 0"
+    ],
+    "rules": [
+      { "name": "The One Blue Rule", "body": "파랑은 누를 수 있는 것과 현재 위치에만 쓴다. 장식, 제목, 아이콘 바탕에 파랑을 칠하지 않는다.", "section": "colors" },
+      { "name": "The Status Is Not Brand Rule", "body": "품질 상태는 녹색·주황·빨강만 쓴다. 파랑으로 상태를 표시하지 않는다(정보 배지 하나는 예외).", "section": "colors" },
+      { "name": "The Weight-Not-Size Rule", "body": "15px 글자 두 종류는 크기가 아니라 굵기와 색으로 나눈다. 메뉴는 400 회색, 표 칸은 350 slate다. 굵기를 400·700 두 가지로 줄이지 않는다.", "section": "typography" },
+      { "name": "The Zero Tracking Rule", "body": "자간은 어디에서나 0이다. 대문자 라벨이나 넓은 자간 라벨을 쓰지 않는다.", "section": "typography" },
+      { "name": "The Flat Frame Rule", "body": "그림자는 본문 위에 겹쳐 뜨는 임시 목록에만 허용한다. 카드나 버튼을 그림자로 띄우지 않는다.", "section": "elevation" }
+    ],
+    "dos": [
+      "**Do** 파랑(`#0057d2`)은 버튼·링크·현재 메뉴·포커스에만 쓴다.",
+      "**Do** 구역은 회색 면(`#f5f6f7`)이나 1px 띠색 선(`#eaecee`)으로 나눈다.",
+      "**Do** 제목은 검정, 본문은 slate(`#223548`), 틀은 회색(`#545454`)으로 색 계열을 나눈다.",
+      "**Do** 버튼·입력칸은 높이 44px 이상, 현장 화면은 56~58px로 만든다.",
+      "**Do** 새 색은 `core/static/qms/fiori.css`의 `--f-*` 토큰으로만 추가하고, 다크 모드 값도 함께 정의한다.",
+      "**Do** 글자 대비는 라이트·다크 모두 4.5:1 이상을 지킨다."
+    ],
+    "donts": [
+      "**Don't** 카드, 버튼, 상단 바에 그림자를 넣지 않는다.",
+      "**Don't** 카드·알림·목록 항목의 왼쪽이나 오른쪽에 1px보다 굵은 색 선을 넣지 않는다.",
+      "**Don't** 알약 모양(완전히 둥근) 배지나 버튼을 만들지 않는다. 배지는 4px다.",
+      "**Don't** 본문에 틀 회색(`#545454`)을 쓰지 않는다. 그 색은 메뉴·경로 전용이다.",
+      "**Don't** 자간을 넣거나 대문자 라벨을 쓰지 않는다.",
+      "**Don't** 외부 글꼴·아이콘·CDN을 불러오지 않는다. 오프라인에서 동작해야 한다.",
+      "**Don't** 파랑이나 두 번째 강조색을 장식에 쓰지 않는다."
+    ]
+  }
+}
