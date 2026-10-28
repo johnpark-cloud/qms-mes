@@ -1,3 +1,8 @@
+// 뒤로가기·앞으로가기로 메모리에 남은 예전 화면(bfcache)이 복원되면 서버에서 최신 내용을 다시 받는다
+window.addEventListener('pageshow', function (e) {
+    if (e.persisted) location.reload();
+});
+
 // 좁은 화면에서 사이드바 접기·펴기
 document.addEventListener('click', function (e) {
     var btn = e.target.closest('.qms-side__toggle');

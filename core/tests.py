@@ -104,6 +104,12 @@ class ShellTest(TestCase):
                 resp.close()  # Windows는 열린 파일을 지울 수 없다
                 self.assertIn('src="/brand/logo"', self.client.get('/todo/').content.decode())
 
+    def test_logged_in_pages_not_stored(self):
+        # 저장 후 뒤로가기 때 예전 화면이 보이지 않도록 브라우저 저장 금지
+        self.client.force_login(User.objects.create_superuser('admin'))
+        self.assertIn('no-store', self.client.get('/todo/')['Cache-Control'])
+        self.assertIn('no-store', self.client.get('/admin/core/item/')['Cache-Control'])
+
     def test_sidebar_filters_by_permission(self):
         def side(html):
             return html.split('id="qms-sidebar"')[1].split('</nav>')[0]
