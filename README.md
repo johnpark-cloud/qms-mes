@@ -43,8 +43,10 @@ http://127.0.0.1:8000/ → **내 할 일** 화면이 열립니다.
 혼자 쓸 때는 위의 `runserver`로 충분합니다. 팀원이 각자 PC에서 접속하게 하려면 아래처럼 띄웁니다(waitress, 무료).
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File scripts\serve.ps1 -HostName QA-PC01   # QA-PC01 = 이 PC 이름 또는 IP
+powershell -ExecutionPolicy Bypass -File scripts\serve.ps1 -HostName QA-PC01 -ListenIp 192.168.0.10   # QA-PC01 = 이 PC 이름, 192.168.0.10 = 사내망 IP
 ```
+
+- `-ListenIp`를 빼면 이 PC의 모든 네트워크 연결(외부 Wi-Fi·VPN 포함)에서 접속을 받습니다. 노트북에서 띄울 때는 꼭 사내망 IP를 지정합니다(`ipconfig`로 확인).
 
 - 팀원은 `http://QA-PC01:8000`으로 접속합니다. Windows 방화벽이 묻으면 "개인/도메인 네트워크 허용"을 선택합니다.
 - 서명·세션용 비밀키는 처음 실행할 때 `data/secret_key.txt`에 자동으로 만들어집니다(Git에 올라가지 않음). 이 파일을 지우면 모두 다시 로그인해야 합니다.
@@ -121,6 +123,8 @@ powershell -ExecutionPolicy Bypass -File scripts\register_backup_task.ps1 -Dest 
 ```
 
 30일이 지난 백업은 자동으로 지워집니다.
+
+백업에는 모든 사람의 연차·급여 기록과 명세서 파일이 들어 있습니다. 자동 백업 등록 스크립트는 백업 폴더를 등록한 계정(과 관리자)만 열 수 있게 잠급니다. 잠그지 못했다는 경고가 나오면(NAS 권한 등) IT팀에 그 폴더를 이 계정 전용으로 설정해 달라고 요청합니다. 수동 백업 폴더도 팀 공유 폴더에 두지 않습니다.
 
 복구는 먼저 리허설로 백업이 쓸 만한지 확인한 뒤 실행합니다. 분기마다 리허설을 한 번 해 두면 "백업은 있는데 복구가 안 되는" 일을 막을 수 있습니다.
 
