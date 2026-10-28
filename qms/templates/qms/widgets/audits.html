@@ -1,8 +1,13 @@
 <section class="card">
-  <h2>내부심사 <span class="count">14일 내 예정 · CAPA 미연결 지적</span></h2>
-  <table><tbody>
+  <h2>내부심사 <span class="count">{% if size == 'wide' %}14일 내 예정 · CAPA 미연결 지적{% else %}14일 내{% endif %}</span></h2>
+  {% if size == 'wide' %}<table><tbody>
     {% for a in audits %}<tr><td><a href="{% url 'admin:qms_internalaudit_change' a.pk %}">{{ a.name }}</a></td><td>{{ a.planned_date|date:"Y-m-d" }} <span class="status status--info">예정</span></td></tr>{% endfor %}
     {% for f in findings %}<tr><td><a href="{% url 'admin:qms_internalaudit_change' f.audit_id %}">{{ f }}</a></td><td><span class="status status--negative">CAPA 필요</span></td></tr>{% endfor %}
     {% if not audits and not findings %}<tr><td colspan="2" class="empty">{% include "admin/empty_state.html" with message="예정된 심사가 없습니다." %}</td></tr>{% endif %}
   </tbody></table>
+  {% else %}<table><tbody>
+    {% with a=audits|dictsort:"planned_date"|first %}<tr><td>{% if a %}<a href="{% url 'admin:qms_internalaudit_change' a.pk %}">{{ a.name }}</a>{% else %}다음 심사 없음{% endif %}</td>
+      <td class="num">{% if a %}{{ a.planned_date|date:"m-d" }}{% endif %}</td></tr>{% endwith %}
+    <tr><td>CAPA 필요 지적</td><td class="num">{% if findings %}<span class="status status--negative">{{ findings|length }}건</span>{% else %}0건{% endif %}</td></tr>
+  </tbody></table>{% endif %}
 </section>

@@ -50,7 +50,7 @@ docs/        구조·업무 규칙·테스트 문서, superpowers/ 설계·계�
 | `apps.py` | `ensure_roles`: migrate 후 역할 그룹(품질엔지니어·품질팀장·검사원)과 권한 재설정 |
 | `views.py` | 내 할 일·대시보드, KPI, 협력사 성적표, 검사 입력, SPC, 현장 메모, 심사 대응 묶음, 엑셀 양식 출력 |
 | `due.py` | 기한·대기 항목 계산 (내 할 일과 `notify`가 공유) |
-| `widgets.py` | 대시보드 위젯 목록·역할별 기본 배치 |
+| `widgets.py` | 대시보드 위젯 목록·역할별 기본 배치·격자 자리 잡기(`place`) |
 | `spc.py`, `kpi.py`, `similar.py`, `memo.py` | 관리도·Cpk, KPI 집계, 재발 방지 유사 사례, 메모 연결 |
 | `management/commands/` | `collect`(CSV 측정값 자동 수집), `notify`(기한 알림 메일·Teams) |
 

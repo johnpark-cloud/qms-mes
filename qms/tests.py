@@ -984,12 +984,60 @@ class DashboardTest(TestCase):
         self.assertNotContains(r, '불러오기 실패')
         for w in WIDGETS.values():
             self.assertContains(r, w.title)
+        keys = list(WIDGETS)
+        for part in (keys[:8], keys[8:]):  # 넓게(2×2)는 한 화면에 최대 10개
+            self.assertEqual(self.save([{'key': k, 'size': 'wide'} for k in part]).status_code, 200)
+            r = self.client.get('/todo/')
+            self.assertNotContains(r, '불러오기 실패')
+            self.assertContains(r, 'widget--wide', count=len(part))
 
     def test_save_and_load(self):
         from .widgets import layout_for
-        items = [{'key': 'gauges', 'size': 'wide'}, {'key': 'held_lots', 'size': 'normal'}]
+        items = [{'key': 'gauges', 'size': 'wide'}, {'key': 'held_lots', 'size': 'normal'}]  # 칸 없이 저장한 예전 배치
+        self.assertEqual(self.save(items).status_code, 200)
+        self.assertEqual(layout_for(self.inspector), [{'key': 'gauges', 'size': 'wide', 'x': 0, 'y': 0},
+                                                      {'key': 'held_lots', 'size': 'normal', 'x': 2, 'y': 0}])
+
+    def test_save_positions(self):
+        from .widgets import layout_for
+        items = [{'key': 'held_lots', 'size': 'normal', 'x': 3, 'y': 0}, {'key': 'gauges', 'size': 'wide', 'x': 1, 'y': 4}]
         self.assertEqual(self.save(items).status_code, 200)
         self.assertEqual(layout_for(self.inspector), items)
+        r = self.client.get('/todo/')
+        self.assertContains(r, 'style="--col:2;--row:5"')
+        for bad in (-1, 4, '1', 1.0, True, None):
+            self.assertEqual(self.save([{'key': 'gauges', 'size': 'normal', 'x': bad, 'y': 0}]).status_code, 400, bad)
+        self.assertEqual(self.save([{'key': 'gauges', 'size': 'normal', 'x': 0, 'y': 10}]).status_code, 400)
+        self.assertEqual(layout_for(self.inspector), items)
+
+    def test_place(self):
+        from .widgets import place
+
+        def spots(items):
+            return [(w['key'], w['size'], w['x'], w['y']) for w in place(items)]
+        # 겹치면 첫 빈칸, 넓게(2×2)는 오른쪽 끝을 넘지 않게 당긴다, 결과는 (y, x) 순
+        self.assertEqual(spots([{'key': 'a', 'size': 'wide', 'x': 3, 'y': 0}, {'key': 'b', 'size': 'normal', 'x': 2, 'y': 1},
+                                {'key': 'c', 'size': 'normal', 'x': 0, 'y': 5}, {'key': 'd', 'size': 'normal'}]),
+                         [('b', 'normal', 0, 0), ('d', 'normal', 1, 0), ('a', 'wide', 2, 0), ('c', 'normal', 0, 5)])
+        # 넓게 놓을 자리가 없으면 보통으로 줄이고, 칸이 다 차면 뺀다
+        full = [{'key': str(i), 'size': 'wide'} for i in range(10)]
+        self.assertEqual(spots(full + [{'key': 'x', 'size': 'wide'}]), spots(full))
+        out = place(full[:9] + [{'key': 'n', 'size': 'normal', 'x': 2, 'y': 8}, {'key': 'x', 'size': 'wide'}])
+        self.assertEqual([(w['size'], w['x'], w['y']) for w in out if w['key'] == 'x'], [('normal', 3, 8)])
+
+    def test_wide_shows_detail(self):
+        lot = Lot.objects.create(item=Item.objects.create(code='P-W', name='품목'), number='LOT-WIDE', qty=1)
+        Nonconformance.objects.create(lot=lot, description='표면 긁힘')
+        self.save([{'key': 'nc_open', 'size': 'normal'}, {'key': 'todo_lists', 'size': 'normal'}])
+        normal = self.client.get('/todo/').content.decode()
+        self.save([{'key': 'nc_open', 'size': 'wide'}, {'key': 'todo_lists', 'size': 'wide'}])
+        wide = self.client.get('/todo/').content.decode()
+        self.assertNotIn('전체 보기', normal)  # 보통: 숫자만
+        self.assertIn('class="tile__list"', wide)
+        self.assertIn('전체 보기', wide)
+        self.assertIn('<tr id="ncs"><td>열린 부적합</td><td class="num">1</td></tr>', normal)  # 할 일 목록 보통: 건수 요약
+        self.assertNotIn('표면 긁힘', normal)
+        self.assertIn('표면 긁힘', wide)  # 넓게: 항목별 표
 
     def test_rejects_bad_payload(self):
         for items in ([{'key': 'nope', 'size': 'normal'}], [{'key': 'edit_requests', 'size': 'normal'}],
@@ -1013,7 +1061,7 @@ class DashboardTest(TestCase):
         from .widgets import WIDGETS
         self.save([{'key': 'gauges', 'size': 'normal'}, {'key': 'held_lots', 'size': 'normal'}])
 
-        def boom(request, d):
+        def boom(request, d, size):
             raise RuntimeError('x')
         with mock.patch.object(WIDGETS['gauges'], 'context', boom), self.assertLogs('qms', 'ERROR'):
             r = self.client.get('/todo/')

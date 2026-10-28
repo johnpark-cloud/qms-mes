@@ -1,7 +1,11 @@
 <section class="card">
-  <h2>SPC 경보 <span class="count">최근 7일</span></h2>
-  <table><tbody>
+  <h2>SPC 경보 <span class="count">최근 7일{% if size != 'wide' %} · {{ spc_alarms|length }}건{% endif %}</span></h2>
+  {% if size == 'wide' %}<table><tbody>
     {% for a in spc_alarms %}<tr><td><a href="{% url 'spc' a.char.pk %}">{{ a.char.spec.item.code }} {{ a.char.name }}</a></td><td>{{ a.lot }}</td>
       <td>{% for x in a.alarms %}<span class="status status--critical">{{ x }}</span> {% endfor %}</td></tr>{% empty %}<tr><td colspan="3" class="empty">{% include "admin/empty_state.html" with message="최근 경보가 없습니다." %}</td></tr>{% endfor %}
   </tbody></table>
+  {% else %}<ul class="widget-summary">
+    {% for a in spc_alarms|slice:":2" %}<li><a href="{% url 'spc' a.char.pk %}">{{ a.char.spec.item.code }} {{ a.char.name }}</a>
+      <span>{{ a.lot }} · {{ a.alarms|first }}</span></li>{% empty %}<li class="empty">최근 경보가 없습니다.</li>{% endfor %}
+  </ul>{% endif %}
 </section>

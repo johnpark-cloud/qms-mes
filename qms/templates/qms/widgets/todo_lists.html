@@ -1,4 +1,12 @@
-<div class="cards">
+{% if size != 'wide' %}<section class="card">
+  <h2>할 일 목록 <span class="count">총 {{ total }}건</span></h2>
+  <table><tbody>
+    {% for id, name, n in summary %}<tr id="{{ id }}"><td>{{ name }}</td><td class="num">{{ n }}</td></tr>
+    {% empty %}<tr><td colspan="2" class="empty">{% include "admin/empty_state.html" with message="처리할 일이 없습니다." %}</td></tr>{% endfor %}
+  </tbody></table>
+  <p class="help">넓게 바꾸면 항목별 목록이 보입니다.</p>
+</section>
+{% else %}<div class="cards">
   <section class="card" id="claims">
     <h2>8D 기한 임박·초과 <span class="count">2일 이내</span></h2>
     <table>
@@ -144,3 +152,4 @@
   </section>
   {% endif %}
 </div>
+{% endif %}

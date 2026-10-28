@@ -1,8 +1,13 @@
 <section class="card">
   <h2>공정 수율 <span class="count">최근 6개월 · 양품 ÷ 투입</span></h2>
-  <table><tbody>
-    {% for y in yields %}<tr><td>{{ y.process }}</td><td>{% if y.yield is None %}-{% else %}{{ y.yield|floatformat:1 }}%{% endif %}</td></tr>
+  {% if size == 'wide' %}<table><tbody>
+    {% for y in yields %}<tr><td>{{ y.process }}</td><td class="num">{% if y.yield is None %}-{% else %}{{ y.yield|floatformat:1 }}%{% endif %}</td></tr>
     {% empty %}<tr><td colspan="2" class="empty">{% include "admin/empty_state.html" with message="작업 실적이 없습니다." %}</td></tr>{% endfor %}
   </tbody></table>
+  {% elif overall is None %}<p class="empty">작업 실적이 없습니다.</p>
+  {% else %}<table><tbody>
+    <tr><td>전체</td><td class="num">{{ overall|floatformat:1 }}%</td></tr>
+    <tr><td>최저 · {{ lowest.process }}</td><td class="num">{{ lowest.yield|floatformat:1 }}%</td></tr>
+  </tbody></table>{% endif %}
   <p class="help"><a href="{% url 'kpi' %}">품질 KPI 전체 보기</a></p>
 </section>

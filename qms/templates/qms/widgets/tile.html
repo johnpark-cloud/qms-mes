@@ -1,3 +1,11 @@
-<a class="tile tile--{{ tone }}" href="{{ href }}">
+{% if size == 'wide' %}<section class="tile tile--wide tile--{{ tone }}">
+  <a class="tile__head" href="{{ href }}"><span><span class="tile__title">{{ title }}</span><br><span class="tile__sub">{{ sub }}</span></span>
+    <span class="tile__value">{{ value }}</span></a>
+  {% if rows %}<table class="tile__list"><tbody>
+    {% for r in rows %}<tr><td>{% if r.href %}<a href="{{ r.href }}">{{ r.label }}</a>{% else %}{{ r.label }}{% endif %}</td>
+      <td class="num">{% if r.tone %}<span class="status status--{{ r.tone }}">{{ r.meta }}</span>{% else %}{{ r.meta }}{% endif %}</td></tr>{% endfor %}
+  </tbody></table>{% else %}<p class="tile__empty">표시할 항목이 없습니다.</p>{% endif %}
+  <a class="tile__more" href="{{ more }}">전체 보기</a>
+</section>{% else %}<a class="tile tile--{{ tone }}" href="{{ href }}">
   <span><span class="tile__title">{{ title }}</span><br><span class="tile__sub">{{ sub }}</span></span>
-  <span class="tile__value">{{ value }}</span></a>
+  <span class="tile__value">{{ value }}</span></a>{% endif %}

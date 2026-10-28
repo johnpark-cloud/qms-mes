@@ -10,6 +10,7 @@
     <select id="dash-add"><option value="">선택…</option>{% for key, name in available %}<option value="{{ key }}">{{ name }}</option>{% endfor %}</select>
     <button type="button" id="dash-reset" class="ghost">기본 배치로 되돌리기</button>
     <button type="button" id="dash-save">저장</button>
+    <span class="help">위젯을 끌어 빈칸에 놓거나, 위젯을 선택하고 방향키로 한 칸씩 옮깁니다.</span>
   </span>
   <span id="dash-status" role="status"></span>
   {% csrf_token %}
@@ -17,11 +18,10 @@
 
 <div class="dash" id="dash" data-save-url="{% url 'dashboard_save' %}">
   {% for w in widgets %}
-  <div class="widget{% if w.size == 'wide' %} widget--wide{% endif %}" data-key="{{ w.key }}" data-size="{{ w.size }}">
+  <div class="widget{% if w.size == 'wide' %} widget--wide{% endif %}" data-key="{{ w.key }}" data-size="{{ w.size }}"
+       data-x="{{ w.x }}" data-y="{{ w.y }}" style="--col:{{ w.x|add:1 }};--row:{{ w.y|add:1 }}" aria-label="{{ w.title }} 위젯">
     <div class="widget__edit" role="group" aria-label="{{ w.title }} 위젯">
       <span class="widget__name">{{ w.title }}</span>
-      <button type="button" class="ghost" data-act="up">위로</button>
-      <button type="button" class="ghost" data-act="down">아래로</button>
       <button type="button" class="ghost" data-act="size">{% if w.size == 'wide' %}보통{% else %}넓게{% endif %}</button>
       <button type="button" class="ghost" data-act="remove">삭제</button>
     </div>
@@ -34,8 +34,6 @@
   <div class="widget" data-size="normal">
     <div class="widget__edit" role="group">
       <span class="widget__name"></span>
-      <button type="button" class="ghost" data-act="up">위로</button>
-      <button type="button" class="ghost" data-act="down">아래로</button>
       <button type="button" class="ghost" data-act="size">넓게</button>
       <button type="button" class="ghost" data-act="remove">삭제</button>
     </div>

@@ -29,7 +29,7 @@ from . import kpi, spc
 from .due import due_items
 from .memo import ATTACHABLE, TARGETS, MemoForm, box_context, resolve_target, target_url, todays_audit
 from .models import Characteristic, DashboardLayout, ExcelTemplate, Gauge, Inspection, InspectionSpec, Measurement, Memo, MemoPhoto
-from .widgets import SIZES, WIDGETS, layout_for
+from .widgets import COLS, ROWS, SIZES, WIDGETS, layout_for
 
 
 @staff_member_required
@@ -53,7 +53,8 @@ def todo(request):
     for w in layout_for(request.user):
         widget = WIDGETS[w['key']]
         try:
-            html = render_to_string(widget.template, {**d, 'title': widget.title, **widget.context(request, d)})
+            html = render_to_string(widget.template, {**d, 'title': widget.title, 'size': w['size'],
+                                                      **widget.context(request, d, w['size'])})
         except Exception:  # 위젯 하나가 깨져도 첫 화면은 떠야 한다
             logging.getLogger('qms').exception('위젯 불러오기 실패: %s', widget.key)
             html = None
@@ -65,19 +66,20 @@ def todo(request):
 @staff_member_required
 @require_POST
 def dashboard_save(request):
-    """본문 JSON [{key, size}]로 내 배치를 저장한다. 빈 배열이면 저장값을 지워 기본 배치로 돌아간다."""
+    """본문 JSON [{key, size, x, y}]로 내 배치를 저장한다. x·y(격자 칸)는 없어도 된다. 빈 배열이면 저장값을 지워 기본 배치로 돌아간다."""
     try:
         items = json.loads(request.body)
     except ValueError:
         return HttpResponseBadRequest('배치 형식이 올바르지 않습니다.')
     ok = isinstance(items, list) and all(
         isinstance(w, dict) and isinstance(w.get('key'), str) and w['key'] in WIDGETS
-        and WIDGETS[w['key']].allowed(request.user) and w.get('size') in SIZES for w in items)
+        and WIDGETS[w['key']].allowed(request.user) and w.get('size') in SIZES
+        and all(k not in w or (type(w[k]) is int and 0 <= w[k] < n) for k, n in (('x', COLS), ('y', ROWS))) for w in items)
     if not ok or len({w['key'] for w in items}) != len(items):
         return HttpResponseBadRequest('저장할 수 없는 위젯 배치입니다.')
     if items:
         DashboardLayout.objects.update_or_create(user=request.user, defaults={
-            'widgets': [{'key': w['key'], 'size': w['size']} for w in items]})
+            'widgets': [{'key': w['key'], 'size': w['size'], **{k: w[k] for k in ('x', 'y') if k in w}} for w in items]})
     else:
         DashboardLayout.objects.filter(user=request.user).delete()
     return JsonResponse({'ok': True})
