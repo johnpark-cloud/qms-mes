@@ -62,7 +62,7 @@ QMS > "부적합 등록"(`/nc/new/`)에서 휴대폰 카메라로 바로 찍어 
 
 ## 회사 로고
 
-`data\brand\logo.png`(또는 `logo.svg`, `logo.jpg`)를 넣으면 로그인 화면과 왼쪽 위에 표시됩니다. 서버를 다시 켤 필요 없이 새로고침하면 바뀝니다. 없으면 "Q" 글자 로고가 나옵니다. 화면 색은 회사 색 `#2C4D80` 기준입니다.
+`data\brand\logo.png`(또는 `logo.svg`, `logo.jpg`)를 넣으면 로그인 화면과 왼쪽 위에 표시됩니다. 서버를 다시 켤 필요 없이 새로고침하면 바뀝니다. 없으면 "Q" 글자 로고가 나옵니다. 화면 대표색은 `#0057d2`입니다(아래 "화면 디자인").
 
 ## 새 기능 사용법
 
@@ -150,7 +150,7 @@ powershell -ExecutionPolicy Bypass -File scripts\register_backup_task.ps1 -Dest 
 
 ## 화면 디자인
 
-SAP Fiori Horizon(SAP Digital Manufacturing·QM의 디자인 시스템)의 색·간격·카드·상태 배지 규칙을 참고해 `core/static/qms/fiori.css` 한 파일로 만들었습니다(상표·전용 폰트 미사용, 인터넷 불필요). 오른쪽 위 반달 아이콘으로 라이트·다크·자동을 바꿉니다. 회사 색으로 바꾸려면 파일 맨 위의 `--f-brand`, `--f-link` 값만 고치면 됩니다.
+SAP 웹 디자인 분석(`DESIGN-sap.md`)을 기준으로 `core/static/qms/fiori.css` 한 파일에 만들었습니다(상표·전용 폰트 미사용, 인터넷 불필요). 밝은 회색 틀(상단 바·사이드바) 안에 흰 업무 화면을 두고, 버튼·링크만 파랑 `#0057d2`으로 표시합니다. 규칙은 `DESIGN.md`에 정리돼 있습니다. 오른쪽 위 반달 아이콘으로 라이트·다크·자동을 바꿉니다. 회사 색으로 바꾸려면 파일 맨 위의 `--f-brand`, `--f-brand-strong`, `--f-link` 값(다크 모드 값 포함)을 고칩니다.
 
 ## 측정 데이터 자동 수집 (3단계)
 
@@ -194,6 +194,12 @@ RAW-1,수입검사,외관,OK
 ## 테스트
 
 ```powershell
-.\.venv\Scripts\python manage.py test core qms   # 단위 테스트
+.\.venv\Scripts\python manage.py test             # 단위 테스트 (core·qms·personal)
 .\.venv\Scripts\python scripts\e2e_check.py      # 실제 서버를 띄워 화면 흐름 76개 점검 (임시 DB 사용)
 ```
+
+검증 절차와 완료 기준은 `docs/testing.md`에 있습니다.
+
+## 개발 문서
+
+코드를 고치는 사람(AI 포함)은 `AGENTS.md`의 규칙을 먼저 읽습니다. 시스템 구조는 `docs/architecture.md`, 바꾸면 안 되는 업무 규칙은 `docs/business-rules.md`, 화면 디자인 규칙은 `DESIGN.md`에 있습니다.
