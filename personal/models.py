@@ -3,7 +3,9 @@ from decimal import Decimal
 from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.core.files.storage import FileSystemStorage
-from django.db import models
+from django.db import models, transaction
+from django.db.models.signals import post_delete
+from django.dispatch import receiver
 
 def private_storage():
     # MEDIA_ROOT 밖이라 어떤 /media/ 주소로도 닿지 않는다 (소유자 전용 화면만 연다)
@@ -20,23 +22,24 @@ class LeaveProfile(models.Model):
     class Meta:
         verbose_name = verbose_name_plural = '연차 설정'
 
-    def __str__(self):
-        return f'입사 {self.hired_on}'
+    def __str__(self):  # 삭제 확인 화면·변경 로그에 입사일을 남기지 않는다
+        return '연차 설정'
 
 
 class LeaveUse(models.Model):
-    DAYS = [(Decimal('1'), '1일'), (Decimal('0.5'), '반차 (0.5일)'), (Decimal('0.25'), '반반차 (0.25일)')]
+    # 저장값(decimal_places=2) 그대로 써야 수정 화면에서 기존 값이 선택된다
+    DAYS = [(Decimal('1.00'), '1일'), (Decimal('0.50'), '반차 (0.5일)'), (Decimal('0.25'), '반반차 (0.25일)')]
     owner = models.ForeignKey(**OWNER)
     used_on = models.DateField('사용일')
-    days = models.DecimalField('일수', max_digits=3, decimal_places=2, choices=DAYS, default=Decimal('1'))
+    days = models.DecimalField('일수', max_digits=3, decimal_places=2, choices=DAYS, default=Decimal('1.00'))
     reason = models.CharField('사유', max_length=100, blank=True)
 
     class Meta:
         verbose_name = verbose_name_plural = '연차 사용'
         ordering = ['-used_on']
 
-    def __str__(self):
-        return f'{self.used_on} {self.days}일'
+    def __str__(self):  # 삭제 확인 화면·변경 로그에 날짜·일수를 남기지 않는다
+        return '연차 사용'
 
 
 class Payslip(models.Model):
@@ -59,6 +62,12 @@ class Payslip(models.Model):
         if self.owner_id and self.month and Payslip.objects.filter(owner_id=self.owner_id, month=self.month).exclude(pk=self.pk).exists():
             raise ValidationError('이미 등록된 급여월입니다.')
 
+    def save(self, *args, **kwargs):
+        old = Payslip.objects.filter(pk=self.pk).values_list('file', flat=True).first() if self.pk else None
+        super().save(*args, **kwargs)
+        if old and old != self.file.name:  # 바뀐 명세서 파일의 옛 파일만 지운다
+            transaction.on_commit(lambda: self.file.storage.delete(old))
+
     def _sum(self, kind):
         return sum((l.amount for l in self.lines.all() if l.kind == kind), Decimal(0))
 
@@ -73,6 +82,13 @@ class Payslip(models.Model):
     @property
     def net(self):
         return self.gross - self.deduction
+
+
+@receiver(post_delete, sender=Payslip)
+def _delete_payslip_file(sender, instance, **kwargs):
+    # 삭제가 롤백되면 파일도 남아야 하므로 커밋 뒤에 지운다 (급여명세 삭제·사용자 삭제 모두)
+    if instance.file:
+        transaction.on_commit(lambda: instance.file.delete(save=False))
 
 
 class PayLine(models.Model):

@@ -36,6 +36,34 @@ class LeaveTests(TestCase):
         self.assertEqual((b['accrued'], b['used'], b['remaining']), (15, Decimal('1.5'), Decimal('13.5')))
 
 
+    def test_me_table_matches_period(self):
+        # 7월 입사자가 다음 해 3월에 보면 표도 합계와 같은 입사 기념일 기간을 보여준다
+        u = User.objects.create_user('a', is_staff=True)
+        LeaveProfile.objects.create(owner=u, hired_on=date(2024, 7, 1))
+        LeaveUse.objects.create(owner=u, used_on=date(2025, 8, 4), reason='작년분')
+        LeaveUse.objects.create(owner=u, used_on=date(2026, 3, 2), reason='올해분')
+        LeaveUse.objects.create(owner=u, used_on=date(2025, 6, 30), reason='지난기간')
+        self.client.force_login(u)
+        from unittest import mock
+        with mock.patch('personal.views.timezone.localdate', return_value=date(2026, 3, 10)):
+            r = self.client.get('/me/')
+        self.assertEqual(r.context['leave']['used'], Decimal('2'))
+        self.assertEqual([x.reason for x in r.context['uses']], ['올해분', '작년분'])
+
+    def test_half_day_edit_keeps_value(self):
+        from django.forms import modelform_factory
+        u = User.objects.create_user('a')
+        use = LeaveUse.objects.get(pk=LeaveUse.objects.create(owner=u, used_on=date(2026, 3, 3), days=Decimal('0.5')).pk)
+        html = str(modelform_factory(LeaveUse, fields=['used_on', 'days', 'reason'])(instance=use)['days'])
+        self.assertIn('value="0.50" selected', html)
+        form = modelform_factory(LeaveUse, fields=['used_on', 'days', 'reason'])(
+            {'used_on': '2026-03-03', 'days': '0.50', 'reason': ''}, instance=use)
+        self.assertTrue(form.is_valid(), form.errors)
+        form.save()
+        use.refresh_from_db()
+        self.assertEqual(use.days, Decimal('0.5'))
+
+
 class PayTests(TestCase):
     def test_net_pay(self):
         u = User.objects.create_user('a')
@@ -116,8 +144,25 @@ class OwnerOnlyTests(TestCase):
         self.assertEqual(r.status_code, 200)
         r.close()
 
+    def test_str_hides_personal_data(self):
+        self.assertEqual(str(self.use), '연차 사용')
+        self.assertEqual(str(LeaveProfile(owner=self.b, hired_on=date(2020, 1, 1))), '연차 설정')
+
+    def test_payslip_file_removed_on_replace_and_delete(self):
+        storage = self.slip.file.storage
+        old = self.slip.file.name
+        with self.captureOnCommitCallbacks(execute=True):
+            self.slip.file = SimpleUploadedFile('t.pdf', b'y')
+            self.slip.save()
+        self.assertFalse(storage.exists(old))
+        new = self.slip.file.name
+        self.assertTrue(storage.exists(new))
+        with self.captureOnCommitCallbacks(execute=True):
+            Payslip.objects.get(pk=self.slip.pk).delete()
+        self.assertFalse(storage.exists(new))
+
     def test_save_forces_owner(self):
-        r = self.client.post('/admin/personal/leaveuse/add/', {'used_on': '2026-02-02', 'days': '1', 'reason': ''})
+        r = self.client.post('/admin/personal/leaveuse/add/', {'used_on': '2026-02-02', 'days': '1.00', 'reason': ''})
         self.assertEqual(r.status_code, 302)
         self.assertEqual(LeaveUse.objects.get(used_on=date(2026, 2, 2)).owner, self.a)
 

@@ -96,7 +96,7 @@
 | --- | --- |
 | 역할 그룹(품질엔지니어·품질팀장·검사원)과 권한은 migrate 때마다 다시 설정된다. 권한을 바꾸려면 이 함수를 고친다. | `qms/apps.py` `ensure_roles` |
 | 품질팀장 그룹이 승인자다. | `core/models.py` `APPROVER_GROUP`, `is_approver` |
-| 연차·급여(`personal`)는 본인 기록만 조회·다운로드한다. 시스템 관리자도 남의 것은 볼 수 없다. 명세서 파일은 `/media/` 밖(`data/private/`)에 둔다. | `personal/views.py`, `personal/admin.py`, `personal/models.py` `private_storage` |
+| 연차·급여(`personal`)는 본인 기록만 조회·다운로드한다. 시스템 관리자도 남의 것은 볼 수 없다. 명세서 파일은 `/media/` 밖(`data/private/`)에 둔다. 연차 사용 표는 합계와 같은 입사 기념일 기간으로 보여 준다. 명세서를 지우거나 파일을 바꾸면 옛 파일도 지운다. 화면 이름(`__str__`)에는 날짜·일수를 넣지 않는다(삭제 확인 화면·변경 로그 노출 방지). | `personal/views.py`, `personal/admin.py`, `personal/models.py` `private_storage`, `Payslip.save`, `_delete_payslip_file` |
 | 첨부 파일은 로그인한 스태프만 받을 수 있다. | `config/urls.py` `/media/` |
 | 엑셀 양식 출력은 읽기 전용 메서드만 호출한다. 개인 앱·인증 모델은 대상에서 제외한다. | `qms/models.py` `ExcelTemplate`, `report_safe` |
 

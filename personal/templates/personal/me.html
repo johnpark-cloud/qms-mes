@@ -11,7 +11,7 @@
   <p>{{ leave.period_start|date:"Y-m-d" }} ~ {{ leave.period_end|date:"Y-m-d" }}: 발생 {{ leave.accrued }}일 · 사용 {{ leave.used|floatformat:"-2" }}일 · <strong>잔여 {{ leave.remaining|floatformat:"-2" }}일</strong></p>
   {% else %}<p class="help">입사일을 먼저 설정하세요.</p>{% endif %}
   <table>
-    <thead><tr><th>{{ year }}년 사용일</th><th class="num">일수</th><th>사유</th></tr></thead>
+    <thead><tr><th>{% if leave %}사용일{% else %}{{ year }}년 사용일{% endif %}</th><th class="num">일수</th><th>사유</th></tr></thead>
     <tbody>{% for u in uses %}<tr><td><a href="{% url 'admin:personal_leaveuse_change' u.pk %}">{{ u.used_on|date:"Y-m-d" }}</a></td><td class="num">{{ u.days|floatformat:"-2" }}</td><td>{{ u.reason }}</td></tr>
     {% empty %}<tr><td colspan="3" class="empty">사용 내역이 없습니다.</td></tr>{% endfor %}</tbody>
   </table>
