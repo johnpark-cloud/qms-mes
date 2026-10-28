@@ -97,6 +97,8 @@ DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.sqlite3',
         'NAME': DATA_DIR / 'db.sqlite3',
+        # 쓰기 트랜잭션은 시작부터 잠금을 잡아 동시 저장 시 번호 중복·'database is locked'를 막고, 잠금은 20초까지 기다린다
+        'OPTIONS': {'transaction_mode': 'IMMEDIATE', 'timeout': 20},
     }
 }
 if os.environ.get('QMS_DB_NAME'):  # 2단계: PostgreSQL 전환 (pip install psycopg 필요)

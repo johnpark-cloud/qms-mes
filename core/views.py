@@ -13,13 +13,15 @@ from django.core.mail import EmailMessage
 from django.core.validators import validate_email
 from django.http import FileResponse, Http404, HttpResponse
 from django.db import transaction
+from django.db.models import prefetch_related_objects
 from django.shortcuts import get_object_or_404, redirect, render
 from django.template.loader import render_to_string
 from django.urls import reverse
 from django.utils import timezone
 from django.utils.http import urlencode
+from simple_history.utils import bulk_update_with_history
 
-from .importer import run_import
+from .importer import TARGET_MODELS, run_import
 from .timeline import lot_actions, lot_timeline
 from .models import (Approvable, EditRequest, Hold, ImportProfile, Lot, Nonconformance, NonconformancePhoto, is_approver,
                      validate_photo)
@@ -48,7 +50,11 @@ def trace(request):
     lot = Lot.objects.filter(number=number).select_related('item').first() if number else None
     ctx = {'number': number, 'lot': lot, 'title': 'LOT 이력'}
     if lot:
-        ctx.update(ancestors=lot.ancestors(), descendants=lot.descendants(),
+        ancestors, descendants = lot.ancestors(), lot.descendants()
+        # 계보 표가 LOT마다 조회하지 않도록 출하·투입 계보·보류를 한꺼번에 읽는다
+        prefetch_related_objects(ancestors + descendants, 'shipments', 'parent_links')
+        held = set(Hold.objects.filter(lot__in=ancestors + descendants, released_at__isnull=True).values_list('lot_id', flat=True))
+        ctx.update(ancestors=ancestors, descendants=descendants, held=held,
                    shipped=lot.shipments.exists(), timeline=lot_timeline(lot), actions=lot_actions(lot, request.user))
     return render(request, 'core/trace.html', ctx)
 
@@ -121,7 +127,8 @@ def nc_quick(request):
 
 
 def _get_record(app_label, model_name, pk):
-    if app_label == 'personal':  # 개인 자료는 요청·인쇄·승인 경로로 열지 않는다
+    # 개인 자료와 계정·세션 등 시스템 기록(비밀번호 해시 포함)은 요청·인쇄·승인 경로로 열지 않는다
+    if app_label in ('personal', 'auth', 'admin', 'sessions', 'contenttypes'):
         raise Http404
     try:
         model = apps.get_model(app_label, model_name)
@@ -237,7 +244,11 @@ def import_view(request):
     form = ImportForm(request.POST or None, request.FILES or None)
     result = None
     if request.method == 'POST' and form.is_valid():
-        count, errors = run_import(form.cleaned_data['profile'], form.cleaned_data['file'])
+        profile = form.cleaned_data['profile']
+        opts = TARGET_MODELS[profile.target]._meta  # 가져오기는 기존 행을 덮어쓰므로 추가·변경 권한이 모두 필요하다
+        if not all(request.user.has_perm(f'{opts.app_label}.{a}_{opts.model_name}') for a in ('add', 'change')):
+            raise PermissionDenied(f'{opts.verbose_name} 추가·변경 권한이 없습니다.')
+        count, errors = run_import(profile, form.cleaned_data['file'])
         result = {'count': count, 'errors': errors}
     return render(request, 'core/import.html', {'form': form, 'result': result, 'title': '엑셀 일괄 등록'})
 
@@ -261,6 +272,12 @@ def _approved_nc(pk):
     return nc
 
 
+def _mark_mailed(nc):
+    # 승인 잠금(save·clean)을 거치지 않고 메일 발송 일시만 바꾸되, 변경 이력은 남긴다
+    nc.mailed_at = timezone.now()
+    bulk_update_with_history([nc], Nonconformance, ['mailed_at'])
+
+
 @staff_member_required
 def nc_mail(request, pk):
     """승인된 부적합 보고 메일: 본문 복사(웹메일 붙여넣기)가 기본, SMTP가 있으면 바로 보내기도 된다."""
@@ -275,7 +292,7 @@ def nc_mail(request, pk):
            'photos': nc.photos.all(), 'smtp': settings.SMTP_ENABLED}
     action = request.POST.get('action')
     if request.method == 'POST' and action == 'mark_sent':
-        Nonconformance.objects.filter(pk=nc.pk).update(mailed_at=timezone.now())  # 승인 잠금(save)을 거치지 않는다
+        _mark_mailed(nc)
         messages.success(request, '보냈음으로 표시했습니다.')
         return redirect(request.path)
     if request.method == 'POST' and action == 'send' and settings.SMTP_ENABLED:
@@ -299,7 +316,7 @@ def nc_mail(request, pk):
         except (SMTPException, OSError) as e:
             ctx['error'] = f'메일을 보내지 못했습니다 ({e}). 보냈음 표시는 하지 않았습니다.'
             return render(request, 'core/nc_mail.html', ctx)
-        Nonconformance.objects.filter(pk=nc.pk).update(mailed_at=timezone.now())
+        _mark_mailed(nc)
         messages.success(request, f'{", ".join(to)}로 보냈습니다.')
         return redirect(request.path)
     return render(request, 'core/nc_mail.html', ctx)

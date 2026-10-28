@@ -3,6 +3,7 @@ import csv
 import datetime
 import io
 
+from django.core.exceptions import ValidationError
 from django.db import transaction
 from openpyxl import load_workbook
 
@@ -23,7 +24,8 @@ def read_rows(uploaded, header_row):
         rows = [list(r) for r in ws.iter_rows(values_only=True)]
     header = [str(h).strip() if h is not None else '' for h in rows[header_row - 1]]
     for i, r in enumerate(rows[header_row:], start=header_row + 1):
-        if any(v not in (None, '') for v in r):
+        r = ['' if v is None else v.strip() if isinstance(v, str) else v for v in r]  # 빈 칸이 'None'으로 저장되지 않게
+        if any(v != '' for v in r):
             yield i, dict(zip(header, r))
 
 
@@ -37,31 +39,42 @@ def _date(v):
     return datetime.date.fromisoformat(str(v).strip()[:10])
 
 
+def _save(model, key, value, **fields):
+    """키로 찾아 고치거나 새로 만든다. 저장 전에 모델 검증(길이·필수·선택지)을 거친다."""
+    obj = model.objects.filter(**{key: value}).first() or model(**{key: value})
+    for k, v in fields.items():
+        setattr(obj, k, v)
+    obj.full_clean()
+    obj.save()
+
+
 def _item(row):
     labels = {label: code for code, label in Item.TYPES}
     t = str(row['item_type']).strip()
     item_type = labels.get(t, t)
     if item_type not in dict(Item.TYPES):
         raise ValueError(f'구분 "{t}"은(는) 원자재/반제품/완제품 중 하나여야 합니다')
-    Item.objects.update_or_create(code=str(row['code']).strip(), defaults={
-        'name': str(row['name']).strip(), 'item_type': item_type})
+    _save(Item, 'code', str(row['code']).strip(), name=str(row['name']).strip(), item_type=item_type)
 
 
 def _work_order(row):
-    WorkOrder.objects.update_or_create(number=str(row['number']).strip(), defaults={
-        'item': Item.objects.get(code=str(row['item']).strip()),
-        'planned_qty': row['planned_qty'],
-        'due_date': _date(row.get('due_date'))})
+    _save(WorkOrder, 'number', str(row['number']).strip(), item=Item.objects.get(code=str(row['item']).strip()),
+          planned_qty=row['planned_qty'], due_date=_date(row.get('due_date')))
 
 
 HANDLERS = {'item': _item, 'work_order': _work_order}
+TARGET_MODELS = {'item': Item, 'work_order': WorkOrder}  # 가져오기 권한 확인용 (core.views.import_view)
 
 
 def run_import(profile, uploaded):
     """한 행이라도 틀리면 전체를 되돌린다. (처리 건수, 오류 목록)을 돌려준다."""
     handler, errors, count = HANDLERS[profile.target], [], 0
+    try:
+        rows = list(read_rows(uploaded, profile.header_row))
+    except Exception:  # 빈 파일, 제목 행이 파일보다 아래, 확장자만 .xlsx, 글자 인코딩을 알 수 없는 CSV 등
+        return 0, ['파일을 읽을 수 없습니다. 엑셀(.xlsx) 또는 CSV 형식과 제목 행 번호를 확인하세요.']
     with transaction.atomic():
-        for line, raw in read_rows(uploaded, profile.header_row):
+        for line, raw in rows:
             try:
                 row = {field: raw[col] for field, col in profile.mapping.items()}
                 with transaction.atomic():
@@ -69,6 +82,8 @@ def run_import(profile, uploaded):
                 count += 1
             except KeyError as e:
                 errors.append(f'{line}행: 열 {e} 없음')
+            except ValidationError as e:
+                errors.append(f'{line}행: {" ".join(e.messages)}')
             except Exception as e:
                 errors.append(f'{line}행: {e}')
         if errors:

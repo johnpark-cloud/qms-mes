@@ -660,3 +660,95 @@ class SearchTest(TestCase):
         r = self.client.get('/search/?q=ZZZZ&go=1')
         self.assertContains(r, '검색 결과가 없습니다')
         self.assertContains(r, 'qms-sidebar')
+
+
+class AuditFixTest(TestCase):
+    def setUp(self):
+        self.raw = Lot.objects.create(number='RAW-1', item=Item.objects.create(code='R1', name='양극재', item_type=Item.RAW))
+        self.cell = Item.objects.create(code='C1', name='셀', item_type=Item.FINISHED)
+        self.su = User.objects.create_superuser('su', password='pw')
+
+    def _user(self, group):
+        u = User.objects.create_user(group, is_staff=True)
+        u.groups.add(Group.objects.get(name=group))
+        return u
+
+    def test_import_needs_add_and_change(self):
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        from .models import ImportProfile
+        profile = ImportProfile.objects.create(name='품번', target='item', mapping={'code': '코드', 'name': '이름', 'item_type': '구분'})
+        post = lambda: {'profile': profile.pk, 'file': SimpleUploadedFile('i.csv', '코드,이름,구분\nC1,덮어씀,완제품\n'.encode())}
+        self.client.force_login(self._user('검사원'))
+        self.assertEqual(self.client.post('/import/', post()).status_code, 403)
+        self.assertEqual(Item.objects.get(code='C1').name, '셀')
+        self.client.force_login(self._user('품질엔지니어'))
+        self.assertEqual(self.client.post('/import/', post()).status_code, 200)
+        self.assertEqual(Item.objects.get(code='C1').name, '덮어씀')
+
+    def test_import_blank_cells_and_broken_files(self):
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        from .importer import run_import
+        from .models import ImportProfile
+        profile = ImportProfile.objects.create(name='품번', target='item', mapping={'code': '코드', 'name': '이름', 'item_type': '구분'})
+        count, errors = run_import(profile, SimpleUploadedFile('i.csv', '코드,이름,구분\nN1,,원자재\n'.encode()))
+        self.assertEqual((count, len(errors)), (0, 1))  # 빈 품명은 'None'으로 저장되지 않고 필수 오류
+        self.assertFalse(Item.objects.filter(code='N1').exists())
+        count, errors = run_import(profile, SimpleUploadedFile('i.csv', f'코드,이름,구분\nN2,{"가" * 201},원자재\n'.encode()))
+        self.assertEqual(count, 0)  # 길이 초과도 거른다
+        for name, data in (('e.csv', b''), ('x.xlsx', b'not excel'), ('k.csv', b'\xff\xff\xff')):
+            self.assertEqual(run_import(profile, SimpleUploadedFile(name, data))[0], 0, name)
+        profile.header_row = 9
+        self.assertIn('읽을 수 없습니다', run_import(profile, SimpleUploadedFile('i.csv', '코드,이름,구분\n'.encode()))[1][0])
+
+    def test_hold_history(self):
+        from .models import Hold
+        child = Lot.objects.create(number='CELL-1', item=self.cell)
+        LotLink.objects.create(parent=self.raw, child=child)
+        nc = Nonconformance.objects.create(lot=self.raw, description='이물')
+        self.assertEqual(Hold.history.filter(history_type='+').count(), 2)
+        nc.disposition, nc.approved_by, nc.customer_approval_ref = Nonconformance.CONCESSION, self.su, 'CA-1'
+        nc.save()
+        released = Hold.history.filter(history_type='~')
+        self.assertEqual(released.count(), 2)
+        self.assertTrue(all(h.released_at for h in released))
+
+    def test_mark_mailed_history(self):
+        from django.utils import timezone
+        nc = Nonconformance.objects.create(lot=self.raw, description='이물')
+        Nonconformance.objects.filter(pk=nc.pk).update(approved_at=timezone.now())
+        self.client.force_login(self.su)
+        before = nc.history.count()
+        self.client.post(f'/nc/{nc.pk}/mail/', {'action': 'mark_sent'})
+        self.assertEqual(nc.history.count(), before + 1)
+        self.assertIsNotNone(nc.history.first().mailed_at)
+
+    def test_print_blocks_system_models(self):
+        self.client.force_login(self.su)
+        for url in (f'/print/auth/user/{self.su.pk}/', '/print/contenttypes/contenttype/1/'):
+            self.assertEqual(self.client.get(url).status_code, 404, url)
+
+    def test_trace_queries_do_not_grow_per_lot(self):
+        from django.db import connection
+        from django.test.utils import CaptureQueriesContext
+        prev = self.raw
+        lots = []
+        for i in range(4):
+            lot = Lot.objects.create(number=f'CELL-{i}', item=self.cell)
+            if i < 3:  # CELL-3은 계보 미등록
+                LotLink.objects.create(parent=prev, child=lot)
+            lots.append(lot)
+            prev = lot
+        Shipment.objects.create(lot=lots[2], customer='A사', qty=1)
+        Nonconformance.objects.create(lot=lots[1], description='x')
+        self.client.force_login(self.su)
+
+        def page():
+            with CaptureQueriesContext(connection) as q:
+                html = self.client.get('/trace/', {'lot': 'RAW-1'}).content.decode()
+            return html, len(q)
+        html, n3 = page()
+        self.assertIn('A사', html)
+        self.assertEqual(html.count('status--negative">보류'), 2)  # CELL-1, CELL-2
+        LotLink.objects.create(parent=lots[0], child=lots[3])  # 보류 안 된 CELL-0에서 갈라진 하위 LOT
+        html, n4 = page()
+        self.assertLessEqual(n4 - n3, 1)  # 계보 한 단계 탐색분만 는다

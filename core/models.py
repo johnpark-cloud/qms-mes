@@ -11,6 +11,7 @@ from django.db.models.signals import post_delete
 from django.dispatch import receiver
 from django.utils import timezone
 from simple_history.models import HistoricalRecords
+from simple_history.utils import bulk_create_with_history, bulk_update_with_history
 
 APPROVER_GROUP = '품질팀장'
 
@@ -217,7 +218,7 @@ class Lot(models.Model):
     def _walk(self, attr, next_attr):
         seen, stack = {}, [self]
         while stack:
-            for link in getattr(stack.pop(), attr).select_related(next_attr):
+            for link in getattr(stack.pop(), attr).select_related(f'{next_attr}__item'):  # 계보 표의 품번 표시용
                 nxt = getattr(link, next_attr)
                 if nxt.pk not in seen and nxt.pk != self.pk:
                     seen[nxt.pk] = nxt
@@ -263,7 +264,8 @@ class LotLink(models.Model):
         super().save(*args, **kwargs)
 
 
-# shortcut: 같은 순간 두 건 등록 시 번호 중복(IntegrityError), 하루 999건 넘으면 순번 정렬이 깨진다, 동시 입력이 잦아지면 DB 시퀀스로 바꾼다
+# shortcut: SQLite는 transaction_mode=IMMEDIATE(settings)라 atomic 안에서 만든 부적합만 번호가 겹치지 않는다(등록 경로는 모두 atomic),
+#   PostgreSQL에서는 동시 등록 시 번호 중복(IntegrityError) 가능, 하루 999건 넘으면 순번 정렬이 깨진다 — 전환 시 DB 시퀀스로 바꾼다
 def _nc_number():
     """NC-YYMMDD-001: 날짜별 순번. 중간 번호가 지워져도 겹치지 않게 그날 마지막 번호 다음으로 매긴다."""
     prefix = timezone.localtime().strftime('NC-%y%m%d-')
@@ -373,9 +375,12 @@ class Nonconformance(models.Model):
         super().save(*args, **kwargs)
         if is_new:
             # 인터록: 해당 LOT과 하위 계보 전체를 자동 보류
-            Hold.objects.bulk_create(Hold(lot=lot, nonconformance=self) for lot in [self.lot, *self.lot.descendants()])
+            bulk_create_with_history([Hold(lot=lot, nonconformance=self) for lot in [self.lot, *self.lot.descendants()]], Hold)
         elif self.disposition in self.RELEASING:
-            self.holds.filter(released_at__isnull=True).update(released_at=self.closed_at)
+            holds = list(self.holds.filter(released_at__isnull=True))
+            for h in holds:
+                h.released_at = self.closed_at
+            bulk_update_with_history(holds, Hold, ['released_at'])  # 보류 생성·해제도 변경 이력에 남긴다
 
 
 PHOTO_EXTS = {'jpg', 'jpeg', 'png', 'heic', 'heif', 'webp'}

@@ -98,8 +98,10 @@
 | 품질팀장 그룹이 승인자다. | `core/models.py` `APPROVER_GROUP`, `is_approver` |
 | 연차·급여(`personal`)는 본인 기록만 조회·다운로드한다. 시스템 관리자도 남의 것은 볼 수 없다. 명세서 파일은 `/media/` 밖(`data/private/`)에 둔다. 연차 사용 표는 합계와 같은 입사 기념일 기간으로 보여 준다. 명세서를 지우거나 파일을 바꾸면 옛 파일도 지운다. 화면 이름(`__str__`)에는 날짜·일수를 넣지 않는다(삭제 확인 화면·변경 로그 노출 방지). | `personal/views.py`, `personal/admin.py`, `personal/models.py` `private_storage`, `Payslip.save`, `_delete_payslip_file` |
 | 첨부 파일은 로그인한 스태프만 받을 수 있다. | `config/urls.py` `/media/` |
+| 엑셀 일괄 등록은 대상(품번·작업지시)의 추가·변경 권한이 모두 있어야 올릴 수 있다(기존 행을 덮어쓰므로). 각 행은 모델 검증(`full_clean`)을 거치고, 한 행이라도 틀리면 전체를 되돌린다. | `core/views.py` `import_view`, `core/importer.py` |
+| 인쇄·승인·삭제 요청 경로는 개인 자료와 계정·세션 등 시스템 기록(`personal`, `auth`, `admin`, `sessions`, `contenttypes`)을 열지 않는다. | `core/views.py` `_get_record` |
 | 엑셀 양식 출력은 읽기 전용 메서드만 호출한다. 개인 앱·인증 모델은 대상에서 제외한다. | `qms/models.py` `ExcelTemplate`, `report_safe` |
 
 ## 11. 이력
 
-업무 모델은 `history = HistoricalRecords()`로 모든 변경을 남긴다. 새 업무 모델에도 붙이고, 기존 모델에서 제거하지 않는다.
+업무 모델은 `history = HistoricalRecords()`로 모든 변경을 남긴다. 새 업무 모델에도 붙이고, 기존 모델에서 제거하지 않는다. 여러 행을 한꺼번에 저장할 때는 `bulk_create`·`update()` 대신 이력을 남기는 `simple_history.utils.bulk_create_with_history`·`bulk_update_with_history`를 쓴다(보류 생성·해제, 부적합 메일 발송 표시가 이 방식이다: `core/models.py` `Nonconformance.save`, `core/views.py` `_mark_mailed`).

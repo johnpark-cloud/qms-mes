@@ -75,7 +75,7 @@ docs/        구조·업무 규칙·테스트 문서, superpowers/ 설계·계�
 | 항목 | 위치 / 환경변수 |
 | --- | --- |
 | 데이터 폴더 | `data/` (`QMS_DATA_DIR`로 변경) |
-| DB | `data/db.sqlite3`, PostgreSQL은 `QMS_DB_NAME`·`QMS_DB_USER`·`QMS_DB_PASSWORD`·`QMS_DB_HOST`·`QMS_DB_PORT` |
+| DB | `data/db.sqlite3`, PostgreSQL은 `QMS_DB_NAME`·`QMS_DB_USER`·`QMS_DB_PASSWORD`·`QMS_DB_HOST`·`QMS_DB_PORT`. SQLite는 `transaction_mode='IMMEDIATE'`, `timeout=20`으로 쓰기를 순서대로 처리한다(동시 저장 시 부적합 번호 중복·"database is locked" 방지). PostgreSQL로 옮기면 부적합 번호(`core/models.py` `_nc_number`)를 DB 시퀀스로 바꿔야 한다 |
 | 첨부 | `data/media/`, 개인 명세서는 `data/private/` |
 | 로고 | `data/brand/logo.svg|png|jpg` |
 | 비밀키 | `data/secret_key.txt` 자동 생성, 또는 `QMS_SECRET_KEY` |
