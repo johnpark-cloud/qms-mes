@@ -135,6 +135,15 @@ class ShellTest(TestCase):
         self.assertIn('aria-current="page">수입검사', html)
         self.assertNotIn('aria-current="page">공정검사', html)
 
+    def test_sidebar_groups_collapse(self):
+        # 홈과 지금 화면이 속한 묶음만 펼쳐서 시작한다 (변경 화면도 그 목록의 묶음)
+        self.client.force_login(User.objects.create_superuser('root'))
+        item = Item.objects.create(code='C1', name='셀', item_type=Item.FINISHED)
+        html = self.client.get(f'/admin/core/item/{item.pk}/change/').content.decode()
+        self.assertIn('data-group="기준정보" data-active open>', html)
+        self.assertIn('data-group="홈" open>', html)
+        self.assertIn('data-group="생산">', html)
+
     def test_admin_index_grouped_like_sidebar(self):
         self.client.force_login(User.objects.create_superuser('root'))
         html = self.client.get('/admin/').content.decode()

@@ -214,7 +214,21 @@ html[data-theme="dark"] .shell-brand { mix-blend-mode: normal; background: #fff;
 /* ---------- 사이드바: 셸바와 같은 회색 틀, 선택 항목만 파랑 ---------- */
 .qms-side { flex: 0 0 15rem; background: var(--f-side-bg); }
 .qms-sidebar { display: flex; flex-direction: column; padding: .75rem .5rem; min-height: calc(100vh - 60px); }
-.qms-sidebar h2 { color: var(--f-label); font-size: 14px; line-height: 21px; font-weight: 500; letter-spacing: 0; margin: 1rem .75rem .25rem; background: none; }
+.qms-nav-group { display: flex; flex-direction: column; }
+.qms-nav-group[open] { padding-bottom: .5rem; }
+.qms-nav-group > a { display: block; }
+.qms-nav-group summary {
+    display: flex; align-items: center; justify-content: space-between; list-style: none; cursor: pointer;
+    color: var(--f-label); font-size: 14px; line-height: 21px; font-weight: 500; padding: 10px 12px; border-radius: var(--f-radius);
+}
+.qms-nav-group summary::-webkit-details-marker { display: none; }
+.qms-nav-group summary::after {
+    content: ""; width: 7px; height: 7px; border-right: 1.5px solid currentColor; border-bottom: 1.5px solid currentColor;
+    transform: rotate(-45deg);
+}
+.qms-nav-group[open] > summary::after { transform: rotate(45deg); }
+.qms-nav-group summary:hover { background: var(--f-band); color: var(--f-ink); }
+.qms-nav-group summary:focus-visible { outline: 2px solid var(--f-focus); outline-offset: -2px; }
 #container .qms-sidebar a:link, #container .qms-sidebar a:visited {
     color: var(--f-side-text); text-decoration: none; padding: 9px 12px; font-size: 15px; line-height: 21px; border-radius: var(--f-radius);
 }

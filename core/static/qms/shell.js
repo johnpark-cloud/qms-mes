@@ -12,6 +12,20 @@ document.addEventListener('click', function (e) {
     document.getElementById('qms-sidebar').classList.toggle('open', open);
 });
 
+// 사이드바 묶음 접기·펴기: 사용자가 펴거나 접은 묶음을 이 브라우저에 기억한다. 지금 화면의 묶음은 항상 펼친다
+(function () {
+    var KEY = 'qms.nav.open', saved = {};
+    try { saved = JSON.parse(localStorage.getItem(KEY)) || {}; } catch (e) { saved = {}; }
+    document.querySelectorAll('.qms-nav-group').forEach(function (d) {
+        var name = d.dataset.group;
+        if (!d.hasAttribute('data-active') && name in saved) d.open = saved[name];
+        d.addEventListener('toggle', function () {
+            saved[name] = d.open;
+            try { localStorage.setItem(KEY, JSON.stringify(saved)); } catch (e) { /* 저장 못 해도 화면은 그대로 동작 */ }
+        });
+    });
+})();
+
 // 통합 검색: Ctrl+K로 이동, 결과가 있으면 aria-expanded, 아래 화살표로 결과 이동, Esc로 닫기
 document.addEventListener('keydown', function (e) {
     var input = document.getElementById('shell-search-input');
