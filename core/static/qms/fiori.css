@@ -175,6 +175,7 @@ body { background: var(--f-bg); color: var(--f-text); font-size: 18px; line-heig
     box-shadow: none;
     padding: 0 1.5rem;
     min-height: 60px;
+    flex-shrink: 0;  /* 휴대폰에서 검색칸이 둘째 줄로 내려가면 틀도 늘어나야 아래 메뉴 버튼을 덮지 않는다 */
     gap: 1rem;
     position: relative;
     z-index: 2;

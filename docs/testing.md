@@ -6,7 +6,7 @@
 
 | 목적 | 명령 | 비고 |
 | --- | --- | --- |
-| 단위 테스트 전체 | `.\.venv\Scripts\python manage.py test` | core·qms·personal 모두. 테스트용 DB를 따로 만들므로 `data/`의 운영 DB는 건드리지 않는다. 2026-10-28 기준 144개, 약 2~4분 |
+| 단위 테스트 전체 | `.\.venv\Scripts\python manage.py test` | core·qms·personal 모두. 테스트용 DB를 따로 만들므로 `data/`의 운영 DB는 건드리지 않는다. 2026-10-29 기준 148개, 약 2~4분 |
 | 앱 하나만 | `.\.venv\Scripts\python manage.py test qms` | 작업 중 빠른 확인용. 완료 판단에는 전체 실행이 필요하다 |
 | 테스트 하나만 | `.\.venv\Scripts\python manage.py test core.tests.ShellTest.test_logged_in_pages_not_stored` | |
 | 화면 흐름(e2e) | `.\.venv\Scripts\python scripts\e2e_check.py` | 임시 폴더에 새 DB를 만들고 포트 8765에 서버를 띄워 실제 HTTP로 인터록·화면을 점검한다. 2026-10-28 기준 76개 |
@@ -19,7 +19,7 @@ e2e를 Git Bash에서 실행할 때 한글이 깨지면 `PYTHONIOENCODING=utf-8`
 
 | 파일 | 다루는 것 |
 | --- | --- |
-| `core/tests.py` | `RoutingTest`(라우팅·실적), `InterlockTest`(보류·처분 인터록), `EditRequestTest`(삭제·수정 요청·잠금), `NcQuickTest`·`NcReportTest`·`NcMailTest`(부적합 간편 등록·보고서·메일), `SearchTest`, `ShellTest`(로고·사이드바·캐시 헤더) |
+| `core/tests.py` | `RoutingTest`(라우팅·실적), `InterlockTest`(보류·처분 인터록), `EditRequestTest`(삭제·수정 요청·잠금), `NcQuickTest`·`NcReportTest`·`NcMailTest`(부적합 간편 등록·보고서·메일), `SearchTest`, `ShellTest`(로고·사이드바·전체 메뉴 묶음·캐시 헤더) |
 | `qms/tests.py` | `QmsTest`(검사 판정·계측기·자격·SPC·4M·클레임·SCAR·CAPA·심사·PPAP·엑셀 가져오기·양식·백업·복원·알림 등), `TimelineTest`, `MemoTest`, `AuditPackTest`, `DashboardTest` |
 | `personal/tests.py` | `LeaveTests`(연차 계산), `PayTests`(급여), `OwnerOnlyTests`(본인만 열람) |
 | `scripts/e2e_check.py` | 로그인부터 화면별 HTTP 흐름, 정적 파일·디자인 토큰 제공 |

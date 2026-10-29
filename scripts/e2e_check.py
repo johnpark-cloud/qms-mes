@@ -288,7 +288,7 @@ try:
         code = e.code
     check('통합 검색 LOT 번호 + go=1 → 추적 화면으로 302', code == 302)
     check('LOT 타임라인 표시', 'class="timeline"' in get('/trace/?lot=CELL-A'))
-    check('심사 대응 묶음 화면 200', '심사 대응 묶음' in get('/audit-pack/'))
+    check('심사 자료 출력 화면 200', '심사 자료 출력' in get('/audit-pack/'))
     try:
         me = post_opener.open(BASE + '/me/'); me_code, me_html = me.status, me.read().decode()
     except urllib.error.HTTPError as e:

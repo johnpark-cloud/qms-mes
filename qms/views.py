@@ -316,7 +316,7 @@ def memo_inbox(request):
 
 
 
-# ---------- 심사 대응 묶음 ----------
+# ---------- 심사 자료 출력 ----------
 
 PACK_LIMIT = 500
 
@@ -411,7 +411,7 @@ def _pack_allowed(request):
 @staff_member_required
 def audit_pack(request):
     _pack_allowed(request)
-    return render(request, 'qms/audit_pack.html', {'title': '심사 대응 묶음', 'obj': '', **_pack_data(request)})
+    return render(request, 'qms/audit_pack.html', {'title': '심사 자료 출력', 'obj': '', **_pack_data(request)})
 
 
 @staff_member_required

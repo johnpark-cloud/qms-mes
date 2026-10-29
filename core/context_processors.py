@@ -1,7 +1,6 @@
 from django.conf import settings
-from django.urls import reverse
 
-from .nav import NAV
+from .nav import NAV, nav_url
 from .views import find_logo
 
 
@@ -9,8 +8,9 @@ def shell(request):
     user = request.user
     groups = []
     if user.is_authenticated and user.is_staff:
+        here = (request.path, request.get_full_path())
         for name, items in NAV:
-            links = [{'label': label, 'url': reverse(url), 'current': request.path == reverse(url)}
+            links = [{'label': label, 'url': nav_url(url), 'current': nav_url(url) in here}
                      for label, url, perm in items if perm is None or user.has_perm(perm)]
             if links:
                 groups.append({'name': name, 'links': links})

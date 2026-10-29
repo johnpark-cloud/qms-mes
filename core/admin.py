@@ -17,6 +17,34 @@ from .records import blockers, can_edit_locked, delete_record, edit_unlocked, is
 
 admin.site.site_header = admin.site.site_title = 'QMS+MES'
 admin.site.index_title = '메뉴'
+_app_list = admin.site.get_app_list
+# 사이드바에 따로 두지 않는 목록이 전체 메뉴에서 들어갈 묶음
+INDEX_EXTRA = {'홈': ['qms.memo'], '심사': ['qms.audititem'], '문서·변경·교육': ['qms.documentrevision'],
+               '관리': ['core.importprofile', 'auth.group'], '개인': ['personal.leaveprofile', 'personal.leaveuse', 'personal.payslip']}
+
+
+def grouped_app_list(request, app_label=None):
+    """전체 메뉴를 앱(core·qms) 대신 사이드바(core/nav.py)와 같은 업무 묶음으로 보여 준다. 어느 묶음에도 없는 목록은 원래 앱 아래에 남는다."""
+    from .nav import NAV, nav_url
+    app_list = _app_list(request, app_label)
+    if app_label:
+        return app_list
+    by_url = {m['admin_url']: m for app in app_list for m in app['models']}
+    by_key = {f"{app['app_label']}.{m['object_name'].lower()}": m['admin_url'] for app in app_list for m in app['models']}
+    groups = []
+    for i, (name, items) in enumerate(NAV):
+        urls = [nav_url(url).partition('?')[0] for _, url, _ in items]
+        urls += [by_key.get(key) for key in INDEX_EXTRA.get(name, [])]
+        found = [by_url.pop(url) for url in dict.fromkeys(urls) if url and url in by_url]
+        if found:
+            groups.append({'name': name, 'app_label': f'group{i}', 'app_url': found[0]['admin_url'],
+                           'has_module_perms': True, 'models': found})
+    for app in app_list:
+        app['models'] = [m for m in app['models'] if m['admin_url'] in by_url]
+    return groups + [app for app in app_list if app['models']]
+
+
+admin.site.get_app_list = grouped_app_list
 
 
 LOCKED_MSG = '잠긴 기록입니다. 수정 요청 후 승인받아야 수정할 수 있습니다.'

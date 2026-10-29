@@ -130,6 +130,21 @@ class ShellTest(TestCase):
         self.assertIn('LOT 이력', html)
         self.client.force_login(User.objects.create_superuser('root'))
         self.assertIn('검사 입력', side(self.client.get('/todo/').content.decode()))
+        # 걸러 연 관리 목록도 현재 메뉴로 표시된다
+        html = side(self.client.get('/admin/qms/inspection/?spec__inspection_type__exact=INCOMING').content.decode())
+        self.assertIn('aria-current="page">수입검사', html)
+        self.assertNotIn('aria-current="page">공정검사', html)
+
+    def test_admin_index_grouped_like_sidebar(self):
+        self.client.force_login(User.objects.create_superuser('root'))
+        html = self.client.get('/admin/').content.decode()
+        groups = ['기준정보', '생산', '부적합·조치', '고객·협력사', '심사']
+        self.assertEqual([g for g in groups if f'class="section">{g}<' in html], groups)
+        self.assertLess(html.index('class="section">기준정보<'), html.index('class="section">생산<'))
+        self.assertNotIn('class="section">MES', html)
+        self.assertNotIn('class="section">QMS', html)
+        self.assertIn('문서 개정', html)  # 사이드바에 없는 목록도 전체 메뉴에는 보인다
+        self.assertEqual(self.client.get('/admin/qms/').status_code, 200)
 
 
 class EditRequestTest(TestCase):
