@@ -4,7 +4,7 @@
 <div class="insp" hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'>
   <section class="card">
     <form hx-get="{% url 'inspect_lot' %}" hx-target="#step" autocomplete="off"{% if number %} hx-trigger="submit, load"{% endif %}>
-      <label for="lot">LOT 번호 — 바코드를 스캔하거나 입력 후 Enter</label>
+      <label for="lot">LOT 번호 — 바코드를 스캔하거나 입력 후 Enter (처음 들어온 자재면 입고 등록 화면이 열립니다)</label>
       <input id="lot" name="lot" value="{{ number }}" autofocus required>
     </form>
   </section>

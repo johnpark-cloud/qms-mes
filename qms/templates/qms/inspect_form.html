@@ -30,6 +30,15 @@
     {% endfor %}
     </tbody>
   </table>
+  <fieldset class="fields">
+    <legend>불합격일 때만 — 부적합에 기록됩니다</legend>
+    <p><label for="defect_type">불량유형</label>
+      <select id="defect_type" name="defect_type">
+        <option value="">(선택 안 함)</option>
+        {% for d in defect_types %}<option>{{ d }}</option>{% endfor %}
+      </select></p>
+    <p><label for="defect_qty">불량수량</label><input id="defect_qty" name="defect_qty" inputmode="decimal" size="6"></p>
+  </fieldset>
   <p><button type="submit">판정</button></p>
 </form>
 </section>

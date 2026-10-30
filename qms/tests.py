@@ -631,7 +631,7 @@ class QmsTest(TestCase):
         clerk.groups.add(Group.objects.get(name='검사원'))
         self.client.force_login(clerk)
         self.assertContains(self.client.get('/inspect/lot/?lot=RAW-1'), f'/inspect/{self.raw.pk}/{self.spec.pk}/')
-        self.assertContains(self.client.get('/inspect/lot/?lot=NOPE'), '찾을 수 없습니다')
+        self.assertContains(self.client.get('/inspect/lot/?lot=NOPE'), '새 입고 등록')
         self.assertContains(self.client.post(f'/inspect/check/{self.thk.pk}/', {f'c{self.thk.pk}': '11'}), '규격 이탈')
         url = f'/inspect/{self.raw.pk}/{self.spec.pk}/submit/'
         r = self.client.post(url, {f'c{self.thk.pk}': '10.0'})  # 외관 누락 → 아무것도 저장 안 됨
@@ -645,6 +645,33 @@ class QmsTest(TestCase):
         outsider = User.objects.create_user('viewer', password='x', is_staff=True)
         self.client.force_login(outsider)
         self.assertEqual(self.client.get('/inspect/').status_code, 403)
+
+    def test_inspector_receive_and_defect(self):
+        clerk = User.objects.create_user('clerk', password='pw-clerk-123', is_staff=True)
+        clerk.groups.add(Group.objects.get(name='검사원'))
+        self.client.force_login(clerk)
+        r = self.client.get('/inspect/lot/?lot=NEW-1')  # 없는 LOT → 입고 등록 양식 (검사기준 있는 품목만)
+        self.assertContains(r, '새 입고 등록')
+        self.assertContains(r, f'value="{self.raw.item.pk}"')
+        self.assertContains(self.client.post('/inspect/receive/', {'number': 'NEW-1', 'item': self.raw.item.pk, 'qty': '0'}),
+                            '0보다 큰')
+        self.assertFalse(Lot.objects.filter(number='NEW-1').exists())
+        r = self.client.post('/inspect/receive/', {'number': 'NEW-1', 'item': self.raw.item.pk, 'qty': '50', 'supplier': '성일철강'})
+        lot = Lot.objects.get(number='NEW-1')
+        self.assertEqual((lot.qty, lot.supplier), (50, '성일철강'))
+        self.assertContains(r, f'/inspect/{lot.pk}/{self.spec.pk}/')
+        self.assertContains(r, '수입검사 관리대장')
+        self.assertContains(self.client.get('/inspect/lot/?lot=NEW-2'), 'supplier-list')
+        r = self.client.post(f'/inspect/{lot.pk}/{self.spec.pk}/submit/', {
+            f'c{self.thk.pk}': '11.0', f'c{self.look.pk}': 'OK', 'defect_type': '치수', 'defect_qty': '3'})
+        nc = Inspection.objects.get(lot=lot).nonconformance
+        self.assertEqual((nc.defect_type, nc.defect_qty, nc.inspected_qty, nc.detected_by), ('치수', 3, 50, clerk))
+        self.assertContains(r, '성적서 인쇄')
+        title, _, rows = nc.inspection.print_table()
+        self.assertEqual(title, '수입검사 성적서')
+        self.assertIn('성일철강', str(rows))
+        self.client.force_login(User.objects.create_user('noperm', is_staff=True))
+        self.assertEqual(self.client.post('/inspect/receive/', {'number': 'X'}).status_code, 403)
 
     def test_kpi_suppliers_spc_permissions(self):
         from .widgets import WIDGETS
@@ -708,7 +735,8 @@ class QmsTest(TestCase):
                     '/admin/qms/internalaudit/add/', '/admin/qms/gauge/add/', f'/admin/qms/gauge/{gauge.pk}/change/',
                     '/admin/qms/customerclaim/add/', f'/admin/core/workorder/{wo.pk}/change/'):
             self.assertEqual(self.client.get(url).status_code, 200, url)
-        for url in ('/admin/qms/inspection/add/', f'/admin/qms/customerclaim/{claim.pk}/change/',
+        self.assertRedirects(self.client.get('/admin/qms/inspection/add/'), '/inspect/')
+        for url in ('/admin/qms/inspection/add/?full=1', f'/admin/qms/customerclaim/{claim.pk}/change/',
                     f'/admin/qms/inspectionspec/{self.spec.pk}/change/', '/admin/core/nonconformance/add/',
                     '/admin/qms/auditchecklist/add/', '/admin/qms/document/add/', '/import/', '/admin/'):
             self.assertEqual(self.client.get(url).status_code, 200, url)

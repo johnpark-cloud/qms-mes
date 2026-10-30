@@ -109,6 +109,21 @@ class Inspection(models.Model):
     def __str__(self):
         return f'{self.lot} {self.spec}'
 
+    def print_table(self):
+        """인쇄 화면 = 검사 성적서: 머리 정보 다음에 항목별 규격·측정값·판정."""
+        lot, item = self.lot, self.lot.item
+        head = [['LOT', str(lot), ''], ['품번', f'{item.code} {item.name}', ''], ['협력사', lot.supplier or '-', ''],
+                ['수량', f'{lot.qty.normalize():f}', ''], ['검사기준', str(self.spec), self.spec.sampling],
+                ['검사자', str(self.inspector or '-'), timezone.localtime(self.inspected_at).strftime('%Y-%m-%d %H:%M')]]
+        rows = []
+        for m in self.measurements.select_related('characteristic', 'gauge'):
+            c = m.characteristic
+            spec = f'{c.lsl if c.lsl is not None else "-"} ~ {c.usl if c.usl is not None else "-"} {c.unit}' if c.is_variable else 'OK/NG'
+            got = (f'{m.value.normalize():f}' if m.value is not None else '-') if c.is_variable else {True: 'OK', False: 'NG'}.get(m.ok, '-')
+            rows.append([c.name, f'{spec} → {got}' + (f' ({m.gauge.number})' if m.gauge else ''), '합격' if m.passed else '불합격'])
+        foot = [['판정', self.get_result_display() or '미판정', str(self.nonconformance or '')]]
+        return f'{self.spec.get_inspection_type_display()} 성적서', ['항목', '내용', '비고·판정'], head + rows + foot
+
     def clean(self):
         if self.spec_id and not self.spec.is_approved:
             raise ValidationError('승인되지 않은 검사기준으로는 검사할 수 없습니다.')

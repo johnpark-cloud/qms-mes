@@ -6,6 +6,7 @@ from django.contrib.contenttypes.models import ContentType
 from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.db.models import Max
+from django.shortcuts import redirect
 from django.urls import reverse
 from django.utils import timezone
 from django.utils.html import format_html, format_html_join
@@ -98,9 +99,15 @@ class MeasurementInline(admin.TabularInline):
 class InspectionAdmin(ReportLinksMixin, BaseAdmin):
     list_display = ['lot', 'spec', 'inspected_at', 'inspector', 'result', 'nonconformance']
     list_filter = ['result', 'spec__inspection_type']
-    search_fields = ['lot__number']
+    search_fields = ['lot__number', 'lot__item__code', 'lot__supplier']
     autocomplete_fields = ['lot']
     inlines = [MeasurementInline]
+
+    def add_view(self, request, form_url='', extra_context=None):
+        # 검사는 검사 입력 화면에서 한다 (LOT 스캔·입고 등록·즉시 판정). 지난 검사 소급 입력은 ?full=1
+        if request.method == 'GET' and 'full' not in request.GET:
+            return redirect('inspect')
+        return super().add_view(request, form_url, extra_context)
 
     def has_change_permission(self, request, obj=None):
         return not (obj and obj.result) and super().has_change_permission(request, obj)

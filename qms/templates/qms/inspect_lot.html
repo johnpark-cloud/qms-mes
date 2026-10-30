@@ -1,8 +1,28 @@
+{% if error %}<p class="banner ng">{{ error }}</p>{% endif %}
 {% if not lot %}
-  <p class="banner ng">LOT "{{ number }}"을(를) 찾을 수 없습니다.</p>
+  <section class="card">
+  {% if items %}
+    <h2>새 입고 등록 <span class="count">"{{ number }}"은(는) 아직 없는 LOT입니다</span></h2>
+    <form hx-post="{% url 'inspect_receive' %}" hx-target="#step" hx-disabled-elt="find button" autocomplete="off" class="fields">
+      <p><label for="r-item">품목</label>
+        <select id="r-item" name="item" required>
+          <option value="">— 고르세요 —</option>
+          {% for i in items %}<option value="{{ i.pk }}">{{ i.code }} {{ i.name }}</option>{% endfor %}
+        </select></p>
+      <p><label for="r-number">LOT 번호</label><input id="r-number" name="number" value="{{ number }}" required></p>
+      <p><label for="r-qty">입고수량</label><input id="r-qty" name="qty" inputmode="decimal" required></p>
+      <p><label for="r-supplier">협력사</label><input id="r-supplier" name="supplier" list="supplier-list" maxlength="100">
+        <datalist id="supplier-list">{% for s in suppliers %}<option value="{{ s }}">{% endfor %}</datalist></p>
+      <p><button type="submit">등록하고 검사 시작</button></p>
+    </form>
+    <p class="help">품목 목록에는 승인된 검사기준이 있는 품목만 나옵니다.</p>
+  {% else %}
+    <p class="banner ng">LOT "{{ number }}"을(를) 찾을 수 없습니다.</p>
+  {% endif %}
+  </section>
 {% else %}
 <section class="card">
-  <h2>{{ lot.number }} <span class="count">{{ lot.item }}</span>
+  <h2>{{ lot.number }} <span class="count">{{ lot.item }}{% if lot.supplier %} · {{ lot.supplier }}{% endif %} · {{ lot.qty|floatformat:"-3" }}개</span>
     {% if lot.on_hold %}<span class="status status--negative">보류 중</span>{% else %}<span class="status status--positive">정상</span>{% endif %}</h2>
   {% if lot.on_hold %}<p class="help">보류 LOT의 재검사 결과는 MRB 처분(재작업·수리) 근거가 됩니다.</p>{% endif %}
   {% if specs %}
@@ -14,5 +34,11 @@
   {% else %}
     <p class="banner ng">이 품번에 승인된 검사기준이 없습니다. 품질팀에 요청하세요.</p>
   {% endif %}
+  <nav class="links" aria-label="관련 화면">
+    {% for s in specs %}<a href="{% url 'admin:qms_inspectionspec_change' s.pk %}" target="_blank">{{ s.get_inspection_type_display }}기준서</a>{% endfor %}
+    <a href="{% url 'admin:qms_inspection_changelist' %}?q={{ lot.item.code|urlencode }}" target="_blank">이 품목 지난 성적서</a>
+    <a href="{% url 'admin:qms_inspection_changelist' %}?spec__inspection_type__exact=INCOMING" target="_blank">수입검사 관리대장</a>
+    <a href="{% url 'admin:core_nonconformance_changelist' %}?origin__exact=INCOMING" target="_blank">부적합 관리대장</a>
+  </nav>
 </section>
 {% endif %}

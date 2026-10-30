@@ -22,7 +22,7 @@ from django.utils.html import format_html
 from django.utils.http import content_disposition_header
 from django.views.decorators.http import require_POST
 
-from core.models import Lot, is_approver
+from core.models import Item, Lot, is_approver
 from core.views import _get_record
 
 from . import kpi, spc
@@ -131,13 +131,49 @@ def inspect_home(request):
     return render(request, 'qms/inspect.html', {'title': '검사 입력', 'number': request.GET.get('lot', '').strip()})
 
 
+DEFECT_TYPES = ['파손', '찍힘·스크래치', '이물', '인쇄', 'Burr', '도장', '용접', '부품 누락', '납땜', '치수', '기능', '조립성', '기타']
+
+
+def _lot_step(request, lot, number, error=None):
+    """LOT 화면. 없는 LOT이면 그 자리에서 입고 등록할 수 있게 품목·협력사 목록을 준다."""
+    ctx = {'lot': lot, 'number': number, 'error': error}
+    if lot:
+        ctx['specs'] = [s for t, _ in InspectionSpec.TYPES if (s := InspectionSpec.current(lot.item, t))]
+    elif request.user.has_perm('core.add_lot'):
+        with_spec = InspectionSpec.objects.filter(approved_at__isnull=False).values('item')
+        ctx['items'] = Item.objects.filter(pk__in=with_spec).order_by('code')
+        ctx['suppliers'] = (Lot.objects.exclude(supplier='').order_by('supplier')
+                            .values_list('supplier', flat=True).distinct())
+    return render(request, 'qms/inspect_lot.html', ctx)
+
+
 @staff_member_required
 def inspect_lot(request):
     """LOT 스캔 → 품번·보류 상태와 검사할 수 있는 검사구분(승인된 현재 기준)."""
     _can_inspect(request)
-    lot = Lot.objects.filter(number=request.GET.get('lot', '').strip()).select_related('item').first()
-    specs = [s for t, _ in InspectionSpec.TYPES if (s := InspectionSpec.current(lot.item, t))] if lot else []
-    return render(request, 'qms/inspect_lot.html', {'lot': lot, 'specs': specs, 'number': request.GET.get('lot', '')})
+    number = request.GET.get('lot', '').strip()
+    return _lot_step(request, Lot.objects.filter(number=number).select_related('item').first(), number)
+
+
+@staff_member_required
+@require_POST
+def inspect_receive(request):
+    """입고 등록: 처음 들어온 자재 LOT을 만들고 바로 검사 화면으로 잇는다."""
+    _can_inspect(request)
+    if not request.user.has_perm('core.add_lot'):
+        raise PermissionDenied
+    p = request.POST
+    number = p.get('number', '').strip()
+    item = Item.objects.filter(pk=p.get('item') or None).first()
+    try:
+        qty = Decimal(p.get('qty', '').strip())
+    except InvalidOperation:
+        qty = None
+    if not number or not item or qty is None or not qty.is_finite() or qty <= 0:
+        return _lot_step(request, None, number, '품목·LOT 번호·입고수량(0보다 큰 숫자)을 모두 입력하세요.')
+    lot, created = Lot.objects.get_or_create(number=number, defaults={
+        'item': item, 'qty': qty, 'supplier': p.get('supplier', '').strip()[:100]})
+    return _lot_step(request, lot, number, None if created else '이미 등록된 LOT입니다. 기존 LOT으로 검사합니다.')
 
 
 @staff_member_required
@@ -146,7 +182,7 @@ def inspect_form(request, lot_id, spec_id):
     lot, spec = get_object_or_404(Lot, pk=lot_id), get_object_or_404(InspectionSpec, pk=spec_id, approved_at__isnull=False)
     gauges = [g for g in Gauge.objects.filter(active=True) if g.usable_on(timezone.localdate())]
     return render(request, 'qms/inspect_form.html', {'lot': lot, 'spec': spec, 'chars': spec.characteristics.all(),
-                                                     'gauges': gauges})
+                                                     'gauges': gauges, 'defect_types': DEFECT_TYPES})
 
 
 def _measurement(char, raw):
@@ -172,6 +208,14 @@ def inspect_check(request, char_id):
                                     'positive' if m.passed else 'negative', '합격' if m.passed else '규격 이탈'))
 
 
+def _qty(raw):
+    try:
+        v = Decimal((raw or '').strip())
+    except InvalidOperation:
+        return Decimal(0)
+    return v if v.is_finite() and v >= 0 else Decimal(0)
+
+
 @staff_member_required
 def inspect_submit(request, lot_id, spec_id):
     """판정: 검사·측정값을 만들고 finalize()로 판정한다. 하나라도 거부되면 전부 되돌린다."""
@@ -192,6 +236,12 @@ def inspect_submit(request, lot_id, spec_id):
                 m.gauge = gauge if char.is_variable else None
                 m.save()
             insp.finalize()
+            nc = insp.nonconformance
+            if nc:  # 불합격으로 자동 등록된 부적합에 검사원이 고른 불량유형·수량을 채운다
+                nc.defect_type = request.POST.get('defect_type', '').strip()[:100]
+                nc.defect_qty = _qty(request.POST.get('defect_qty'))
+                nc.inspected_qty, nc.detected_by = lot.qty, request.user
+                nc.save()
     except ValidationError as e:
         error, insp = ' '.join(e.messages), None
     return render(request, 'qms/inspect_result.html', {'insp': insp, 'error': error, 'lot': lot})
