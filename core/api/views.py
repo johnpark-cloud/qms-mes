@@ -1,22 +1,18 @@
 from django.contrib.auth import authenticate, login, logout
 from django.utils.decorators import method_decorator
-from django.views.decorators.csrf import csrf_protect, ensure_csrf_cookie
+from django.views.decorators.csrf import ensure_csrf_cookie
+from rest_framework.authentication import SessionAuthentication
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from core.models import is_approver
-from core.nav import NAV, nav_url
+from core.nav import visible_nav
 
 
 def me_payload(user):
-    # 사이드바(core/context_processors.py shell)와 같은 규칙: 권한이 없는 항목은 빼고, 빈 묶음은 감춘다
-    nav = []
-    for name, items in NAV:
-        links = [{'label': label, 'href': nav_url(url)} for label, url, perm in items
-                 if perm is None or user.has_perm(perm)]
-        if links:
-            nav.append({'group': name, 'items': links})
+    nav = [{'group': name, 'items': [{'label': label, 'href': href} for label, href in items]}
+           for name, items in visible_nav(user)]  # 사이드바(core/context_processors.py)와 같은 필터
     return {'username': user.get_username(), 'name': user.get_full_name() or user.get_username(),
             'is_superuser': user.is_superuser, 'is_approver': is_approver(user),
             'groups': sorted(user.groups.values_list('name', flat=True)),
@@ -32,14 +28,15 @@ class CsrfView(APIView):
         return Response({})
 
 
-# 로그인은 익명 요청이라 SessionAuthentication이 CSRF를 검사하지 않는다. 직접 검사한다.
-@method_decorator(csrf_protect, name='dispatch')
 class LoginView(APIView):
     schema = None
     permission_classes = [AllowAny]
 
     def post(self, request):
-        user = authenticate(request, username=request.data.get('username'), password=request.data.get('password'))
+        # 로그인은 익명 요청이라 SessionAuthentication이 CSRF를 검사하지 않는다. 직접 검사한다 (실패는 DRF 403 JSON).
+        SessionAuthentication().enforce_csrf(request)
+        data = request.data if isinstance(request.data, dict) else {}
+        user = authenticate(request, username=data.get('username'), password=data.get('password'))
         if user is None or not user.is_staff:  # 틀린 비밀번호와 같은 응답 (계정 존재 여부를 알려 주지 않는다)
             return Response({'detail': '아이디 또는 비밀번호가 맞지 않습니다.'}, status=400)
         login(request, user)

@@ -1,10 +1,11 @@
-from django.contrib.auth.models import Group, User
+from django.contrib.auth.models import Group, Permission, User
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.db.models import ProtectedError
 from django.test import SimpleTestCase, TestCase
-from rest_framework.test import APIClient
+from rest_framework.test import APIClient, APIRequestFactory
 
-from core.api.exceptions import handler
+from core.api.exceptions import CSRF_MSG, handler
+from core.api.permissions import ModelPerms
 from core.models import Item
 from core.rules import LOCKED_MSG, Locked
 
@@ -59,13 +60,20 @@ class AuthApiTest(TestCase):
     def test_login_without_csrf_rejected(self):
         r = self.client.post('/api/auth/login/', {'username': 'qe', 'password': 'pw-qe-123'}, format='json')
         self.assertEqual(r.status_code, 403)
+        self.assertIn('detail', r.json())
+        self.assertEqual(r.json()['detail'], CSRF_MSG)
         self.assertEqual(self.client.get('/api/auth/me/').status_code, 403)
+
+    def test_login_non_dict_body_is_400(self):
+        r = self._post('/api/auth/login/', [])
+        self.assertEqual(r.status_code, 400)
+        self.assertEqual(r.json()['detail'], '아이디 또는 비밀번호가 맞지 않습니다.')
 
     def test_post_without_csrf_rejected(self):
         self.client.force_login(self.qe)
         r = self.client.post('/api/auth/logout/')
         self.assertEqual(r.status_code, 403)
-        self.assertIn('detail', r.json())
+        self.assertEqual(r.json()['detail'], CSRF_MSG)
 
     def test_logout(self):
         self._post('/api/auth/login/', {'username': 'qe', 'password': 'pw-qe-123'})
@@ -121,3 +129,32 @@ class ProtectedErrorHandlerTest(TestCase):
         self.assertEqual(r.status_code, 409)
         self.assertEqual(r.data['blockers'], [f'{Item._meta.verbose_name}: {item}'])
         self.assertTrue(r.data['detail'].startswith('먼저 지워야 할 기록: '))
+
+
+class ModelPermsTest(TestCase):
+    class FakeView:
+        queryset = Item.objects.all()
+
+    def _allowed(self, user, method):
+        request = APIRequestFactory().generic(method, '/x/')
+        request.user = user
+        return ModelPerms().has_permission(request, self.FakeView())
+
+    def _user(self, name, perm=None, **kw):
+        user = User.objects.create_user(name, password='pw-x-123', **kw)
+        if perm:
+            user.user_permissions.add(Permission.objects.get(content_type__app_label='core', codename=perm))
+        return user
+
+    def test_get_needs_view_perm(self):
+        self.assertFalse(self._allowed(self._user('a', is_staff=True), 'GET'))
+        self.assertTrue(self._allowed(self._user('b', 'view_item', is_staff=True), 'GET'))
+
+    def test_non_staff_with_perm_rejected(self):
+        self.assertFalse(self._allowed(self._user('c', 'view_item'), 'GET'))
+
+    def test_delete_superuser_only(self):
+        staff = self._user('d', 'delete_item', is_staff=True)
+        self.assertFalse(self._allowed(staff, 'DELETE'))
+        root = User.objects.create_superuser('root', password='pw-root-123')
+        self.assertTrue(self._allowed(root, 'DELETE'))

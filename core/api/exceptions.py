@@ -1,9 +1,12 @@
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.db.models import ProtectedError
+from rest_framework.exceptions import PermissionDenied as DrfPermissionDenied
 from rest_framework.response import Response
 from rest_framework.views import exception_handler
 
 from core.rules import LOCKED_MSG, Locked
+
+CSRF_MSG = '보안 토큰이 없거나 만료되었습니다. 새로고침 후 다시 시도하세요.'
 
 
 def handler(exc, context):
@@ -18,4 +21,6 @@ def handler(exc, context):
     if isinstance(exc, ProtectedError):
         blockers = [f'{o._meta.verbose_name}: {o}' for o in exc.protected_objects]
         return Response({'detail': '먼저 지워야 할 기록: ' + ', '.join(blockers), 'blockers': blockers}, status=409)
+    if isinstance(exc, DrfPermissionDenied) and str(exc.detail).startswith('CSRF Failed'):
+        return Response({'detail': CSRF_MSG}, status=403)
     return exception_handler(exc, context)

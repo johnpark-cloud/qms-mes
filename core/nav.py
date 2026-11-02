@@ -11,6 +11,16 @@ def nav_url(name):
     return reverse(name) + (f'?{query}' if query else '')
 
 
+def visible_nav(user):
+    """사이드바와 me API가 함께 쓴다: 권한이 있는 항목만 남기고 빈 묶음은 뺀다. → [(묶음명, [(라벨, 주소)])]"""
+    groups = []
+    for name, items in NAV:
+        links = [(label, nav_url(url)) for label, url, perm in items if perm is None or user.has_perm(perm)]
+        if links:
+            groups.append((name, links))
+    return groups
+
+
 def _inspections(kind):
     return f'admin:qms_inspection_changelist?spec__inspection_type__exact={kind}'
 
