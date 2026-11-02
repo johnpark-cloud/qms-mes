@@ -10,6 +10,11 @@
   <a class="button ghost" href="{% url 'suppliers' %}?months={{ months }}">협력사 성적표</a>
 </form>
 
+{% if not show.quality and not show.yield %}
+<section class="card">{% include "admin/empty_state.html" with message="소속 부서에 해당하는 KPI가 없습니다." %}</section>
+{% endif %}
+
+{% if show.quality %}
 {% with cur=rows|last %}
 <div class="tiles">
   <div class="tile"><span><span class="tile__title">고객 PPM</span><br><span class="tile__sub">{{ cur.month|date:"Y-m" }}</span></span>
@@ -46,8 +51,10 @@
   <p class="help">고객 PPM = 클레임 불량 수량 ÷ 출하 수량 × 1,000,000 · 직행률 = LOT·검사구분별 첫 판정이 합격인 비율 ·
     8D 봉쇄 기한 준수 = D3가 고객사별 기한 안에 처음 기록된 비율 · 실패비용 = 부적합에 입력한 비용 합계</p>
 </section>
+{% endif %}
 
 <div class="cards">
+  {% if show.yield %}
   <section class="card">
     <h2>공정별 수율 <span class="count">작업 실적, 기간 전체</span></h2>
     <table>
@@ -61,7 +68,9 @@
       </tbody>
     </table>
   </section>
+  {% endif %}
 
+  {% if show.quality %}
   <section class="card">
     <h2>불량유형 파레토 <span class="count">기간 전체</span></h2>
     <table>
@@ -80,5 +89,6 @@
       </tbody>
     </table>
   </section>
+  {% endif %}
 </div>
 {% endblock %}

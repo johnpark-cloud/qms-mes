@@ -686,6 +686,32 @@ class QmsTest(TestCase):
             self.assertEqual(got, codes, user)
         self.assertEqual([WIDGETS['todo_lists'].allowed(u) for u in (plain, clerk, eng)], [False, True, True])
 
+    def test_kpi_by_department(self):
+        from django.contrib.auth.models import Permission
+        from .widgets import WIDGETS
+        eng = User.objects.create_user('eng3', is_staff=True)
+        eng.groups.add(Group.objects.get(name='품질엔지니어'))
+        clerk = User.objects.create_user('clerk3', is_staff=True)
+        clerk.groups.add(Group.objects.get(name='검사원'))
+        prod = User.objects.create_user('prod', is_staff=True)  # 생산 부서 가정: 클레임 보기 권한만 따로 받은 사용자
+        prod.groups.add(Group.objects.create(name='생산팀'))
+        prod.user_permissions.add(Permission.objects.get(codename='view_customerclaim'))
+        keys = ('kpi_ppm', 'kpi_fpy', 'kpi_yield')
+        with mock.patch.dict(kpi.DEPARTMENTS, {'생산': ('생산팀',)}):
+            for user, want in ((eng, [True] * 3), (clerk, [False] * 3), (prod, [False, False, True]), (self.lead, [True] * 3)):
+                self.assertEqual([WIDGETS[k].allowed(user) for k in keys], want, user)
+            self.client.force_login(prod)
+            r = self.client.get('/kpi/')
+            self.assertContains(r, '공정별 수율')
+            self.assertNotContains(r, '월별 추이')
+            self.assertNotContains(r, '불량유형 파레토')
+            self.client.force_login(self.lead)  # 품질팀장은 모든 부서 KPI
+            r = self.client.get('/kpi/')
+            self.assertContains(r, '월별 추이')
+            self.assertContains(r, '공정별 수율')
+        self.client.force_login(prod)  # 생산 부서가 설정에 없으면 볼 KPI가 없다
+        self.assertContains(self.client.get('/kpi/'), '소속 부서에 해당하는 KPI가 없습니다.')
+
     # 화면 · 승인 서명
     def test_approve_requires_password(self):
         draft = InspectionSpec.objects.create(item=self.cell_item, inspection_type=InspectionSpec.OUTGOING)

@@ -6,9 +6,22 @@ from decimal import Decimal
 from django.db.models import Count, Sum
 from django.utils import timezone
 
-from core.models import Lot, Nonconformance, Shipment, WorkResult
+from core.models import Lot, Nonconformance, Shipment, WorkResult, is_approver
 
 from .models import CustomerClaim, Inspection, InspectionSpec, Scar
+
+# 부서 = 역할 그룹 묶음. 부서를 늘릴 때 여기에 그룹을 더한다(예: '생산': ('생산팀',)).
+DEPARTMENTS = {'품질': ('품질엔지니어', '품질팀장', '검사원')}
+# KPI 영역 → 볼 수 있는 부서. quality = PPM·직행률·8D·실패비용·불량유형 파레토, yield = 공정별 수율
+KPI_DEPARTMENTS = {'quality': ('품질',), 'yield': ('품질', '생산')}
+
+
+def can_see(user, area):
+    """소속 부서의 KPI만 본다. 품질팀장·시스템 관리자는 모든 부서 KPI를 본다(작은 조직은 타부서 품질 업무도 품질이 맡는다)."""
+    if is_approver(user):
+        return True
+    groups = {g for dept in KPI_DEPARTMENTS[area] for g in DEPARTMENTS.get(dept, ())}
+    return user.groups.filter(name__in=groups).exists()
 
 
 def month_starts(months, today=None):

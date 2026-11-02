@@ -105,6 +105,7 @@
 | 인쇄·승인·삭제 요청 경로는 개인 자료와 계정·세션 등 시스템 기록(`personal`, `auth`, `admin`, `sessions`, `contenttypes`)을 열지 않는다. | `core/views.py` `_get_record` |
 | 엑셀 양식 출력은 읽기 전용 메서드만 호출한다. 개인·인증 앱(`PRIVATE_APPS`)은 양식 대상과 심사 증적·PPAP 요소의 기록 종류에서 제외하고, 값을 따라가다 그 앱 기록에 닿으면 칸을 비운다. | `qms/models.py` `PRIVATE_APPS`, `ExcelTemplate.fill`, `report_safe` |
 | 품질 KPI(실패비용 포함)는 `qms.view_customerclaim`, 협력사 성적표는 `qms.view_scar`, SPC 관리도는 `qms.view_measurement`, 내 할 일 목록 위젯은 `core.view_nonconformance` 권한이 있어야 본다. 검사원은 KPI·협력사 화면을 볼 수 없다. | `qms/views.py`, `qms/widgets.py`, `core/nav.py` |
+| KPI는 소속 부서 것만 본다(`/kpi/` 화면과 내 할 일 KPI 위젯 모두). 부서는 역할 그룹 묶음이고 지금은 `품질`(품질엔지니어·품질팀장·검사원)뿐이다. PPM·직행률·8D·실패비용·불량유형 파레토는 품질, 공정 수율은 품질·생산 부서 KPI다. 품질팀장·시스템 관리자는 모든 부서 KPI를 본다. KPI 위젯은 `/kpi/`와 같은 `qms.view_customerclaim` 권한도 있어야 보인다. 부서를 늘리려면 `DEPARTMENTS`에 그룹을 더한다. | `qms/kpi.py` `DEPARTMENTS`·`KPI_DEPARTMENTS`·`can_see`, `qms/views.py` `kpi_view`, `qms/widgets.py` `kpi_allowed` |
 
 ## 11. 이력
 

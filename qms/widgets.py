@@ -30,6 +30,11 @@ def everyone(user):
     return True
 
 
+def kpi_allowed(area):
+    """KPI 위젯: /kpi/ 화면 권한(클레임 보기)이 있고 소속 부서의 KPI일 때만 (qms.kpi.can_see)."""
+    return lambda user: user.has_perm('qms.view_customerclaim') and kpi.can_see(user, area)
+
+
 def tile(count, sub, href, bad='critical', rows=None, more=None):
     """숫자 타일 문맥. href는 URL 이름 또는 '#앵커'. 넓게 보면 rows(request, d)의 앞 몇 줄과 '전체 보기'(more 또는 href)를 붙인다."""
     def context(request, d, size):
@@ -181,9 +186,9 @@ WIDGETS = {w.key: w for w in [
            lambda u: u.has_perm('core.view_nonconformance')),
     Widget('spc_alarms', 'SPC 경보', 'qms/widgets/spc_alarms.html', lambda request, d, size: {}, everyone),
     Widget('audits', '내부심사', 'qms/widgets/audits.html', lambda request, d, size: {}, everyone),
-    Widget('kpi_ppm', '고객 PPM', TILE, kpi_tile('ppm', '{:,.0f}', '이번 달 · 클레임 수량 기준'), everyone),
-    Widget('kpi_fpy', '초도 합격률', TILE, kpi_tile('fpy', '{:.1f}%', '이번 달 · 첫 판정 합격'), everyone),
-    Widget('kpi_yield', '공정 수율', 'qms/widgets/kpi_yield.html', yield_context, everyone),
+    Widget('kpi_ppm', '고객 PPM', TILE, kpi_tile('ppm', '{:,.0f}', '이번 달 · 클레임 수량 기준'), kpi_allowed('quality')),
+    Widget('kpi_fpy', '초도 합격률', TILE, kpi_tile('fpy', '{:.1f}%', '이번 달 · 첫 판정 합격'), kpi_allowed('quality')),
+    Widget('kpi_yield', '공정 수율', 'qms/widgets/kpi_yield.html', yield_context, kpi_allowed('yield')),
     Widget('leave', '연차 잔여', TILE, leave_context, everyone),
 ]}
 

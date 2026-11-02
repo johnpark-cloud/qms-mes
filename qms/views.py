@@ -220,15 +220,17 @@ def _need(request, perm):
 
 @staff_member_required
 def kpi_view(request):
+    # shortcut: 화면 권한이 클레임 보기 하나라 수율만 볼 부서도 이 권한이 필요하다, 생산 부서를 추가할 때 영역별 권한으로 나눈다
     _need(request, 'qms.view_customerclaim')  # PPM·COPQ는 클레임·비용 자료라 검사원에게는 보이지 않는다
     months = _months(request)
-    rows = kpi.monthly(months)
+    show = {area: kpi.can_see(request.user, area) for area in kpi.KPI_DEPARTMENTS}  # 소속 부서 KPI만
+    rows, pareto = (kpi.monthly(months), kpi.pareto(months)) if show['quality'] else ([], [])
     for key in ('ppm', 'copq'):  # 막대 길이(%)는 기간 내 최댓값 기준
         top = max((float(r[key] or 0) for r in rows), default=0) or 1
         for r in rows:
             r[f'{key}_bar'] = float(r[key] or 0) / top * 100
-    return render(request, 'qms/kpi.html', {'title': '품질 KPI', 'months': months, 'rows': rows,
-                                             'pareto': kpi.pareto(months), 'yields': kpi.process_yield(months)})
+    return render(request, 'qms/kpi.html', {'title': '품질 KPI', 'months': months, 'rows': rows, 'show': show,
+                                             'pareto': pareto, 'yields': kpi.process_yield(months) if show['yield'] else []})
 
 
 @staff_member_required
