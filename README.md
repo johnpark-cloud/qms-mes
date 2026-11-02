@@ -27,6 +27,8 @@ http://127.0.0.1:8000/ → **내 할 일** 화면이 열립니다.
 
 | 화면 | 주소 |
 | --- | --- |
+| 새 화면(React) 내 할 일 · 위젯 추가·빼기·크기 바꾸기 | /app/todo |
+| 새 화면(React) 공장 종합현황 | /app/overview |
 | 내 할 일 (8D·SCAR 기한, 열린 부적합, 승인 대기, 교정 임박, 초품 미확인, SPC 경보) | /todo/ |
 | 공장 종합현황 (작업지시 진행, 계획 대비 실적, 수율, 검사 불합격, 보류 LOT, 열린 부적합, CAPA, 교정, SPC 경보, 협력사) | /overview/ |
 | 검사 입력 (검사원용 큰 화면, 바코드 스캔) | /inspect/ |
@@ -40,6 +42,23 @@ http://127.0.0.1:8000/ → **내 할 일** 화면이 열립니다.
 | 미분류 현장 메모 | /memo/inbox/ |
 | 내 연차·급여 (본인만) | /me/ |
 | SPC 관리도 | 검사기준 화면의 검사항목 옆 "관리도" 링크 |
+
+### 새 화면 `/app/` (React, 시범)
+
+`/app/`은 React로 만든 새 화면입니다. 지금은 **내 할 일**(`/app/todo`)과 **공장 종합현황**(`/app/overview`)만 옮겨 두었고, 기존 `/todo/`·`/overview/`는 그대로 있습니다. 로그인은 기존과 같은 계정을 쓰며, 카드나 줄을 누르면 기존 화면으로 이동합니다. 설계와 단계는 `docs/architecture-migration-plan.md`에 있습니다.
+
+운영 PC에서는 아무것도 더 할 일이 없습니다. 빌드된 파일(`frontend/dist/`)이 저장소에 들어 있어서 `서버시작.bat`이나 `scripts\serve.ps1`로 켜면 그대로 열립니다. **운영 PC에서는 Node.js도 빌드도 필요 없습니다.**
+
+화면을 고치는 개발 PC에서만 Node.js가 필요합니다.
+
+```powershell
+cd frontend
+npm ci            # 처음 한 번 (패키지 설치)
+npm run dev       # 개발 서버: http://localhost:5173/app/ (Django는 127.0.0.1:8000에서 따로 켜 둡니다)
+npm run build     # 결과를 frontend\dist\에 만듭니다. 화면을 고쳤으면 이 폴더도 함께 커밋합니다
+```
+
+개발 서버 주소는 `127.0.0.1`이 아니라 `localhost`로 엽니다.
 
 ## 사내망 서비스 (팀 공유)
 
@@ -208,6 +227,7 @@ RAW-1,수입검사,외관,OK
 ```powershell
 .\.venv\Scripts\python manage.py test             # 단위 테스트 (core·qms·personal)
 .\.venv\Scripts\python scripts\e2e_check.py      # 실제 서버를 띄워 화면 흐름 76개 점검 (임시 DB 사용)
+python scripts\e2e_browser.py                    # 시스템 Python의 Playwright로 /app/ 화면을 브라우저로 점검 (임시 DB 사용)
 ```
 
 검증 절차와 완료 기준은 `docs/testing.md`에 있습니다.
