@@ -13,6 +13,8 @@ urlpatterns = [
     path('', RedirectView.as_view(url='/todo/')),
     path('admin/', admin.site.urls),
     path('api/', include('core.api.urls')),
+    path('app/', core_views.spa),
+    re_path(r'^app/(?P<rest>.*)$', core_views.spa),
     path('me/', personal_views.me, name='me'),
     path('me/payslip/<int:pk>/file/', personal_views.payslip_file, name='payslip_file'),
     path('todo/', qms_views.todo, name='todo'),

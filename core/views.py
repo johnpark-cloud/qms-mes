@@ -45,6 +45,14 @@ def brand_logo(request):
     return FileResponse(open(path, 'rb'))
 
 
+def spa(request, rest=''):
+    # 데이터를 담지 않는 정적 문서이고 로그인 화면도 이 문서가 그려서 인증 없이 연다. 데이터는 /api/ 가 권한을 검사한다.
+    index = settings.BASE_DIR / 'frontend' / 'dist' / 'index.html'
+    if not index.is_file():
+        raise Http404
+    return HttpResponse(index.read_bytes(), content_type='text/html; charset=utf-8')
+
+
 @staff_member_required
 def trace(request):
     if not request.user.has_perm('core.view_lot'):

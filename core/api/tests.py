@@ -158,3 +158,11 @@ class ModelPermsTest(TestCase):
         self.assertFalse(self._allowed(staff, 'DELETE'))
         root = User.objects.create_superuser('root', password='pw-root-123')
         self.assertTrue(self._allowed(root, 'DELETE'))
+
+
+class SpaTest(SimpleTestCase):
+    def test_app_serves_index(self):
+        r = self.client.get('/app/overview')
+        self.assertEqual(r.status_code, 200)
+        self.assertContains(r, '<div id="root">')
+        self.assertContains(r, '/static/app/assets/')

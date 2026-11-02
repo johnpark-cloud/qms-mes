@@ -157,6 +157,7 @@ USE_TZ = True
 # https://docs.djangoproject.com/en/6.1/howto/static-files/
 
 STATIC_URL = 'static/'
+STATICFILES_DIRS = [('app', BASE_DIR / 'frontend' / 'dist')]  # React 앱 빌드 결과(/static/app/), 커밋한다
 STATIC_ROOT = DATA_DIR / 'static'  # collectstatic 결과 (scripts/serve.ps1)
 STATIC_ROOT.mkdir(exist_ok=True)
 
