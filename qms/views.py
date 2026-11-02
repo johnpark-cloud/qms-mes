@@ -21,16 +21,15 @@ from django.utils.html import format_html
 from django.utils.http import content_disposition_header
 from django.views.decorators.http import require_POST
 
-from core.models import Item, Lot, Nonconformance, is_approver
+from core.models import Item, Lot, Nonconformance
 from core.views import _get_record
 
 from . import kpi, spc
-from .due import due_items
 from .memo import ATTACHABLE, TARGETS, MemoForm, box_context, resolve_target, target_url, todays_audit
-from .models import Capa, Characteristic, DashboardLayout, ExcelTemplate, Gauge, Inspection, InspectionSpec, Memo, MemoPhoto
+from .models import Capa, Characteristic, ExcelTemplate, Gauge, Inspection, InspectionSpec, Memo, MemoPhoto
 from .overview import sections as overview_sections
 from .rules import RECEIVE_MSG, measurement, receive_lot, submit_inspection
-from .widgets import COLS, ROWS, SIZES, WIDGETS, layout_for
+from .widgets import WIDGETS, layout_for, save_layout, todo_items, valid_layout
 
 
 @staff_member_required
@@ -47,9 +46,7 @@ def excel_report(request, template_id, pk):
 @staff_member_required
 def todo(request):
     """내 할 일: 사용자별 위젯 배치(qms.widgets). 계산은 qms.due 한 번을 위젯이 나눠 쓴다."""
-    d = due_items(approver=is_approver(request.user), user=request.user)
-    d['claims_overdue'] = sum(c.overdue for c in d['claims'])
-    d['capas_late'] = sum(c.status == '기한 초과' for c in d['capas'])
+    d = todo_items(request.user)
     widgets = []
     for w in layout_for(request.user):
         widget = WIDGETS[w['key']]
@@ -77,17 +74,9 @@ def dashboard_save(request):
         items = json.loads(request.body)
     except ValueError:
         return HttpResponseBadRequest('배치 형식이 올바르지 않습니다.')
-    ok = isinstance(items, list) and all(
-        isinstance(w, dict) and isinstance(w.get('key'), str) and w['key'] in WIDGETS
-        and WIDGETS[w['key']].allowed(request.user) and w.get('size') in SIZES
-        and all(k not in w or (type(w[k]) is int and 0 <= w[k] < n) for k, n in (('x', COLS), ('y', ROWS))) for w in items)
-    if not ok or len({w['key'] for w in items}) != len(items):
+    if not valid_layout(request.user, items):
         return HttpResponseBadRequest('저장할 수 없는 위젯 배치입니다.')
-    if items:
-        DashboardLayout.objects.update_or_create(user=request.user, defaults={
-            'widgets': [{'key': w['key'], 'size': w['size'], **{k: w[k] for k in ('x', 'y') if k in w}} for w in items]})
-    else:
-        DashboardLayout.objects.filter(user=request.user).delete()
+    save_layout(request.user, items)
     return JsonResponse({'ok': True})
 
 

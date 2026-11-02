@@ -10,6 +10,7 @@ from personal.leave import balance
 from personal.models import LeaveUse
 
 from . import kpi
+from .due import due_items
 from .models import DashboardLayout, Memo
 
 SIZES = ('normal', 'wide')
@@ -191,6 +192,105 @@ WIDGETS = {w.key: w for w in [
     Widget('kpi_yield', '공정 수율', 'qms/widgets/kpi_yield.html', yield_context, kpi_allowed('yield')),
     Widget('leave', '연차 잔여', TILE, leave_context, everyone),
 ]}
+
+
+def todo_items(user):
+    """내 할 일 화면과 API가 함께 쓰는 due_items 묶음 (위젯이 나눠 쓰는 합계 포함)."""
+    d = due_items(approver=is_approver(user), user=user)
+    d['claims_overdue'] = sum(c.overdue for c in d['claims'])
+    d['capas_late'] = sum(c.status == '기한 초과' for c in d['capas'])
+    return d
+
+
+# 전용 템플릿 위젯의 JSON 데이터. 템플릿이 화면에 보이는 값을 같은 이름의 키로 담고, 링크는 템플릿이 쓰는 주소 그대로다.
+def _lines(items, label, href, **fields):
+    return [{'label': label(o), 'href': href(o), **{k: f(o) for k, f in fields.items()}} for o in items]
+
+
+def _local(dt):
+    return timezone.localtime(dt)
+
+
+def todo_lists_data(ctx, d, size):
+    if size != 'wide':
+        return {'summary': [{'id': i, 'name': name, 'count': n} for i, name, n in ctx['summary']], 'total': ctx['total']}
+    pend = [('검사기준', 'pending_specs', lambda o: reverse('approve', args=['qms', 'inspectionspec', o.pk])),
+            ('문서', 'pending_docs', lambda o: reverse('approve', args=['qms', 'documentrevision', o.pk])),
+            ('관리계획서', 'pending_plans', lambda o: reverse('approve', args=['qms', 'controlplan', o.pk])),
+            ('4M 변경', 'pending_changes', lambda o: reverse('approve', args=['qms', 'changerequest', o.pk])),
+            ('PSW', 'pending_ppaps', lambda o: change('qms_ppapsubmission', o))]
+    return {
+        'claims': _lines(d['claims'], str, lambda c: change('qms_customerclaim', c), lot=lambda c: str(c.lot),
+                         current_step=lambda c: c.current_step, due_label=lambda c: c.due_label, due=lambda c: _local(c.due),
+                         overdue=lambda c: c.overdue),
+        'open_ncs': _lines(d['open_ncs'], str, lambda n: change('core_nonconformance', n), description=lambda n: n.description,
+                           detected_at=lambda n: _local(n.detected_at)),
+        'capas': _lines(d['capas'], str, lambda c: change('qms_capa', c), owner=lambda c: str(c.owner), due_date=lambda c: c.due_date,
+                        status=lambda c: c.status, tone=lambda c: capa_tone(c.status)),
+        'scars': _lines(d['scars'], lambda s: s.number, lambda s: change('qms_scar', s), supplier=lambda s: str(s.supplier),
+                        response_due=lambda s: s.response_due, overdue=lambda s: s.response_due < d['today']),
+        'nc_incomplete': _lines(d['nc_incomplete'], str, lambda n: change('core_nonconformance', n),
+                                missing_fields=lambda n: n.missing_fields()),
+        'nc_mail_pending': _lines(d['nc_mail_pending'], str, lambda n: reverse('nc_mail', args=[n.pk]),
+                                  approved_at=lambda n: _local(n.approved_at)),
+        'nc_notify_pending': _lines(d['nc_notify_pending'], str, lambda n: change('core_nonconformance', n)),
+        'edit_requests': _lines(d['edit_requests'], str, lambda r: reverse('edit_request_decide', args=[r.pk]),
+                                requested_by=lambda r: str(r.requested_by), requested_at=lambda r: _local(r.requested_at)),
+        'my_rejected': [{'label': str(r), 'reject_reason': r.reject_reason} for r in d['my_rejected']],
+        'memos_unsorted': d['memos_unsorted'],
+        'memo_inbox': reverse('memo_inbox'),
+        'first_articles': _lines(d['first_articles'], str, lambda c: change('qms_changerequest', c),
+                                 effective_at=lambda c: _local(c.effective_at)),
+        'gauges': _lines(d['gauges'], str, lambda g: change('qms_gauge', g), next_due=lambda g: g.next_due,
+                         overdue=lambda g: g.next_due < d['today']),
+        'ppaps': _lines(d['ppaps'], str, lambda p: change('qms_ppapsubmission', p), due_date=lambda p: p.due_date,
+                        overdue=lambda p: p.due_date < d['today']),
+        'approvals': [{'kind': kind, 'label': str(o), 'href': href(o)} for kind, key, href in pend for o in d[key]],
+    }
+
+
+def spc_alarms_data(ctx, d, size):
+    return {'spc_alarms': [{'label': f"{a['char'].spec.item.code} {a['char'].name}", 'href': reverse('spc', args=[a['char'].pk]),
+                            'lot': str(a['lot']), 'alarms': [str(x) for x in a['alarms']]} for a in d['spc_alarms']]}
+
+
+def audits_data(ctx, d, size):
+    return {'audits': _lines(d['audits'], lambda a: a.name, lambda a: change('qms_internalaudit', a),
+                             planned_date=lambda a: a.planned_date),
+            'findings': [{'label': str(f), 'href': change('qms_internalaudit', f.audit)} for f in d['findings']]}
+
+
+def kpi_yield_data(ctx, d, size):
+    lowest = ctx['lowest']
+    return {'yields': [{'process': y['process'], 'yield': y['yield']} for y in ctx['yields']], 'overall': ctx['overall'],
+            'lowest': {'process': lowest['process'], 'yield': lowest['yield']} if lowest else None, 'href': reverse('kpi')}
+
+
+DATA = {'todo_lists': todo_lists_data, 'spc_alarms': spc_alarms_data, 'audits': audits_data, 'kpi_yield': kpi_yield_data}
+
+
+def widget_data(widget, request, d, size):
+    """위젯 하나의 JSON 데이터. 숫자 타일은 context 결과 그대로, 전용 템플릿 위젯은 DATA의 변환을 거친다."""
+    ctx = widget.context(request, d, size)
+    return DATA[widget.key](ctx, d, size) if widget.key in DATA else ctx
+
+
+def valid_layout(user, items):
+    """저장할 배치 [{key, size, x?, y?}]가 올바른가: 있는 위젯·내게 허용된 것·크기·칸 범위·중복 없음."""
+    return isinstance(items, list) and all(
+        isinstance(w, dict) and isinstance(w.get('key'), str) and w['key'] in WIDGETS
+        and WIDGETS[w['key']].allowed(user) and w.get('size') in SIZES
+        and all(k not in w or (type(w[k]) is int and 0 <= w[k] < n) for k, n in (('x', COLS), ('y', ROWS))) for w in items
+    ) and len({w['key'] for w in items}) == len(items)
+
+
+def save_layout(user, items):
+    """valid_layout을 통과한 배치를 저장한다. 빈 배열이면 저장값을 지워 기본 배치로 돌아간다."""
+    if items:
+        DashboardLayout.objects.update_or_create(user=user, defaults={
+            'widgets': [{'key': w['key'], 'size': w['size'], **{k: w[k] for k in ('x', 'y') if k in w}} for w in items]})
+    else:
+        DashboardLayout.objects.filter(user=user).delete()
 
 
 def span(size):
