@@ -27,14 +27,17 @@ def finish_edit(unlock):
 
 @transaction.atomic
 def save_with_lock(obj, user, children=()):
+    locked = bool(obj.pk) and is_locked(obj)
     unlock = begin_edit(obj, user)
-    # 폼이 없으므로 admin의 '폼 변경 없음' 판정 대신, 잠기고 해제되지 않은 저장은 항상 막는다
-    if obj.pk and is_locked(obj) and not obj._edit_unlocked:
-        raise Locked(LOCKED_MSG)
-    obj.save()
-    for child in children:
-        child._edit_unlocked = obj._edit_unlocked
-        child.save()
+    try:  # 승인 후에도 어떤 칸이 열려 있는지는 모델의 save 가드가 정한다
+        obj.save()
+        for child in children:
+            child._edit_unlocked = obj._edit_unlocked
+            child.save()
+    except ValidationError as e:
+        if locked and not obj._edit_unlocked:
+            raise Locked(LOCKED_MSG) from e
+        raise
     finish_edit(unlock)
 
 

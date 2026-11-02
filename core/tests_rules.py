@@ -1,7 +1,8 @@
 from decimal import Decimal
+from unittest import mock
 
 from django.contrib.auth.models import Group, User
-from django.core.exceptions import PermissionDenied
+from django.core.exceptions import PermissionDenied, ValidationError
 from django.test import TestCase
 from django.utils import timezone
 
@@ -39,6 +40,19 @@ class LockRulesTest(TestCase):
         self.spec.note = '2차'
         with self.assertRaises(Locked):
             save_with_lock(self.spec, self.eng)
+
+    def test_child_failure_rolls_back_and_keeps_request(self):
+        req = EditRequest.objects.create(kind=EditRequest.EDIT, target=self.spec, object_repr='x', reason='r',
+                                         requested_by=self.eng, status=EditRequest.APPROVED)
+        ch = self.spec.characteristics.first()
+        self.spec.note = '롤백'
+        with mock.patch.object(Characteristic, 'save', side_effect=ValidationError('항목 오류')):
+            with self.assertRaises(ValidationError) as cm:
+                save_with_lock(self.spec, self.eng, children=[ch])
+        self.assertNotIsInstance(cm.exception, Locked)
+        req.refresh_from_db()
+        self.assertEqual(req.status, EditRequest.APPROVED)
+        self.assertEqual(InspectionSpec.objects.get(pk=self.spec.pk).note, '')
 
     def test_superuser_edits_locked(self):
         self.spec.note = '관리자'
