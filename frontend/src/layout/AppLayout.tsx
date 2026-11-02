@@ -1,6 +1,6 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Alert, Button, Layout, Menu, Spin } from 'antd'
-import { Link, Navigate, Outlet, useLocation } from 'react-router-dom'
+import { Navigate, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { fetchMe, logout } from '../api/auth'
 import { ApiError } from '../api/client'
 
@@ -10,6 +10,7 @@ const to = (href: string) => MOVED[href] ?? href
 
 export default function AppLayout() {
   const { pathname, search } = useLocation()
+  const navigate = useNavigate()
   const queryClient = useQueryClient()
   const me = useQuery({ queryKey: ['me'], queryFn: fetchMe })
 
@@ -24,10 +25,7 @@ export default function AppLayout() {
   const items = user.nav.map((g) => ({
     key: g.group,
     label: g.group,
-    children: g.items.map((i) => {
-      const href = to(i.href)
-      return { key: href, label: href.startsWith('/app/') ? <Link to={href.slice(4)}>{i.label}</Link> : <a href={href}>{i.label}</a> }
-    }),
+    children: g.items.map((i) => ({ key: to(i.href), label: i.label })),
   }))
   const selected = '/app' + pathname
   const open = user.nav.filter((g) => g.items.some((i) => to(i.href) === selected)).map((g) => g.group)
@@ -41,9 +39,14 @@ export default function AppLayout() {
         <a href="/todo/">기존 화면</a>
         <Button
           onClick={async () => {
-            await logout()
-            queryClient.clear()
-            location.href = '/app/login'
+            try {
+              await logout()
+            } catch {
+              // 세션이 이미 만료돼 403 이어도 로그인 화면으로 간다.
+            } finally {
+              queryClient.clear()
+              location.href = '/app/login'
+            }
           }}
         >
           로그아웃
@@ -51,7 +54,10 @@ export default function AppLayout() {
       </Layout.Header>
       <Layout>
         <Layout.Sider width={248} breakpoint="md" collapsedWidth={0} theme="light">
-          <Menu mode="inline" items={items} selectedKeys={[selected]} defaultOpenKeys={open.length ? open : [user.nav[0]?.group]} />
+          <Menu mode="inline" items={items} selectedKeys={[selected]}
+            // 항목 전체가 눌리도록 링크 대신 클릭으로 이동한다. 가운데 클릭·새 탭 열기는 포기한다(사내 업무 화면이라 필요 없다).
+            onClick={({ key }) => (key.startsWith('/app/') ? navigate(key.slice(4)) : (location.href = key))}
+            defaultOpenKeys={open.length ? open : [user.nav[0]?.group]} />
         </Layout.Sider>
         <Layout.Content style={{ padding: 24, minWidth: 0 }}>
           <Outlet />

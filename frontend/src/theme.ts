@@ -9,7 +9,7 @@ const light = {
   colorBgBase: '#ffffff', colorBgLayout: '#f5f6f7', colorBgContainer: '#ffffff',
   colorText: '#223548', colorTextSecondary: '#475e75', colorTextHeading: '#000000',
   colorBorder: '#eaecee', colorBorderSecondary: '#eaecee',
-  colorTextLightSolid: '#fff', colorSuccess: '#256f3a', colorWarning: '#a33f00', colorError: '#aa0808',
+  colorTextLightSolid: '#fff', shell: '#f5f6f7', nav: '#545454', selected: '#ebf8ff', colorSuccess: '#256f3a', colorWarning: '#a33f00', colorError: '#aa0808',
 }
 
 const dark = {
@@ -17,7 +17,7 @@ const dark = {
   colorBgBase: '#12171c', colorBgLayout: '#1d232a', colorBgContainer: '#12171c',
   colorText: '#eaecee', colorTextSecondary: '#a9b4be', colorTextHeading: '#ffffff',
   colorBorder: '#2d3540', colorBorderSecondary: '#2d3540',
-  colorTextLightSolid: '#0b1b2b', colorSuccess: '#6bd28c', colorWarning: '#ffab52', colorError: '#ff8a8a',
+  colorTextLightSolid: '#0b1b2b', shell: '#1d232a', nav: '#c4cbd2', selected: '#13304a', colorSuccess: '#6bd28c', colorWarning: '#ffab52', colorError: '#ff8a8a',
 }
 
 const query = window.matchMedia('(prefers-color-scheme: dark)')
@@ -30,15 +30,20 @@ export function useAppTheme(): ThemeConfig {
     return () => query.removeEventListener('change', on)
   }, [])
 
-  const token = isDark ? dark : light
+  const { shell, nav, selected, ...token } = isDark ? dark : light
   useEffect(() => {
     document.body.style.margin = '0'
     document.body.style.background = token.colorBgBase
     document.body.style.color = token.colorText
-  }, [token])
+  }, [isDark])
 
   return {
     algorithm: isDark ? antdTheme.darkAlgorithm : antdTheme.defaultAlgorithm,
     token: { ...token, fontFamily: FONT, borderRadius: 8 },
+    // antd 기본 상단 바·사이드바는 남색이라 fiori.css 의 셸 색(--f-shell, --f-nav)으로 덮는다.
+    components: {
+      Layout: { headerBg: shell, headerColor: nav, siderBg: shell, lightSiderBg: shell, triggerBg: shell, lightTriggerBg: shell, triggerColor: nav },
+      Menu: { itemBg: shell, subMenuItemBg: shell, itemColor: nav, itemSelectedBg: selected, itemSelectedColor: token.colorPrimary },
+    },
   }
 }
