@@ -42,15 +42,15 @@ function Panel({ title, note, children }: { title: string; note?: ReactNode; chi
 const SECTIONS: { title: string; note: string; always?: boolean; rows: (d: any) => Row[] }[] = [
   { title: '8D 기한 임박·초과', note: '2일 이내', always: true, rows: (d) => d.claims.map((c: any) => ({ label: c.label, href: c.href, meta: `${c.lot} · ${c.current_step} · ${c.due_label} ${md(c.due)} ${c.overdue ? '초과' : '임박'}`, tone: c.overdue ? 'negative' : 'critical' })) },
   { title: '열린 부적합', note: 'MRB 처분 대기', always: true, rows: (d) => d.open_ncs.map((n: any) => ({ label: n.label, href: n.href, meta: `${n.description.slice(0, 50)} · ${dayjs(n.detected_at).format('YYYY-MM-DD')}` })) },
-  { title: 'CAPA', note: '지연·임박·유효성 확인 대기', always: true, rows: (d) => d.capas.map((c: any) => ({ label: c.label, href: c.href, meta: c.status, tone: c.tone })) },
-  { title: 'SCAR 회신 기한', note: '2일 이내·초과', always: true, rows: (d) => d.scars.map((s: any) => ({ label: s.label, href: s.href, meta: s.overdue ? `${s.response_due} 초과` : s.response_due, tone: s.overdue ? 'negative' : null })) },
+  { title: 'CAPA', note: '지연·임박·유효성 확인 대기', always: true, rows: (d) => d.capas.map((c: any) => ({ label: c.label, href: c.href, meta: `${c.owner} · ${c.due_date} · ${c.status}`, tone: c.tone })) },
+  { title: 'SCAR 회신 기한', note: '2일 이내·초과', always: true, rows: (d) => d.scars.map((s: any) => ({ label: s.label, href: s.href, meta: `${s.supplier} · ${s.response_due}${s.overdue ? ' 초과' : ''}`, tone: s.overdue ? 'negative' : null })) },
   { title: '부적합 보완 필요', note: '필수 항목 미입력', rows: (d) => d.nc_incomplete.map((n: any) => ({ label: n.label, href: n.href, meta: n.missing_fields.join(', ') })) },
   { title: '메일 발송 대기', note: '승인 후 미발송', rows: (d) => d.nc_mail_pending.map((n: any) => ({ label: n.label, href: n.href, meta: `${dayjs(n.approved_at).format('YYYY-MM-DD')} 승인` })) },
   { title: '고객 통보 미처리', note: '통보 필요', rows: (d) => d.nc_notify_pending.map((n: any) => ({ label: n.label, href: n.href, meta: '통보 전', tone: 'critical' })) },
   { title: '삭제·수정 요청 대기', note: '관리자 처리', rows: (d) => d.edit_requests.map((r: any) => ({ label: r.label, href: r.href, meta: `${r.requested_by} · ${md(r.requested_at)}` })) },
   { title: '거절된 내 요청', note: '최근 7일', rows: (d) => d.my_rejected.map((r: any) => ({ label: r.label, meta: r.reject_reason })) },
   { title: '미분류 메모', note: '', rows: (d) => (d.memos_unsorted ? [{ label: '메모 수신함에서 분류하기', href: d.memo_inbox, meta: `${d.memos_unsorted}건` }] : []) },
-  { title: '4M 변경 초품 미확인', note: '출하 차단 중', rows: (d) => d.first_articles.map((c: any) => ({ label: c.label, href: c.href, meta: `적용 ${md(c.effective_at)}`, tone: 'negative' })) },
+  { title: '4M 변경 초품 미확인', note: '출하 차단 중', rows: (d) => d.first_articles.map((c: any) => ({ label: c.label, href: c.href, meta: `적용 ${dayjs(c.effective_at).format('YYYY-MM-DD HH:mm')}`, tone: 'negative' })) },
   { title: '계측기 교정', note: '14일 이내·초과', rows: (d) => d.gauges.map((g: any) => ({ label: g.label, href: g.href, meta: `${g.next_due} ${g.overdue ? '초과' : '임박'}`, tone: g.overdue ? 'negative' : 'critical' })) },
   { title: 'PPAP 제출 기한', note: '14일 이내', rows: (d) => d.ppaps.map((p: any) => ({ label: p.label, href: p.href, meta: p.overdue ? `${p.due_date} 초과` : p.due_date, tone: p.overdue ? 'negative' : null })) },
   { title: '승인 대기', note: '품질팀장 서명', rows: (d) => d.approvals.map((a: any) => ({ label: a.label, href: a.href, meta: a.kind })) },
@@ -132,9 +132,9 @@ export default function TodoPage() {
   })
 
   if (q.isPending) return <Spin />
-  if (q.isError) return <Alert type="error" title={q.error.message} showIcon />
+  if (!q.data) return <Alert type="error" title={q.error?.message} showIcon />
 
-  const { widgets, available } = q.data
+  const { widgets, available } = q.data  // 다시 불러오기가 실패해도 받아 둔 데이터는 그대로 보인다
   const current: Layout[] = widgets.map(({ key, size, x, y }) => ({ key, size, x, y }))
   const options = available.filter((a) => !widgets.some((w) => w.key === a.key)).map((a) => ({ value: a.key, label: a.title }))
   const error = save.error instanceof ApiError ? save.error.detail : save.error ? '저장하지 못했습니다.' : ''
@@ -155,12 +155,15 @@ export default function TodoPage() {
         <Button disabled={save.isPending} onClick={() => save.mutate([])}>기본 배치로</Button>
         <Button href="/overview/">공장 종합현황</Button>
       </div>
+      {q.isError && <Alert type="error" title={q.error.message} showIcon />}
       {error && <Alert type="error" title={error} showIcon />}
       <div style={{ display: 'grid', gap: 16, gridTemplateColumns: `repeat(${desktop ? 4 : 1}, minmax(0, 1fr))`, gridAutoRows: 'minmax(120px, auto)', opacity: save.isPending ? 0.6 : 1 }}>
         {widgets.map((w) => {
           const span = desktop && w.size === 'wide' ? 2 : 1
+          // 서버가 준 자리(x·y)를 쓴다. 좁은 1칸 배치에서는 쓰지 않는다.
+          const at = desktop && w.x != null && w.y != null ? { gridColumnStart: w.x + 1, gridRowStart: w.y + 1 } : {}
           return (
-            <div key={w.key} data-widget={w.key} style={{ gridColumn: `span ${span}`, gridRow: `span ${span}`, display: 'flex', flexDirection: 'column', gap: 4, minWidth: 0 }}>
+            <div key={w.key} data-widget={w.key} style={{ ...at, gridColumnEnd: `span ${span}`, gridRowEnd: `span ${span}`, display: 'flex', flexDirection: 'column', gap: 4, minWidth: 0 }}>
               <Space size={4} style={{ justifyContent: 'flex-end', color: token.colorTextSecondary }}>
                 <Button size="small" type="text" disabled={save.isPending} aria-label={`${w.title} 크기 바꾸기`}
                   onClick={() => save.mutate(current.map((c) => (c.key === w.key ? { ...c, size: w.size === 'wide' ? 'normal' : 'wide' } : c)))}>
