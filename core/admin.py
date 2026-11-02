@@ -19,8 +19,9 @@ admin.site.site_header = admin.site.site_title = 'QMS+MES'
 admin.site.index_title = '메뉴'
 _app_list = admin.site.get_app_list
 # 사이드바에 따로 두지 않는 목록이 전체 메뉴에서 들어갈 묶음
-INDEX_EXTRA = {'홈': ['qms.memo'], '심사': ['qms.audititem'], '문서·변경·교육': ['qms.documentrevision'],
-               '관리': ['core.importprofile', 'auth.group'], '개인': ['personal.leaveprofile', 'personal.leaveuse', 'personal.payslip']}
+INDEX_EXTRA = {'통합 업무 홈': ['qms.memo', 'personal.leaveprofile', 'personal.leaveuse', 'personal.payslip'],
+               '품질보증 및 개선': ['qms.documentrevision', 'qms.audititem'],
+               '기준정보 및 시스템 관리': ['core.importprofile', 'auth.group']}
 
 
 def grouped_app_list(request, app_label=None):
@@ -48,6 +49,24 @@ admin.site.get_app_list = grouped_app_list
 
 
 LOCKED_MSG = '잠긴 기록입니다. 수정 요청 후 승인받아야 수정할 수 있습니다.'
+RELATED_SHOWN = 5
+
+
+def related_panel(user, groups):
+    """상세 화면 '관련 기록' 칸. groups: [(제목, 쿼리셋, 목록 필터[, 표시 함수])]. 볼 권한이 없는 기록 종류는 빼고, 많으면 걸러진 목록으로 보낸다.
+    목록 필터는 관리 목록이 받는 한 단계 조건(lot__id__exact 등)만 쓴다. 두 단계 조건은 관리 화면이 막으므로 ''로 두고 건수만 보인다."""
+    out = []
+    for title, qs, query, *label in groups:
+        label = label[0] if label else str
+        opts = qs.model._meta
+        if not user.has_perm(f'{opts.app_label}.view_{opts.model_name}'):
+            continue
+        rows = list(qs[:RELATED_SHOWN + 1])
+        out.append({'title': title, 'count': qs.count() if len(rows) > RELATED_SHOWN else len(rows),
+                    'links': [(label(r), reverse(f'admin:{opts.app_label}_{opts.model_name}_change', args=[r.pk])) for r in rows[:RELATED_SHOWN]],
+                    'more': reverse(f'admin:{opts.app_label}_{opts.model_name}_changelist') + f'?{query}'
+                    if len(rows) > RELATED_SHOWN and query else ''})
+    return out
 
 
 class BaseAdmin(SimpleHistoryAdmin):
@@ -85,7 +104,14 @@ class BaseAdmin(SimpleHistoryAdmin):
     def render_change_form(self, request, context, add=False, change=False, form_url='', obj=None):
         context['request_links_enabled'] = self.request_links_enabled
         context['record_locked'] = obj is not None and is_locked(obj) and not can_edit_locked(obj, request.user)
+        if obj is not None and obj.pk:
+            context['related_lot'], groups = self.related(obj)
+            context['related'] = related_panel(request.user, groups)
         return super().render_change_form(request, context, add, change, form_url, obj)
+
+    def related(self, obj):
+        """상세 화면 '관련 기록': (LOT, [(제목, 쿼리셋, 목록 필터)]). LOT이 있으면 LOT 이력 조회 링크를 함께 보인다."""
+        return None, []
 
     def save_model(self, request, obj, form, change):
         unlock = change and edit_unlocked(obj, request.user)
@@ -253,6 +279,14 @@ class WorkOrderAdmin(BaseAdmin):
         p = obj.progress if obj.pk else None
         return '-' if p is None else f'{p:.0f}%'
 
+    def related(self, obj):
+        from qms.models import Inspection  # 검사는 qms 앱 기능
+        return None, [('LOT', obj.lots.all(), f'work_order__id__exact={obj.pk}'),
+                      ('작업 실적', obj.results.select_related('step__process'), f'work_order__id__exact={obj.pk}'),
+                      ('검사', Inspection.objects.filter(lot__work_order=obj).select_related('lot', 'spec'),
+                       ''),
+                      ('부적합', Nonconformance.objects.filter(lot__work_order=obj), '')]
+
 
 @admin.register(WorkResult)
 class WorkResultAdmin(BaseAdmin):
@@ -260,6 +294,10 @@ class WorkResultAdmin(BaseAdmin):
     list_filter = ['step__process']
     search_fields = ['work_order__number', 'lot__number']
     autocomplete_fields = ['work_order', 'lot']
+
+    def related(self, obj):
+        return obj.lot, [('작업지시', WorkOrder.objects.filter(pk=obj.work_order_id), ''),
+                         ('부적합', Nonconformance.objects.filter(lot_id=obj.lot_id), f'lot__id__exact={obj.lot_id}')]
 
 
 @admin.register(ImportProfile)
@@ -279,6 +317,7 @@ class ParentLinkInline(admin.TabularInline):
 class LotAdmin(BaseAdmin):
     list_display = ['number', 'item', 'work_order', 'qty', 'supplier', 'is_hold', 'is_gap', 'created_at']
     search_fields = ['number', 'item__code', 'supplier']
+    list_filter = ['item__item_type', 'supplier']
     autocomplete_fields = ['item', 'work_order']
     inlines = [ParentLinkInline]
 
@@ -289,6 +328,18 @@ class LotAdmin(BaseAdmin):
     @admin.display(boolean=True, description='계보 미등록')
     def is_gap(self, obj):
         return obj.lineage_gap
+
+    def related(self, obj):
+        from qms.models import CustomerClaim, Scar  # 클레임·SCAR는 qms 앱 기능
+        q = f'lot__id__exact={obj.pk}'
+        return obj, [('작업지시', WorkOrder.objects.filter(pk=obj.work_order_id), ''),
+                     ('검사', obj.inspections.select_related('spec').order_by('-inspected_at'), q,
+                      lambda i: f"{timezone.localtime(i.inspected_at):%m-%d %H:%M} {i.spec.get_inspection_type_display()} {i.get_result_display() or '판정 전'}"),
+                     ('부적합', obj.nonconformances.all(), q),
+                     ('보류', obj.holds.select_related('nonconformance'), q),
+                     ('출하', obj.shipments.all(), q),
+                     ('고객 클레임', CustomerClaim.objects.filter(lot=obj), q),
+                     ('SCAR', Scar.objects.filter(lot=obj), q)]
 
 
 class NonconformanceForm(forms.ModelForm):
@@ -390,6 +441,14 @@ class NonconformanceAdmin(ReportLinksMixin, BaseAdmin):
         from qms.similar import similar_html  # 재발 방지 검색은 qms 앱 기능
         return similar_html(obj) if obj.pk else '저장 후 표시됩니다.'
 
+    def related(self, obj):
+        from qms.models import CustomerClaim, Inspection, Scar  # 검사·클레임·SCAR는 qms 앱 기능
+        q = f'nonconformance__id__exact={obj.pk}'
+        return obj.lot, [('원 검사', Inspection.objects.filter(nonconformance=obj).select_related('lot', 'spec'), q),
+                         ('보류', obj.holds.select_related('lot'), q),
+                         ('고객 클레임', CustomerClaim.objects.filter(nonconformance=obj), q),
+                         ('SCAR', obj.scars.all(), q)]
+
     def get_form(self, request, obj=None, **kwargs):
         return type('Form', (super().get_form(request, obj, **kwargs),), {'user': request.user})
 
@@ -399,6 +458,10 @@ class HoldAdmin(BaseAdmin):
     list_display = ['lot', 'nonconformance', 'created_at', 'released_at']
     list_filter = [('released_at', admin.EmptyFieldListFilter)]
     request_links_enabled = False  # 보류는 부적합 삭제와 함께만 지워진다
+    search_fields = ['lot__number', 'nonconformance__number']
+
+    def related(self, obj):
+        return obj.lot, [('부적합', Nonconformance.objects.filter(pk=obj.nonconformance_id), '')]
 
     # 보류는 부적합 등록·처분으로만 생기고 풀린다
     def has_add_permission(self, request):
@@ -417,3 +480,6 @@ class ShipmentAdmin(ReportLinksMixin, BaseAdmin):
     search_fields = ['lot__number', 'customer']
     autocomplete_fields = ['lot']
     readonly_fields = ['report_links']  # 인쇄 = 출하성적서, 고객 엑셀 양식은 매핑 {"A10": "coa_rows"}
+
+    def related(self, obj):
+        return obj.lot, [('부적합', Nonconformance.objects.filter(lot_id=obj.lot_id), f'lot__id__exact={obj.lot_id}')]

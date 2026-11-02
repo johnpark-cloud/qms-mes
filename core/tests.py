@@ -140,16 +140,19 @@ class ShellTest(TestCase):
         self.client.force_login(User.objects.create_superuser('root'))
         item = Item.objects.create(code='C1', name='셀', item_type=Item.FINISHED)
         html = self.client.get(f'/admin/core/item/{item.pk}/change/').content.decode()
-        self.assertIn('data-group="기준정보" data-active open>', html)
-        self.assertIn('data-group="홈" open>', html)
-        self.assertIn('data-group="생산">', html)
+        self.assertIn('data-group="기준정보 및 시스템 관리" data-active open>', html)
+        self.assertIn('data-group="통합 업무 홈" open>', html)
+        self.assertIn('data-group="생산관리 (MES)">', html)
+        self.assertIn('<p class="page-head__where">기준정보 및 시스템 관리</p>', html)  # 페이지 머리의 현재 위치
 
     def test_admin_index_grouped_like_sidebar(self):
         self.client.force_login(User.objects.create_superuser('root'))
         html = self.client.get('/admin/').content.decode()
-        groups = ['기준정보', '생산', '부적합·조치', '고객·협력사', '심사']
-        self.assertEqual([g for g in groups if f'class="section">{g}<' in html], groups)
-        self.assertLess(html.index('class="section">기준정보<'), html.index('class="section">생산<'))
+        groups = ['통합 업무 홈', '생산관리 (MES)', '품질관리 (QMS)', '품질보증 및 개선', '고객 및 협력사', '분석 및 보고서',
+                  '기준정보 및 시스템 관리']
+        found = [g for g in groups if f'class="section">{g}<' in html]
+        self.assertEqual(found, groups)
+        self.assertEqual(sorted(found, key=lambda g: html.index(f'class="section">{g}<')), groups)  # 사이드바와 같은 순서
         self.assertNotIn('class="section">MES', html)
         self.assertNotIn('class="section">QMS', html)
         self.assertIn('문서 개정', html)  # 사이드바에 없는 목록도 전체 메뉴에는 보인다

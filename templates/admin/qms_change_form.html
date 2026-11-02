@@ -7,4 +7,17 @@
 {% if record_locked %}<li><a href="{% url 'edit_request' 'EDIT' opts.app_label opts.model_name original.pk %}">수정 요청</a></li>{% endif %}
 {% endif %}
 {% endblock %}
-{% block content %}{{ block.super }}{% if original.pk %}{% memo_box original %}{% endif %}{% endblock %}
+{% block content %}{{ block.super }}
+{% if related or related_lot %}
+<section class="card related" aria-labelledby="related-title">
+  <h2 id="related-title">관련 기록</h2>
+  {% if related_lot %}<p><a class="button ghost" href="{% url 'trace' %}?lot={{ related_lot.number|urlencode }}">LOT 이력 조회 · {{ related_lot.number }}</a></p>{% endif %}
+  {% if related %}<dl class="related__list">
+    {% for g in related %}
+    <dt>{{ g.title }} <span class="count">{{ g.count }}</span></dt>
+    <dd>{% for label, url in g.links %}<a href="{{ url }}">{{ label }}</a>{% if not forloop.last %} · {% endif %}{% empty %}<span class="related__none">없음</span>{% endfor %}{% if g.more %} · <a href="{{ g.more }}">전체 {{ g.count }}건 보기</a>{% endif %}</dd>
+    {% endfor %}
+  </dl>{% endif %}
+</section>
+{% endif %}
+{% if original.pk %}{% memo_box original %}{% endif %}{% endblock %}

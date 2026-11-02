@@ -12,6 +12,7 @@ from django.utils import timezone
 from django.utils.html import format_html, format_html_join
 
 from core.admin import ApprovalAdminMixin, BaseAdmin, ReportLinksMixin
+from core.models import Nonconformance
 from core.records import can_edit_locked
 
 from .models import (AuditChecklist, AuditFinding, AuditItem, Capa, ChangeRequest, Characteristic, ControlPlan,
@@ -111,6 +112,10 @@ class InspectionAdmin(ReportLinksMixin, BaseAdmin):
 
     def has_change_permission(self, request, obj=None):
         return not (obj and obj.result) and super().has_change_permission(request, obj)
+
+    def related(self, obj):
+        return obj.lot, [('부적합', Nonconformance.objects.filter(pk=obj.nonconformance_id), ''),
+                         ('검사기준', InspectionSpec.objects.filter(pk=obj.spec_id), '')]
 
     def get_readonly_fields(self, request, obj=None):
         base = ['inspector', 'result', 'nonconformance', 'report_links']
@@ -371,6 +376,7 @@ class CustomerClaimAdmin(ReportLinksMixin, BaseAdmin):
     list_display = ['number', 'customer', 'lot', 'received_at', 'current_step', 'containment_due', 'corrective_due', 'closed_at']
     search_fields = ['number', 'customer', 'lot__number']
     autocomplete_fields = ['lot']
+    list_filter = [('closed_at', admin.EmptyFieldListFilter)]
     readonly_fields = ['nonconformance', 'trace_link', 'containment_due', 'corrective_due', 'current_step', 'report_links',
                        'similar_cases', 'capa']
     fieldsets = [
@@ -396,12 +402,16 @@ class CustomerClaimAdmin(ReportLinksMixin, BaseAdmin):
             return '-'
         return format_html('<a href="{}?lot={}" target="_blank">LOT 추적 열기</a>', reverse('trace'), obj.lot.number)
 
+    def related(self, obj):
+        return obj.lot, [('부적합', Nonconformance.objects.filter(pk=obj.nonconformance_id), '')]
+
 
 @admin.register(Scar)
 class ScarAdmin(ReportLinksMixin, BaseAdmin):
     list_display = ['number', 'supplier', 'lot', 'issued_at', 'response_due', 'responded_at', 'closed_at']
     search_fields = ['number', 'supplier', 'lot__number']
     autocomplete_fields = ['lot', 'nonconformance']
+    list_filter = [('closed_at', admin.EmptyFieldListFilter)]
     readonly_fields = ['report_links', 'capa']
     fieldsets = [
         (None, {'fields': ['number', 'supplier', 'lot', 'request', 'response_due']}),
@@ -412,6 +422,9 @@ class ScarAdmin(ReportLinksMixin, BaseAdmin):
     @admin.display(description='CAPA')
     def capa(self, obj):
         return capa_links(obj, 'SCAR', f'{obj}: {obj.request}')
+
+    def related(self, obj):
+        return obj.lot, [('부적합', Nonconformance.objects.filter(pk=obj.nonconformance_id), '')]
 
 
 class RevisionInline(admin.TabularInline):

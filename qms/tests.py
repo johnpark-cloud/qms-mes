@@ -1107,3 +1107,78 @@ class DashboardTest(TestCase):
         LeaveProfile.objects.create(owner=self.admin, hired_on=datetime.date(2020, 1, 1))
         self.save([{'key': 'leave', 'size': 'normal'}])
         self.assertContains(self.client.get('/todo/'), '연차 정보 없음')
+
+
+class OverviewTest(TestCase):
+    """공장 종합현황 카드와 상세 화면 '관련 기록' 칸: 권한 있는 것만 보이고, 링크는 관리 목록에서 열린다."""
+
+    def setUp(self):
+        self.admin = User.objects.create_superuser('boss', password='x')
+        self.inspector = User.objects.create_user('insp', password='x', is_staff=True)
+        self.inspector.groups.add(Group.objects.get(name='검사원'))
+        self.item = Item.objects.create(code='P1', name='부품', item_type=Item.RAW)
+        self.lot = Lot.objects.create(number='L-1', item=self.item, supplier='가협력')
+
+    def admin_links(self, html):
+        return [h.replace('&amp;', '&') for h in re.findall(r'href="(/admin/[^"]+)"', html)]
+
+    def related(self, url):
+        html = self.client.get(url).content.decode()
+        return html.split('id="related-title"')[1].split('</section>')[0] if 'id="related-title"' in html else ''
+
+    def test_login_required(self):
+        self.assertEqual(self.client.get('/overview/').status_code, 302)
+
+    def test_cards_and_links_open(self):
+        WorkOrder.objects.create(number='WO-1', item=self.item, planned_qty=10, status=WorkOrder.RUNNING,
+                                 due_date=timezone.localdate())
+        Nonconformance.objects.create(lot=self.lot, description='찍힘')
+        self.client.force_login(self.admin)
+        self.assertIn('href="/overview/"', self.client.get('/todo/').content.decode())  # 홈 묶음 메뉴
+        html = self.client.get('/overview/').content.decode()
+        for title in ('진행 중 작업지시', '계획 대비 실적', '생산 수율', '검사 불합격', '보류 LOT', '열린 부적합',
+                      '진행 중 CAPA', '계측기 교정', 'SPC 경보', '협력사 품질'):
+            self.assertIn(title, html)
+        self.assertIn('WO-1', html)
+        links = self.admin_links(html)
+        self.assertIn('/admin/core/hold/?released_at__isnull=True', links)
+        for url in links:  # 걸러진 목록이 관리 화면에서 막히면(?e=1) 302가 된다
+            self.assertEqual(self.client.get(url).status_code, 200, url)
+
+    def test_empty_db_and_permissions(self):
+        self.client.force_login(self.inspector)
+        html = self.client.get('/overview/').content.decode()
+        self.assertIn('검사 불합격', html)
+        self.assertIn('열린 부적합', html)
+        for title in ('보류 LOT', '진행 중 CAPA', '협력사 품질'):  # 검사원은 보류·CAPA·SCAR 조회 권한이 없다
+            self.assertNotIn(title, html)
+        self.client.force_login(User.objects.create_user('plain', is_staff=True))
+        self.assertIn('볼 수 있는 현황이 없습니다', self.client.get('/overview/').content.decode())
+
+    def test_related_panel(self):
+        nc = Nonconformance.objects.create(lot=self.lot, description='찍힘')
+        lot_url = f'/admin/core/lot/{self.lot.pk}/change/'
+        self.client.force_login(self.admin)
+        panel = self.related(lot_url)
+        self.assertIn('/trace/?lot=L-1', panel)
+        self.assertIn(f'/admin/core/nonconformance/{nc.pk}/change/', panel)
+        self.assertIn('/admin/core/hold/', panel)
+        panel = self.related(f'/admin/core/nonconformance/{nc.pk}/change/')
+        self.assertIn('/trace/?lot=L-1', panel)
+        self.assertIn('/admin/core/hold/', panel)
+        self.client.force_login(self.inspector)
+        panel = self.related(lot_url)
+        self.assertIn(f'/admin/core/nonconformance/{nc.pk}/change/', panel)
+        self.assertNotIn('/admin/core/hold/', panel)  # 볼 권한이 없는 기록은 링크하지 않는다
+        self.assertNotIn('SCAR', panel)
+
+    def test_related_more_link_and_filters(self):
+        for i in range(6):
+            Nonconformance.objects.create(lot=self.lot, description=f'찍힘 {i}')
+        self.client.force_login(self.admin)
+        panel = self.related(f'/admin/core/lot/{self.lot.pk}/change/')
+        self.assertIn('전체 6건 보기', panel)
+        for url in self.admin_links(panel) + ['/admin/core/lot/?item__item_type__exact=RAW', '/admin/core/lot/?supplier=가협력',
+                                              '/admin/qms/customerclaim/?closed_at__isempty=1', '/admin/qms/scar/?closed_at__isempty=0',
+                                              '/admin/core/hold/?q=L-1']:
+            self.assertEqual(self.client.get(url).status_code, 200, url)

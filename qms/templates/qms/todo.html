@@ -1,6 +1,7 @@
 {% extends "admin/base_site.html" %}
 {% load static %}
 {% block extrahead %}{{ block.super }}<script src="{% static 'qms/dashboard.js' %}" defer></script>{% endblock %}
+{% block page_actions %}<div class="page-head__actions"><a class="button ghost" href="{% url 'overview' %}">공장 종합현황</a></div>{% endblock %}
 {% block content %}
 
 <div class="toolbar dash-tools">

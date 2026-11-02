@@ -33,10 +33,10 @@ docs/        구조·업무 규칙·테스트 문서, superpowers/ 설계·계�
 | 파일 | 역할 |
 | --- | --- |
 | `models.py` | `Approvable`(승인 필드·잠금 기반 클래스), 품번 `Item`·공정 `Process`·BOM `BomLine`·라우팅 `RoutingStep`, 작업지시 `WorkOrder`·실적 `WorkResult`, LOT `Lot`·계보 `LotLink`, 부적합 `Nonconformance`·사진 `NonconformancePhoto`, 보류 `Hold`, 출하 `Shipment`, 삭제·수정 요청 `EditRequest`, 엑셀 가져오기 설정 `ImportProfile` |
-| `admin.py` | `BaseAdmin`(삭제는 시스템 관리자만, 승인 잠금, 요청 링크), 부적합 폼(MRB 처분 시 비밀번호·보완 필수 칸 검사) |
+| `admin.py` | `BaseAdmin`(삭제는 시스템 관리자만, 승인 잠금, 요청 링크, 상세 화면 관련 기록 `related_panel`), 부적합 폼(MRB 처분 시 비밀번호·보완 필수 칸 검사) |
 | `records.py` | 삭제(`delete_record`), 잠금(`is_locked`), 잠금 해제 확인(`can_edit_locked`) 규칙 |
 | `views.py` | LOT 추적, 통합 검색, 부적합 간편 등록, 승인 서명, 삭제·수정 요청, 출력, 부적합 메일·사진 ZIP, 엑셀 가져오기 |
-| `timeline.py`, `search.py`, `nav.py`, `context_processors.py` | LOT 타임라인, 검색, 사이드바 메뉴(권한별, 업무 묶음). 전체 메뉴(`/admin/`)도 `core/admin.py` `grouped_app_list`가 같은 묶음으로 정렬한다 |
+| `timeline.py`, `search.py`, `nav.py`, `context_processors.py` | LOT 타임라인, 검색, 사이드바 메뉴(권한별, 업무 영역 7묶음). 전체 메뉴(`/admin/`)도 `core/admin.py` `grouped_app_list`가 같은 묶음으로 정렬한다 |
 | `middleware.py` | 로그인 사용자 HTML 화면에 `no-store` 헤더(뒤로가기 때 최신 내용) |
 | `importer.py` | 엑셀/CSV 일괄 등록 |
 | `management/commands/` | `backup`, `restore` |
@@ -48,7 +48,7 @@ docs/        구조·업무 규칙·테스트 문서, superpowers/ 설계·계�
 | --- | --- |
 | `models.py` | 검사기준 `InspectionSpec`·항목 `Characteristic`, 검사 `Inspection`·측정값 `Measurement`, 계측기 `Gauge`, 검사원 자격 `Qualification`, 관리계획서 `ControlPlan`·`ControlPlanLine`, 4M 변경 `ChangeRequest`, 고객 규칙 `CustomerRule`·클레임(8D) `CustomerClaim`, `Scar`, 문서 `Document`·`DocumentRevision`, 심사 증적 `AuditChecklist`·`AuditItem`·`Evidence`, `Capa`, 내부심사 `InternalAudit`·`AuditFinding`, PPAP `PpapSubmission`·`PpapElement`, 엑셀 양식 `ExcelTemplate`, 현장 메모 `Memo`·`MemoPhoto`, 대시보드 배치 `DashboardLayout` |
 | `apps.py` | `ensure_roles`: migrate 후 역할 그룹(품질엔지니어·품질팀장·검사원)과 권한 재설정 |
-| `views.py` | 내 할 일·대시보드, KPI, 협력사 성적표, 검사 입력, SPC, 현장 메모, 심사 자료 출력, 엑셀 양식 출력 |
+| `views.py` | 내 할 일·대시보드, 공장 종합현황, KPI, 협력사 성적표, 검사 입력, SPC, 현장 메모, 심사 자료 출력, 엑셀 양식 출력 |
 | `due.py` | 기한·대기 항목 계산 (내 할 일과 `notify`가 공유) |
 | `widgets.py` | 대시보드 위젯 목록·역할별 기본 배치·격자 자리 잡기(`place`) |
 | `spc.py`, `kpi.py`, `similar.py`, `memo.py` | 관리도·Cpk, KPI 집계, 재발 방지 유사 사례, 메모 연결 |
@@ -61,13 +61,13 @@ docs/        구조·업무 규칙·테스트 문서, superpowers/ 설계·계�
 ## 의존 방향
 
 - `qms` → `core`: qms 모델이 `Lot`, `Nonconformance`, `Approvable` 등을 참조한다.
-- `core` → `qms`: 모듈 수준에서 import하지 않는다. 필요한 곳에서만 `apps.get_model('qms', ...)`(`Shipment.clean`의 4M 확인)이나 함수 안 지연 import(`core/admin.py`의 CAPA 링크·유사 사례)로 참조한다.
+- `core` → `qms`: 모듈 수준에서 import하지 않는다. 필요한 곳에서만 `apps.get_model('qms', ...)`(`Shipment.clean`의 4M 확인)이나 함수 안 지연 import(`core/admin.py`의 CAPA 링크·유사 사례·관련 기록)로 참조한다.
 - `personal`: core·qms 모델을 import하지 않는다. 권한 부여만 `qms/apps.py`의 `ensure_roles`가 한다.
 
 ## 요청 흐름과 화면
 
 - 모든 화면이 `templates/admin/base_site.html`(회색 상단 바 + `qms_sidebar.html` 사이드바)을 상속한다. 예외는 인쇄용 화면(`print.html`, `nc_print.html`, `audit_pack.html`)과 htmx 조각 템플릿이다.
-- URL은 `config/urls.py` 한 곳에 있다. `/admin/`은 기준정보·전체 기록이고, `/todo/`·`/inspect/`·`/trace/`·`/nc/new/`·`/kpi/`·`/suppliers/`·`/audit-pack/`·`/memo/*`·`/me/`·`/search/`가 전용 화면이다.
+- URL은 `config/urls.py` 한 곳에 있다. `/admin/`은 기준정보·전체 기록이고, `/todo/`·`/overview/`·`/inspect/`·`/trace/`·`/nc/new/`·`/kpi/`·`/suppliers/`·`/audit-pack/`·`/memo/*`·`/me/`·`/search/`가 전용 화면이다.
 - 첨부 파일(`/media/`)은 `staff_member_required`로 로그인한 스태프만 받을 수 있다.
 
 ## 데이터와 설정

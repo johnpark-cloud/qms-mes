@@ -15,6 +15,7 @@ urlpatterns = [
     path('me/', personal_views.me, name='me'),
     path('me/payslip/<int:pk>/file/', personal_views.payslip_file, name='payslip_file'),
     path('todo/', qms_views.todo, name='todo'),
+    path('overview/', qms_views.overview, name='overview'),
     path('dashboard/save/', qms_views.dashboard_save, name='dashboard_save'),
     path('brand/logo', core_views.brand_logo, name='brand_logo'),
     path('search/', core_views.search, name='search'),

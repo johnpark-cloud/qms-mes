@@ -1,0 +1,15 @@
+{% extends "admin/base_site.html" %}
+{% block page_actions %}<div class="page-head__actions"><a class="button ghost" href="{% url 'todo' %}">내 할 일</a><a class="button ghost" href="{% url 'trace' %}">LOT 이력 조회</a></div>{% endblock %}
+{% block content %}
+<p class="help">DB에 등록된 작업지시·실적·검사·부적합 기록만 집계합니다. 설비 실시간 값은 없습니다. 카드를 누르면 해당 목록이 열립니다.</p>
+{% for name, cards in sections %}
+<section class="overview" aria-labelledby="ov-{{ forloop.counter }}">
+  <h2 id="ov-{{ forloop.counter }}">{{ name }}</h2>
+  <div class="overview__grid">
+    {% for c in cards %}{% include "qms/widgets/tile.html" with size="wide" title=c.title sub=c.sub value=c.value href=c.href tone=c.tone rows=c.rows more=c.more|default:c.href %}{% endfor %}
+  </div>
+</section>
+{% empty %}
+{% include "admin/empty_state.html" with message="볼 수 있는 현황이 없습니다. 관리자에게 조회 권한을 요청하세요." %}
+{% endfor %}
+{% endblock %}

@@ -253,6 +253,11 @@ html[data-theme="dark"] .shell-brand { mix-blend-mode: normal; background: #fff;
 .main > .content { flex: 1 1 0; min-width: 0; }  /* 넓은 표는 화면을 밀지 않고 .results 안에서 가로 스크롤 */
 h1 { color: var(--f-ink); font-weight: 500; font-size: 32px; line-height: 35.2px; letter-spacing: 0; margin: .5rem 0 1.5rem; }
 h2 { color: var(--f-ink); }
+/* 페이지 머리: 위치(묶음) · 업무명 · 주요 버튼. 좁으면 버튼이 아래 줄로 내려간다 */
+.page-head { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: .75rem 1.5rem; margin: .5rem 0 1.5rem; }
+.page-head h1 { margin: 0; }
+.page-head__where { margin: 0 0 .25rem; color: var(--f-label); font-size: 14px; line-height: 21px; font-weight: 500; }
+.page-head__actions { display: flex; flex-wrap: wrap; gap: .5rem; }
 #content h2, #content h3 { font-weight: 500; letter-spacing: 0; }
 #content h2 { font-size: 20px; line-height: 22px; }
 
@@ -474,3 +479,19 @@ td.w { width: 25%; }
 .tile__list td + td { padding-left: 1rem; color: var(--f-label); }
 .tile__empty { margin: 0; color: var(--f-label); font-size: 14px; }
 .tile__more { margin-top: auto; font-size: 14px; }
+
+/* ---------- 공장 종합현황: 넓은 타일을 자동 칸으로 ---------- */
+.overview { margin: 0 0 2rem; }
+.overview > h2 { margin: 0 0 1rem; }
+.overview__grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 20rem), 1fr)); gap: 1rem; }
+
+/* ---------- 상세 화면 '관련 기록': 이 기록과 이어진 생산·품질 기록 ---------- */
+.related { margin: 1.5rem 0; }
+.related__list { display: grid; grid-template-columns: max-content 1fr; gap: .5rem 1.5rem; margin: 0; }
+.related__list dt { color: var(--f-label); font-weight: 500; }
+.related__list dd { margin: 0; overflow-wrap: anywhere; }
+.related__none { color: var(--f-label); }
+@media (max-width: 40rem) {
+    .related__list { grid-template-columns: 1fr; gap: .25rem; }
+    .related__list dd { margin-bottom: .5rem; }
+}
