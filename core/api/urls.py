@@ -1,4 +1,4 @@
-from django.urls import path
+from django.urls import include, path
 from drf_spectacular.views import SpectacularAPIView
 
 from . import views
@@ -9,5 +9,6 @@ urlpatterns = [
     path('auth/login/', views.LoginView.as_view()),
     path('auth/logout/', views.LogoutView.as_view()),
     path('auth/me/', views.MeView.as_view()),
+    path('qms/', include('qms.api.urls')),
     path('schema/', SpectacularAPIView.as_view(permission_classes=[IsStaff]), name='api_schema'),
 ]
