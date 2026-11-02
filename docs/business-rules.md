@@ -58,7 +58,7 @@
 | 불합격이면 부적합을 자동 생성한다(→ 계보 보류). | `Inspection.finalize` |
 | 판정된 검사와 그 측정값은 수정할 수 없다. | `Inspection.save`, `Measurement.clean` |
 | 검사원 자격: 그 검사구분에 자격 기록이 하나라도 있으면, 유효기한 안의 자격자만 판정할 수 있다. | `Inspection.finalize` |
-| 검사 입력 화면의 "판정"은 전부 저장되거나 아무것도 저장되지 않는다. | `qms/views.py` `inspect_submit`, `Inspection.finalize`(`transaction.atomic`) |
+| 검사 입력 화면의 "판정"은 전부 저장되거나 아무것도 저장되지 않는다. | `qms/rules.py` `submit_inspection`(뷰 `inspect_submit`이 호출), `Inspection.finalize`(`transaction.atomic`) |
 
 ## 6. 계측기 교정
 
@@ -68,7 +68,7 @@
 | 측정값에 계측기를 적으면, 검사일이 다음 교정일을 지났거나 사용 중지된 계측기는 거부한다. | `Gauge.usable_on`, `Measurement.clean` |
 | 교정 14일 전부터 내 할 일·알림에 표시한다. | `qms/due.py` |
 
-측정값 입력(검사 입력 화면, `collect` 자동 수집)은 NaN·무한대 값을 거부한다. `collect`는 읽을 수 없는 CSV를 `error/` 폴더로 옮기고 다음 파일을 계속 처리한다(`qms/views.py` `_measurement`, `qms/management/commands/collect.py`).
+측정값 입력(검사 입력 화면, `collect` 자동 수집)은 NaN·무한대 값을 거부한다. `collect`는 읽을 수 없는 CSV를 `error/` 폴더로 옮기고 다음 파일을 계속 처리한다(`qms/rules.py` `measurement`, `qms/management/commands/collect.py`).
 
 ## 7. SPC
 
