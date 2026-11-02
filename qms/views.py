@@ -4,7 +4,6 @@ import json
 import logging
 import os
 import zipfile
-from decimal import Decimal, InvalidOperation
 from urllib.parse import urlencode
 
 from django.contrib import messages
@@ -28,7 +27,8 @@ from core.views import _get_record
 from . import kpi, spc
 from .due import due_items, recent_spc_alarms
 from .memo import ATTACHABLE, TARGETS, MemoForm, box_context, resolve_target, target_url, todays_audit
-from .models import Capa, Characteristic, DashboardLayout, ExcelTemplate, Gauge, Inspection, InspectionSpec, Measurement, Memo, MemoPhoto
+from .models import Capa, Characteristic, DashboardLayout, ExcelTemplate, Gauge, Inspection, InspectionSpec, Memo, MemoPhoto
+from .rules import RECEIVE_MSG, measurement, receive_lot, submit_inspection
 from .widgets import COLS, ROWS, SIZES, WIDGETS, layout_for
 
 
@@ -289,13 +289,9 @@ def inspect_receive(request):
     number = p.get('number', '').strip()
     item = Item.objects.filter(pk=p.get('item') or None).first()
     try:
-        qty = Decimal(p.get('qty', '').strip())
-    except InvalidOperation:
-        qty = None
-    if not number or not item or qty is None or not qty.is_finite() or qty <= 0:
-        return _lot_step(request, None, number, '품목·LOT 번호·입고수량(0보다 큰 숫자)을 모두 입력하세요.')
-    lot, created = Lot.objects.get_or_create(number=number, defaults={
-        'item': item, 'qty': qty, 'supplier': p.get('supplier', '').strip()[:100]})
+        lot, created = receive_lot(number, item, p.get('qty', ''), p.get('supplier', ''))
+    except ValidationError:
+        return _lot_step(request, None, number, RECEIVE_MSG)
     return _lot_step(request, lot, number, None if created else '이미 등록된 LOT입니다. 기존 LOT으로 검사합니다.')
 
 
@@ -308,35 +304,16 @@ def inspect_form(request, lot_id, spec_id):
                                                      'gauges': gauges, 'defect_types': DEFECT_TYPES})
 
 
-def _measurement(char, raw):
-    """입력칸 값 → 저장 전 측정값. 계량형은 숫자, 계수형은 OK/NG."""
-    if char.is_variable:
-        try:
-            value = Decimal(raw.strip())
-        except (InvalidOperation, AttributeError):
-            return None
-        return Measurement(characteristic=char, value=value) if value.is_finite() else None  # NaN·Infinity 거부
-    return Measurement(characteristic=char, ok={'OK': True, 'NG': False}.get(raw)) if raw in ('OK', 'NG') else None
-
-
 @staff_member_required
 def inspect_check(request, char_id):
     """값을 입력하는 즉시 항목별 합부를 보여준다 (저장하지 않음)."""
     _can_inspect(request)
     char = get_object_or_404(Characteristic, pk=char_id)
-    m = _measurement(char, request.POST.get(f'c{char.pk}', ''))
+    m = measurement(char, request.POST.get(f'c{char.pk}', ''))
     if m is None:
         return HttpResponse('')
     return HttpResponse(format_html('<span class="status status--{}">{}</span>',
                                     'positive' if m.passed else 'negative', '합격' if m.passed else '규격 이탈'))
-
-
-def _qty(raw):
-    try:
-        v = Decimal((raw or '').strip())
-    except InvalidOperation:
-        return Decimal(0)
-    return v if v.is_finite() and v >= 0 else Decimal(0)
 
 
 @staff_member_required
@@ -347,24 +324,11 @@ def inspect_submit(request, lot_id, spec_id):
         raise PermissionDenied
     lot, spec = get_object_or_404(Lot, pk=lot_id), get_object_or_404(InspectionSpec, pk=spec_id)
     gauge = Gauge.objects.filter(pk=request.POST.get('gauge') or None).first()
+    values = {c.pk: request.POST.get(f'c{c.pk}', '') for c in spec.characteristics.all()}
     error = None
     try:
-        with transaction.atomic():
-            insp = Inspection.objects.create(lot=lot, spec=spec, inspector=request.user)
-            for char in spec.characteristics.all():
-                m = _measurement(char, request.POST.get(f'c{char.pk}', ''))
-                if m is None:
-                    raise ValidationError(f'{char.name}: 값을 입력하세요.')
-                m.inspection = insp
-                m.gauge = gauge if char.is_variable else None
-                m.save()
-            insp.finalize()
-            nc = insp.nonconformance
-            if nc:  # 불합격으로 자동 등록된 부적합에 검사원이 고른 불량유형·수량을 채운다
-                nc.defect_type = request.POST.get('defect_type', '').strip()[:100]
-                nc.defect_qty = _qty(request.POST.get('defect_qty'))
-                nc.inspected_qty, nc.detected_by = lot.qty, request.user
-                nc.save()
+        insp = submit_inspection(lot, spec, request.user, gauge, values,
+                                 request.POST.get('defect_type', ''), request.POST.get('defect_qty'))
     except ValidationError as e:
         error, insp = ' '.join(e.messages), None
     return render(request, 'qms/inspect_result.html', {'insp': insp, 'error': error, 'lot': lot})
