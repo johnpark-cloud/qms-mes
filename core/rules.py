@@ -28,6 +28,8 @@ def finish_edit(unlock):
 
 @transaction.atomic
 def save_with_lock(obj, user, children=()):
+    """잠금 규칙을 지키며 저장한다(승인 후 잠금·수정 승인 소모). 부적합은 모델 잠금 가드가 없다.
+    부르는 쪽이 `nc_locked_fields(nc, user)`에 든 칸을 바꾸지 않았는지 먼저 확인해야 한다(2단계 API 필수)."""
     locked = bool(obj.pk) and is_locked(obj)
     unlock = begin_edit(obj, user)
     try:  # 승인 후에도 어떤 칸이 열려 있는지는 모델의 save 가드가 정한다
@@ -73,6 +75,10 @@ def missing_message(nc):
 
 @transaction.atomic
 def dispose_nc(nc, user, password, data):
+    """MRB 처분: data(DISPOSE_FIELDS)를 넣고 서명한 뒤 저장한다. 종결되면 보류 해제는 모델 save가 한다.
+    비밀번호 오류와 필수칸 누락이 함께 있으면 admin처럼 두 문구를 함께 담아 낸다.
+    admin보다 엄격한 점: 허용 외 칸 거부, 빈 처분('처분을 선택하세요.') 거부, full_clean 검사.
+    실패해도 메모리의 nc 속성은 바뀐 채 남으므로 호출자는 다시 조회해야 한다."""
     if nc.closed_at:
         raise Locked(LOCKED_MSG)
     if extra := set(data) - set(DISPOSE_FIELDS):
@@ -81,9 +87,15 @@ def dispose_nc(nc, user, password, data):
         raise ValidationError('처분을 선택하세요.')
     for name, value in data.items():
         setattr(nc, name, value)
-    sign_disposition(nc, user, password)
+    errors = []
+    try:
+        sign_disposition(nc, user, password)
+    except ValidationError as e:
+        errors += e.messages
     if msg := missing_message(nc):
-        raise ValidationError(msg)
+        errors.append(msg)
+    if errors:  # admin 순서: 비밀번호, 보완 필요
+        raise ValidationError(errors)
     nc.full_clean()
     nc.save()
 

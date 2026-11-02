@@ -176,3 +176,157 @@ class ApproveRulesTest(TestCase):
         self.assertEqual(self.spec.approved_by, self.boss)
         with self.assertRaisesMessage(ValidationError, '이미 승인된 기록입니다.'):
             approve(self.spec, self.boss, 'pw')
+
+
+class NcLockedFieldsAdminTest(TestCase):
+    """부적합은 모델 잠금 가드가 없다. 종결 뒤 읽기 전용 칸은 nc_locked_fields가 정하고 admin이 그대로 쓴다."""
+
+    def test_locked_fields_match_admin_readonly_fields(self):
+        from django.contrib import admin
+        from django.test import RequestFactory
+
+        item = Item.objects.create(code='R1', name='양극재', item_type=Item.RAW)
+        lot = Lot.objects.create(number='RAW-1', item=item)
+        mrb = User.objects.create_user('mrb', password='pw')
+        mrb.groups.add(Group.objects.get(name='품질팀장'))
+        eng = User.objects.create_user('eng', password='pw-eng-123', is_staff=True)
+        eng.groups.add(Group.objects.get(name='품질엔지니어'))
+        root = User.objects.create_superuser('root', password='pw-root-123')
+        nc = Nonconformance.objects.create(lot=lot, description='이물', origin='INCOMING', defect_type='이물',
+                                           sorting_result='전수 선별', contained_qty=Decimal('5'))
+        dispose_nc(nc, mrb, 'pw', {'disposition': Nonconformance.SCRAP})
+        nc.refresh_from_db()
+        ma = admin.site._registry[Nonconformance]
+        for user in (eng, root):
+            with self.subTest(user=user.username):
+                request = RequestFactory().get('/')
+                request.user = user
+                locked = nc_locked_fields(nc, user)
+                self.assertTrue(locked)
+                self.assertEqual(ma.get_readonly_fields(request, nc), ma.AUTO + [f for f in locked if f not in ma.AUTO])
+        self.assertEqual(nc_locked_fields(nc, root), list(Nonconformance.INTERLOCK))
+
+
+class AdminRulesEquivalenceTest(TestCase):
+    """같은 입력을 admin 경로(화면 POST)와 공용 함수에 넣으면 저장 여부·오류 문구·이력 행 수가 같다
+    (docs/architecture-migration-plan.md 3.2·9장). 두 경로는 같은 조건으로 만든 서로 다른 기록에 실행한다."""
+
+    def setUp(self):
+        import tempfile
+        from django.test import override_settings
+        media = override_settings(MEDIA_ROOT=tempfile.mkdtemp())
+        media.enable()
+        self.addCleanup(media.disable)
+        self.item = Item.objects.create(code='R1', name='양극재', item_type=Item.RAW)
+        self.boss = User.objects.create_user('boss', password='pw-boss-123', is_staff=True)
+        self.boss.groups.add(Group.objects.get(name='품질팀장'))
+        self.client.force_login(self.boss)
+        self.seq = 0
+
+    def _nc(self, sorting):
+        self.seq += 1
+        lot = Lot.objects.create(number=f'RAW-{self.seq}', item=self.item)
+        return Nonconformance.objects.create(lot=lot, description='이물', origin='INCOMING', defect_type='이물',
+                                             sorting_result=sorting, contained_qty=Decimal('5'))
+
+    def _dispose_both(self, password='pw-boss-123', sorting='전수 선별', **data):
+        """(admin 결과, 공용 함수 결과). 결과는 (저장 여부, 이력 증가량, 오류 문구, 해제된 보류 수)."""
+        a, b = self._nc(sorting), self._nc(sorting)
+        before = a.history.count(), b.history.count()
+        form = {'lot': a.lot_id, 'description': a.description, 'origin': 'INCOMING', 'detected_at_0': '2026-10-27',
+                'detected_at_1': '09:00:00', 'defect_qty': 1, 'cost': 0, 'password': password, 'defect_type': '이물',
+                'sorting_result': sorting, 'contained_qty': 5, 'photos-TOTAL_FORMS': 0, 'photos-INITIAL_FORMS': 0,
+                'photos-MIN_NUM_FORMS': 0, 'photos-MAX_NUM_FORMS': 1000, **data}
+        resp = self.client.post(f'/admin/core/nonconformance/{a.pk}/change/', form)
+        admin_text = resp.content.decode() if resp.status_code == 200 else ''
+        try:
+            dispose_nc(b, self.boss, password, data)
+            rules_text = ''
+        except ValidationError as e:
+            rules_text = ' '.join(e.messages)
+        out = []
+        for nc, n, text in ((a, before[0], admin_text), (b, before[1], rules_text)):
+            nc = Nonconformance.objects.get(pk=nc.pk)
+            released = nc.holds.filter(released_at__isnull=False).count()
+            out.append((nc.approved_by_id is not None and nc.closed_at is not None, nc.history.count() - n, text, released))
+        return out
+
+    def _same(self, result, *, saved, phrases=()):
+        (a_saved, a_hist, a_text, a_rel), (r_saved, r_hist, r_text, r_rel) = result
+        self.assertEqual((a_saved, r_saved), (saved, saved))
+        self.assertEqual(a_hist, r_hist)
+        self.assertEqual(a_rel, r_rel)
+        for phrase in phrases:
+            self.assertIn(phrase, a_text)
+            self.assertIn(phrase, r_text)
+        return a_hist, a_rel
+
+    def test_dispose_ok(self):
+        hist, released = self._same(self._dispose_both(disposition='SCRAP'), saved=True)
+        self.assertGreater(hist, 0)
+        self.assertEqual(released, 0)  # 폐기는 보류 유지
+
+    def test_dispose_wrong_password(self):
+        hist, _ = self._same(self._dispose_both(password='bad', disposition='SCRAP'), saved=False,
+                             phrases=['MRB 승인 비밀번호가 맞지 않습니다.'])
+        self.assertEqual(hist, 0)
+
+    def test_dispose_missing_fields(self):
+        hist, _ = self._same(self._dispose_both(sorting='', disposition='SCRAP'), saved=False, phrases=['보완 필요'])
+        self.assertEqual(hist, 0)
+
+    def test_dispose_wrong_password_and_missing_fields_show_both_in_order(self):
+        result = self._dispose_both(password='bad', sorting='', disposition='SCRAP')
+        self._same(result, saved=False, phrases=['MRB 승인 비밀번호가 맞지 않습니다.', '보완 필요'])
+        for text in (result[0][2], result[1][2]):  # 순서도 admin과 같다: 비밀번호, 보완 필요
+            self.assertLess(text.index('MRB 승인 비밀번호'), text.index('보완 필요'))
+
+    def test_concession_needs_customer_approval_ref(self):
+        hist, released = self._same(self._dispose_both(disposition='CONCESSION'), saved=False,
+                                    phrases=['특채는 고객 승인 문서번호가 필요합니다.'])
+        self.assertEqual((hist, released), (0, 0))
+
+    def test_concession_with_ref_releases_hold_like_admin(self):
+        hist, released = self._same(self._dispose_both(disposition='CONCESSION', customer_approval_ref='CA-1'), saved=True)
+        self.assertGreater(hist, 0)
+        self.assertEqual(released, 1)  # 특채는 보류를 푼다
+
+    def test_rework_needs_retest_pass(self):
+        hist, released = self._same(self._dispose_both(disposition='REWORK'), saved=False,
+                                    phrases=['재작업·수리는 부적합 발견 이후 재검사 합격 기록이 있어야 보류를 해제합니다.'])
+        self.assertEqual((hist, released), (0, 0))
+
+    def _approve_both(self, password):
+        specs = []
+        for code in ('S1', 'S2'):
+            item = Item.objects.create(code=code, name=code, item_type=Item.RAW)
+            spec = InspectionSpec.objects.create(item=item, inspection_type=InspectionSpec.INCOMING)
+            Characteristic.objects.create(spec=spec, name='두께', lsl=Decimal('9.5'), usl=Decimal('10.5'))
+            specs.append(spec)
+        view_spec, rules_spec = specs
+        before = view_spec.history.count(), rules_spec.history.count()
+        resp = self.client.post(f'/approve/qms/inspectionspec/{view_spec.pk}/', {'password': password})
+        view_text = resp.content.decode() if resp.status_code == 200 else ''
+        try:
+            approve(rules_spec, self.boss, password)
+            rules_text = ''
+        except ValidationError as e:
+            rules_text = ' '.join(e.messages)
+        res = []
+        for spec, n, text in ((view_spec, before[0], view_text), (rules_spec, before[1], rules_text)):
+            spec = InspectionSpec.objects.get(pk=spec.pk)
+            res.append((spec.approved_by_id is not None, spec.history.count() - n, text))
+        return res
+
+    def test_approve_ok(self):
+        (v_saved, v_hist, _), (r_saved, r_hist, _) = self._approve_both('pw-boss-123')
+        self.assertEqual((v_saved, r_saved), (True, True))
+        self.assertEqual(v_hist, r_hist)
+        self.assertGreater(v_hist, 0)
+
+    def test_approve_wrong_password(self):
+        (v_saved, v_hist, v_text), (r_saved, r_hist, r_text) = self._approve_both('bad')
+        self.assertEqual((v_saved, r_saved), (False, False))
+        self.assertEqual((v_hist, r_hist), (0, 0))
+        self.assertIn('비밀번호가 맞지 않습니다.', v_text)
+        self.assertIn('비밀번호가 맞지 않습니다.', r_text)
