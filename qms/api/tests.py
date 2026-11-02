@@ -8,8 +8,10 @@ from django.test import TestCase
 from django.utils import timezone
 from rest_framework.test import APIClient
 
-from core.models import Hold, Item, Lot, Nonconformance, WorkOrder
-from qms.models import AuditFinding, Capa, Gauge, InternalAudit, Scar
+from django.contrib.contenttypes.models import ContentType
+
+from core.models import EditRequest, Hold, Item, Lot, Nonconformance, WorkOrder
+from qms.models import AuditFinding, Capa, ChangeRequest, CustomerClaim, Gauge, InternalAudit, PpapSubmission, Scar
 from qms.overview import sections
 from qms.widgets import WIDGETS, layout_for
 
@@ -76,9 +78,10 @@ class TodoApiTest(TestCase):
         self.assertNotIn('kpi_ppm', keys)
 
     def test_broken_widget_isolated(self):
-        with mock.patch.dict(WIDGETS, {'leave': replace(WIDGETS['leave'], context=lambda *a: 1 / 0)}):
+        with mock.patch.dict(WIDGETS, {'leave': replace(WIDGETS['leave'], context=lambda *a: 1 / 0)}),                 self.assertLogs('qms', 'ERROR') as logs:
             self.client.force_login(self.qe)
             r = self.client.get('/api/qms/todo/')
+        self.assertIn('위젯 불러오기 실패: leave', logs.output[0])
         self.assertEqual(r.status_code, 200)
         leave = next(w for w in r.json()['widgets'] if w['key'] == 'leave')
         self.assertTrue(leave['error'])
@@ -139,3 +142,33 @@ class TodoApiTest(TestCase):
         self.assertEqual(data['todo_lists']['gauges'][0]['label'], 'G-1 마이크로미터')
         self.assertEqual(data['audits']['audits'][0]['label'], '공정심사')
         self.assertEqual(len(data['audits']['findings']), 1)
+
+    def test_todo_lists_wide_rows(self):
+        now, item = timezone.now(), Item.objects.get(code='P1')
+        lot = Lot.objects.get(number='L-1')
+        nc = Nonconformance.objects.get()
+        Nonconformance.objects.filter(pk=nc.pk).update(approved_at=now, customer_notify=True)  # 승인 후 미발송 + 고객 통보 대기
+        claim = CustomerClaim.objects.create(number='CL-1', customer='A사', lot=lot, description='x', received_at=now - datetime.timedelta(days=10))
+        er = EditRequest.objects.create(kind='EDIT', content_type=ContentType.objects.get_for_model(Nonconformance), object_id=nc.pk,
+                                        object_repr='a', reason='r', requested_by=self.qe)
+        EditRequest.objects.create(kind='EDIT', content_type=er.content_type, object_id=nc.pk, object_repr='b', reason='r',
+                                   requested_by=self.boss, status=EditRequest.REJECTED, decided_at=now, reject_reason='안 됨')
+        cr = ChangeRequest.objects.create(number='4M-1', item=item, category='MAN', description='x', customer_notice=False)
+        fa = ChangeRequest.objects.create(number='4M-2', item=item, category='MAN', description='x', customer_notice=False)
+        ChangeRequest.objects.filter(pk=fa.pk).update(approved_at=now - datetime.timedelta(hours=1))  # 승인됐고 초품 합격 전
+        ppap = PpapSubmission.objects.create(item=item, customer='A사', reason='신규', due_date=timezone.localdate() - datetime.timedelta(days=1))
+        self.client.force_login(self.boss)
+        self.client.post('/api/qms/dashboard/', [{'key': 'todo_lists', 'size': 'wide'}], format='json')
+        w = self.client.get('/api/qms/todo/').json()['widgets'][0]
+        self.assertFalse(w['error'])
+        t = w['data']
+        self.assertEqual((t['claims'][0]['label'], t['claims'][0]['lot'], t['claims'][0]['overdue'], t['claims'][0]['due_label']),
+                         (str(claim), str(lot), True, '봉쇄'))
+        self.assertEqual(t['claims'][0]['href'], f'/admin/qms/customerclaim/{claim.pk}/change/')
+        self.assertEqual(t['nc_mail_pending'][0]['href'], f'/nc/{nc.pk}/mail/')
+        self.assertEqual(t['nc_notify_pending'][0]['label'], str(nc))
+        self.assertEqual((t['edit_requests'][0]['requested_by'], t['edit_requests'][0]['href']), ('qe', f'/request/{er.pk}/decide/'))
+        self.assertEqual(t['my_rejected'], [{'label': str(EditRequest.objects.get(status='REJECTED')), 'reject_reason': '안 됨'}])
+        self.assertEqual(t['first_articles'][0]['label'], str(fa))
+        self.assertEqual((t['ppaps'][0]['label'], t['ppaps'][0]['overdue']), (str(ppap), True))
+        self.assertEqual(sorted((a['kind'], a['label']) for a in t['approvals']), sorted([('4M 변경', str(cr)), ('PSW', str(ppap))]))
