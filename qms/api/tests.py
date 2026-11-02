@@ -4,11 +4,10 @@ from types import SimpleNamespace
 from unittest import mock
 
 from django.contrib.auth.models import Group, User
+from django.contrib.contenttypes.models import ContentType
 from django.test import TestCase
 from django.utils import timezone
 from rest_framework.test import APIClient
-
-from django.contrib.contenttypes.models import ContentType
 
 from core.models import EditRequest, Hold, Item, Lot, Nonconformance, WorkOrder
 from qms.models import AuditFinding, Capa, ChangeRequest, CustomerClaim, Gauge, InternalAudit, PpapSubmission, Scar
@@ -78,7 +77,8 @@ class TodoApiTest(TestCase):
         self.assertNotIn('kpi_ppm', keys)
 
     def test_broken_widget_isolated(self):
-        with mock.patch.dict(WIDGETS, {'leave': replace(WIDGETS['leave'], context=lambda *a: 1 / 0)}),                 self.assertLogs('qms', 'ERROR') as logs:
+        with (mock.patch.dict(WIDGETS, {'leave': replace(WIDGETS['leave'], context=lambda *a: 1 / 0)}),
+              self.assertLogs('qms', 'ERROR') as logs):
             self.client.force_login(self.qe)
             r = self.client.get('/api/qms/todo/')
         self.assertIn('위젯 불러오기 실패: leave', logs.output[0])
