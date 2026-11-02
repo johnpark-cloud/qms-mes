@@ -127,7 +127,7 @@ class ShellTest(TestCase):
         self.client.force_login(plain)
         html = side(self.client.get('/todo/').content.decode())
         self.assertNotIn('검사 입력', html)
-        self.assertIn('LOT 이력', html)
+        self.assertNotIn('LOT 이력', html)
         self.client.force_login(User.objects.create_superuser('root'))
         self.assertIn('검사 입력', side(self.client.get('/todo/').content.decode()))
         # 걸러 연 관리 목록도 현재 메뉴로 표시된다

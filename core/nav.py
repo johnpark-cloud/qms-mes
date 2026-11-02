@@ -25,7 +25,7 @@ NAV = [
     ('생산관리 (MES)', [('작업지시', 'admin:core_workorder_changelist', 'core.view_workorder'),
                    ('작업 실적', 'admin:core_workresult_changelist', 'core.view_workresult'),
                    ('LOT', 'admin:core_lot_changelist', 'core.view_lot'),
-                   ('LOT 이력 조회', 'trace', None),
+                   ('LOT 이력 조회', 'trace', 'core.view_lot'),
                    ('출하', 'admin:core_shipment_changelist', 'core.view_shipment')]),
     ('품질관리 (QMS)', [('검사 입력', 'inspect', 'qms.add_inspection'),
                    ('수입검사', _inspections('INCOMING'), 'qms.view_inspection'),
