@@ -46,6 +46,8 @@ def brand_logo(request):
 
 @staff_member_required
 def trace(request):
+    if not request.user.has_perm('core.view_lot'):
+        raise PermissionDenied
     number = request.GET.get('lot', '').strip()
     lot = Lot.objects.filter(number=number).select_related('item').first() if number else None
     ctx = {'number': number, 'lot': lot, 'title': 'LOT 이력'}

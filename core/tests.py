@@ -782,3 +782,16 @@ class AuditFixTest(TestCase):
         LotLink.objects.create(parent=lots[0], child=lots[3])  # 보류 안 된 CELL-0에서 갈라진 하위 LOT
         html, n4 = page()
         self.assertLessEqual(n4 - n3, 1)  # 계보 한 단계 탐색분만 는다
+
+
+class TracePermTest(TestCase):
+    def test_trace_needs_view_lot(self):
+        item = Item.objects.create(code='T1', name='품목', item_type=Item.RAW)
+        Lot.objects.create(number='T-1', item=item)
+        nobody = User.objects.create_user('nobody', password='pw', is_staff=True)
+        self.client.force_login(nobody)
+        self.assertEqual(self.client.get('/trace/?lot=T-1').status_code, 403)
+        inspector = User.objects.create_user('insp', password='pw', is_staff=True)
+        inspector.groups.add(Group.objects.get(name='검사원'))
+        self.client.force_login(inspector)
+        self.assertEqual(self.client.get('/trace/?lot=T-1').status_code, 200)
