@@ -13,7 +13,8 @@ from simple_history.admin import SimpleHistoryAdmin
 
 from .models import (BomLine, Hold, ImportProfile, Item, Lot, LotLink, Nonconformance, NonconformancePhoto, Process,
                      RoutingStep, Shipment, WorkOrder, WorkResult)
-from .records import blockers, can_edit_locked, delete_record, edit_unlocked, is_locked
+from .records import blockers, can_edit_locked, delete_record, is_locked
+from .rules import LOCKED_MSG, begin_edit, child_editable, finish_edit
 
 admin.site.site_header = admin.site.site_title = 'QMS+MES'
 admin.site.index_title = '메뉴'
@@ -48,7 +49,6 @@ def grouped_app_list(request, app_label=None):
 admin.site.get_app_list = grouped_app_list
 
 
-LOCKED_MSG = '잠긴 기록입니다. 수정 요청 후 승인받아야 수정할 수 있습니다.'
 RELATED_SHOWN = 5
 
 
@@ -114,8 +114,7 @@ class BaseAdmin(SimpleHistoryAdmin):
         return None, []
 
     def save_model(self, request, obj, form, change):
-        unlock = change and edit_unlocked(obj, request.user)
-        obj._edit_unlocked = bool(unlock) or request.user.is_superuser
+        unlock = begin_edit(obj, request.user)
         if change and is_locked(obj) and not obj._edit_unlocked:
             try:
                 if not form.has_changed():  # 읽기 전용 폼: 저장할 것이 없다
@@ -126,9 +125,7 @@ class BaseAdmin(SimpleHistoryAdmin):
                 self.message_user(request, LOCKED_MSG, messages.ERROR)
             return
         super().save_model(request, obj, form, change)
-        if unlock:  # 저장이 성공했을 때만 잠금 해제를 소모한다 (changeform_view가 atomic이라 인라인 실패도 되돌린다)
-            unlock.status = unlock.USED
-            unlock.save()
+        finish_edit(unlock)  # changeform_view가 atomic이라 인라인 실패도 되돌린다
 
     def save_formset(self, request, form, formset, change):
         if getattr(form.instance, '_edit_unlocked', False):
@@ -378,7 +375,7 @@ class NcPhotoInline(admin.TabularInline):
 
     def _open(self, request, obj):
         # 종결된 부적합의 사진은 본문과 같이 잠긴다
-        return not (obj and obj.closed_at) or can_edit_locked(obj, request.user)
+        return child_editable(obj, request.user)
 
     def has_add_permission(self, request, obj=None):
         return super().has_add_permission(request, obj) and self._open(request, obj)
