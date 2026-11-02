@@ -7,8 +7,8 @@ from django.test import TestCase
 from django.utils import timezone
 
 from core.models import EditRequest, Item, Lot, Nonconformance, Process
-from core.rules import Locked, child_editable, delete_as, dispose_nc, nc_locked_fields, save_with_lock
-from qms.models import Characteristic, InspectionSpec
+from core.rules import Locked, approve, child_editable, delete_as, dispose_nc, nc_locked_fields, save_with_lock
+from qms.models import Characteristic, ChangeRequest, InspectionSpec
 
 
 class LockRulesTest(TestCase):
@@ -141,3 +141,38 @@ class DisposeRulesTest(TestCase):
         self.assertEqual(self.nc.disposition, '')
         self.assertIsNone(self.nc.approved_by)
         self.assertIsNone(self.nc.closed_at)
+
+
+class ApproveRulesTest(TestCase):
+    def setUp(self):
+        self.boss = User.objects.create_user('boss', password='pw')
+        self.boss.groups.add(Group.objects.get(name='품질팀장'))
+        self.eng = User.objects.create_user('eng', password='pw-eng-123', is_staff=True)
+        self.eng.groups.add(Group.objects.get(name='품질엔지니어'))
+        self.item = Item.objects.create(code='R1', name='양극재', item_type=Item.RAW)
+        self.spec = InspectionSpec.objects.create(item=self.item, inspection_type=InspectionSpec.INCOMING)
+        Characteristic.objects.create(spec=self.spec, name='두께', lsl=Decimal('9.5'), usl=Decimal('10.5'))
+
+    def test_non_approver(self):
+        with self.assertRaisesMessage(PermissionDenied, '품질팀장만 승인할 수 있습니다.'):
+            approve(self.spec, self.eng, 'pw')
+
+    def test_wrong_password(self):
+        with self.assertRaisesMessage(ValidationError, '비밀번호가 맞지 않습니다.'):
+            approve(self.spec, self.boss, 'bad')
+        self.assertIsNone(self.spec.approved_at)
+
+    def test_model_rule_restores_fields(self):
+        cr = ChangeRequest.objects.create(number='CR-1', item=self.item, category='MATERIAL',
+                                          description='x', customer_notice=True)
+        with self.assertRaises(ValidationError):
+            approve(cr, self.boss, 'pw')
+        self.assertIsNone(cr.approved_at)
+        self.assertIsNone(cr.approved_by)
+
+    def test_ok_then_already(self):
+        approve(self.spec, self.boss, 'pw')
+        self.spec.refresh_from_db()
+        self.assertEqual(self.spec.approved_by, self.boss)
+        with self.assertRaisesMessage(ValidationError, '이미 승인된 기록입니다.'):
+            approve(self.spec, self.boss, 'pw')

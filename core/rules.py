@@ -3,7 +3,7 @@ from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import transaction
 from django.utils import timezone
 
-from .models import Nonconformance
+from .models import Nonconformance, is_approver
 from .records import can_edit_locked, delete_record, edit_unlocked, is_locked
 
 LOCKED_MSG = '잠긴 기록입니다. 수정 요청 후 승인받아야 수정할 수 있습니다.'
@@ -95,3 +95,20 @@ def nc_locked_fields(nc, user):
     if can_edit_locked(nc, user):
         return list(Nonconformance.INTERLOCK)
     return [f.name for f in nc._meta.fields if f.name not in Nonconformance.AFTER_APPROVAL]
+
+
+def approve(obj, user, password):
+    """승인 서명: 승인자가 비밀번호를 다시 입력해야 승인된다. Approvable 여부는 부르는 쪽이 먼저 본다."""
+    if not is_approver(user):
+        raise PermissionDenied('품질팀장만 승인할 수 있습니다.')
+    if obj.is_approved:
+        raise ValidationError('이미 승인된 기록입니다.')
+    if not user.check_password(password):
+        raise ValidationError('비밀번호가 맞지 않습니다.')
+    prev = obj.approved_by, obj.approved_at
+    obj.approved_by, obj.approved_at = user, timezone.now()
+    try:
+        obj.save()
+    except ValidationError:  # 예: 고객 승인번호 없는 4M 변경
+        obj.approved_by, obj.approved_at = prev
+        raise

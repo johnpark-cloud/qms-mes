@@ -21,6 +21,7 @@ from django.utils import timezone
 from django.utils.http import urlencode
 from simple_history.utils import bulk_update_with_history
 
+from . import rules
 from .importer import TARGET_MODELS, run_import
 from .timeline import lot_actions, lot_timeline
 from .models import (Approvable, EditRequest, Hold, ImportProfile, Lot, Nonconformance, NonconformancePhoto, is_approver,
@@ -222,17 +223,13 @@ def approve(request, app_label, model_name, pk):
         return redirect(back)
     error = None
     if request.method == 'POST':
-        if not request.user.check_password(request.POST.get('password', '')):
-            error = '비밀번호가 맞지 않습니다.'
+        try:
+            rules.approve(obj, request.user, request.POST.get('password', ''))
+        except ValidationError as e:
+            error = ' '.join(e.messages)
         else:
-            obj.approved_by, obj.approved_at = request.user, timezone.now()
-            try:
-                obj.save()
-            except ValidationError as e:  # 예: 고객 승인번호 없는 4M 변경
-                error = ' '.join(e.messages)
-            else:
-                messages.success(request, f'{obj} 승인 완료')
-                return redirect(back)
+            messages.success(request, f'{obj} 승인 완료')
+            return redirect(back)
     return render(request, 'core/approve.html', {'obj': obj, 'error': error, 'back': back, 'title': '승인 서명'})
 
 
