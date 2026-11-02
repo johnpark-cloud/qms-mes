@@ -77,6 +77,8 @@ def dispose_nc(nc, user, password, data):
         raise Locked(LOCKED_MSG)
     if extra := set(data) - set(DISPOSE_FIELDS):
         raise ValidationError('처분에서 바꿀 수 없는 칸: ' + ', '.join(sorted(extra)))
+    if not data.get('disposition'):  # 처분 없는 서명은 admin 폼도 받지 않는다
+        raise ValidationError('처분을 선택하세요.')
     for name, value in data.items():
         setattr(nc, name, value)
     sign_disposition(nc, user, password)

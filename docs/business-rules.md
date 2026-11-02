@@ -22,7 +22,7 @@
 | 규칙 | 위치 |
 | --- | --- |
 | 처분은 등록과 동시에 입력할 수 없다(먼저 등록·보류). | `Nonconformance.clean` |
-| 처분하려면 품질팀장(또는 시스템 관리자)이 승인자이고, 처분 저장 때 본인 비밀번호를 다시 입력한다. | `Nonconformance.clean`, `core/admin.py` 부적합 폼 `clean` |
+| 처분하려면 품질팀장(또는 시스템 관리자)이 승인자이고, 처분 저장 때 본인 비밀번호를 다시 입력한다. | `Nonconformance.clean`, `core/rules.py` `sign_disposition`(비밀번호 확인, admin 폼 `clean`이 호출)·`dispose_nc`(처분 없는 서명 거부) |
 | 처분 전에 보완 필수 칸(불량유형·선별 결과·격리 수량, 공정 내부·출하검사는 발견 공정까지)을 채워야 한다. | `Nonconformance.missing_fields`, 부적합 폼 `_post_clean` |
 | 재작업·수리는 부적합 발견 이후 그 LOT의 재검사 합격 기록이 있어야 한다. | `Nonconformance.clean` |
 | 특채는 고객 승인 문서번호가 필요하다. | `Nonconformance.clean` |

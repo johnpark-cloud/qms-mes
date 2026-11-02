@@ -123,3 +123,21 @@ class DisposeRulesTest(TestCase):
         self.assertEqual(sorted(nc_locked_fields(self.nc, self.root)), sorted(Nonconformance.INTERLOCK))
         with self.assertRaises(Locked):
             dispose_nc(self.nc, self.mrb, 'pw', {'disposition': Nonconformance.REWORK})
+
+    def test_empty_disposition_rejected_without_signature(self):
+        for data in ({}, {'cost': 1}, {'disposition': ''}):
+            with self.subTest(data=data):
+                with self.assertRaisesMessage(ValidationError, '처분을 선택하세요.'):
+                    dispose_nc(self.nc, self.mrb, 'pw', data)
+                self.assertIsNone(self.nc.approved_by)
+                self.nc.refresh_from_db()
+                self.assertIsNone(self.nc.approved_by)
+                self.assertIsNone(self.nc.approved_at)
+
+    def test_non_approver_rejected(self):
+        with self.assertRaises(ValidationError):
+            dispose_nc(self.nc, self.eng, 'pw-eng-123', {'disposition': Nonconformance.SCRAP})
+        self.nc.refresh_from_db()
+        self.assertEqual(self.nc.disposition, '')
+        self.assertIsNone(self.nc.approved_by)
+        self.assertIsNone(self.nc.closed_at)
