@@ -1,7 +1,7 @@
 from django.conf import settings
 from django.contrib import admin
 from django.contrib.admin.views.decorators import staff_member_required
-from django.urls import path, re_path
+from django.urls import include, path, re_path
 from django.views.generic import RedirectView
 from django.views.static import serve
 
@@ -12,6 +12,7 @@ from qms import views as qms_views
 urlpatterns = [
     path('', RedirectView.as_view(url='/todo/')),
     path('admin/', admin.site.urls),
+    path('api/', include('core.api.urls')),
     path('me/', personal_views.me, name='me'),
     path('me/payslip/<int:pk>/file/', personal_views.payslip_file, name='payslip_file'),
     path('todo/', qms_views.todo, name='todo'),

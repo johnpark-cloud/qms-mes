@@ -40,6 +40,9 @@ DEBUG = os.environ.get('QMS_DEBUG', '1') == '1'
 
 ALLOWED_HOSTS = [h for h in os.environ.get('QMS_ALLOWED_HOSTS', '').split(',') if h]
 
+if DEBUG:  # Vite 개발 서버(5173)가 /api를 프록시할 때의 Origin
+    CSRF_TRUSTED_ORIGINS = ['http://localhost:5173', 'http://127.0.0.1:5173']
+
 
 # Application definition
 
@@ -50,6 +53,9 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    'rest_framework',
+    'django_filters',
+    'drf_spectacular',
     'simple_history',
     'core',
     'qms',
@@ -176,3 +182,16 @@ if os.environ.get('QMS_SMTP_HOST'):  # 기한 알림(manage.py notify)용 회사
     }
 SMTP_ENABLED = bool(os.environ.get('QMS_SMTP_HOST'))  # 부적합 메일 '바로 보내기' 표시 여부
 DEFAULT_FROM_EMAIL = os.environ.get('QMS_MAIL_FROM', 'qms@localhost')
+
+REST_FRAMEWORK = {
+    'DEFAULT_AUTHENTICATION_CLASSES': ['rest_framework.authentication.SessionAuthentication'],
+    'DEFAULT_PERMISSION_CLASSES': ['core.api.permissions.IsStaff'],
+    'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
+    'PAGE_SIZE': 50,
+    'DEFAULT_FILTER_BACKENDS': ['django_filters.rest_framework.DjangoFilterBackend',
+                                'rest_framework.filters.SearchFilter', 'rest_framework.filters.OrderingFilter'],
+    'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
+    'EXCEPTION_HANDLER': 'core.api.exceptions.handler',
+    'UNAUTHENTICATED_USER': 'django.contrib.auth.models.AnonymousUser',
+}
+SPECTACULAR_SETTINGS = {'TITLE': 'QMS+MES API', 'SERVE_INCLUDE_SCHEMA': False}
