@@ -14,7 +14,7 @@ from simple_history.admin import SimpleHistoryAdmin
 from .models import (BomLine, Hold, ImportProfile, Item, Lot, LotLink, Nonconformance, NonconformancePhoto, Process,
                      RoutingStep, Shipment, WorkOrder, WorkResult)
 from .records import blockers, can_edit_locked, delete_record, is_locked
-from .rules import LOCKED_MSG, begin_edit, child_editable, finish_edit
+from .rules import LOCKED_MSG, begin_edit, child_editable, finish_edit, missing_message, nc_locked_fields, sign_disposition
 
 admin.site.site_header = admin.site.site_title = 'QMS+MES'
 admin.site.index_title = '메뉴'
@@ -354,15 +354,13 @@ class NonconformanceForm(forms.ModelForm):
     def clean(self):
         data = super().clean()
         if self._disposing():
-            if not self.user.check_password(data.get('password') or ''):
-                raise forms.ValidationError('MRB 승인 비밀번호가 맞지 않습니다.')
-            self.instance.approved_by, self.instance.approved_at = self.user, timezone.now()
+            sign_disposition(self.instance, self.user, data.get('password') or '')  # forms.ValidationError와 같은 클래스
         return data
 
     def _post_clean(self):
         super()._post_clean()  # 폼 값이 instance에 들어간 뒤라야 읽기 전용 칸까지 포함해 판단할 수 있다
-        if self._disposing() and (missing := self.instance.missing_fields()):
-            self.add_error(None, '보완 필요: ' + ', '.join(missing))
+        if self._disposing() and (msg := missing_message(self.instance)):
+            self.add_error(None, msg)
 
 
 class NcPhotoInline(admin.TabularInline):
@@ -411,11 +409,8 @@ class NonconformanceAdmin(ReportLinksMixin, BaseAdmin):
         js = ['qms/nc_form.js']
 
     def get_readonly_fields(self, request, obj=None):
-        if obj and obj.closed_at and not can_edit_locked(obj, request.user):
-            open_ = Nonconformance.AFTER_APPROVAL
-            return [f.name for f in obj._meta.fields if f.name not in open_ and f.name not in self.AUTO] + self.AUTO
-        # 보류 인터록 칸은 관리자·수정 승인으로도 종결 뒤에 바꿀 수 없다 (새 MRB 서명 없이 보류가 풀리거나 남는다)
-        return self.AUTO + (Nonconformance.INTERLOCK if obj and obj.closed_at else [])
+        # 종결 뒤 보류 인터록 칸은 관리자·수정 승인으로도 바꿀 수 없다 (새 MRB 서명 없이 보류가 풀리거나 남는다)
+        return self.AUTO + [f for f in nc_locked_fields(obj, request.user) if f not in self.AUTO]
 
     def formfield_for_foreignkey(self, db_field, request, **kwargs):
         if db_field.name == 'detected_by':

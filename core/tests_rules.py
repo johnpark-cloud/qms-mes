@@ -6,8 +6,8 @@ from django.core.exceptions import PermissionDenied, ValidationError
 from django.test import TestCase
 from django.utils import timezone
 
-from core.models import EditRequest, Item, Lot, Nonconformance
-from core.rules import Locked, child_editable, delete_as, save_with_lock
+from core.models import EditRequest, Item, Lot, Nonconformance, Process
+from core.rules import Locked, child_editable, delete_as, dispose_nc, nc_locked_fields, save_with_lock
 from qms.models import Characteristic, InspectionSpec
 
 
@@ -79,3 +79,47 @@ class LockRulesTest(TestCase):
         self.assertTrue(child_editable(self.spec, self.root))
         nc = Nonconformance.objects.create(lot=self.lot, description='x')
         self.assertTrue(child_editable(nc, self.eng))
+
+
+class DisposeRulesTest(TestCase):
+    def setUp(self):
+        item = Item.objects.create(code='R1', name='양극재', item_type=Item.RAW)
+        self.lot = Lot.objects.create(number='RAW-1', item=item)
+        self.mrb = User.objects.create_user('mrb', password='pw')
+        self.mrb.groups.add(Group.objects.get(name='품질팀장'))
+        self.eng = User.objects.create_user('eng', password='pw-eng-123', is_staff=True)
+        self.eng.groups.add(Group.objects.get(name='품질엔지니어'))
+        self.root = User.objects.create_superuser('root', password='pw-root-123')
+        self.nc = Nonconformance.objects.create(lot=self.lot, description='이물', defect_type='이물',
+                                                process=Process.objects.create(code='P10', name='적층'),
+                                                sorting_result='전수 선별', contained_qty=Decimal('5'))
+
+    def test_wrong_password(self):
+        with self.assertRaisesMessage(ValidationError, 'MRB 승인 비밀번호가 맞지 않습니다.'):
+            dispose_nc(self.nc, self.mrb, 'bad', {'disposition': Nonconformance.SCRAP})
+        self.nc.refresh_from_db()
+        self.assertEqual(self.nc.disposition, '')
+
+    def test_missing_fields_block(self):
+        self.nc.sorting_result = ''
+        with self.assertRaisesMessage(ValidationError, '보완 필요:'):
+            dispose_nc(self.nc, self.mrb, 'pw', {'disposition': Nonconformance.SCRAP})
+
+    def test_dispose_ok_keeps_hold_for_scrap(self):
+        dispose_nc(self.nc, self.mrb, 'pw', {'disposition': Nonconformance.SCRAP})
+        self.nc.refresh_from_db()
+        self.assertEqual(self.nc.approved_by, self.mrb)
+        self.assertTrue(self.lot.on_hold)
+
+    def test_other_fields_rejected(self):
+        with self.assertRaises(ValidationError):
+            dispose_nc(self.nc, self.mrb, 'pw', {'disposition': Nonconformance.SCRAP, 'lot': 99})
+
+    def test_closed_nc_locked_fields(self):
+        dispose_nc(self.nc, self.mrb, 'pw', {'disposition': Nonconformance.SCRAP})
+        self.nc.refresh_from_db()
+        self.assertIn('lot', nc_locked_fields(self.nc, self.eng))
+        self.assertNotIn('cost', nc_locked_fields(self.nc, self.eng))
+        self.assertEqual(sorted(nc_locked_fields(self.nc, self.root)), sorted(Nonconformance.INTERLOCK))
+        with self.assertRaises(Locked):
+            dispose_nc(self.nc, self.mrb, 'pw', {'disposition': Nonconformance.REWORK})

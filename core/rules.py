@@ -1,6 +1,7 @@
 """admin·기존 뷰·API가 함께 쓰는 업무 규칙. 본문은 기존 admin·뷰 코드를 옮긴 것이다(docs/architecture-migration-plan.md 3.2)."""
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import transaction
+from django.utils import timezone
 
 from .models import Nonconformance
 from .records import can_edit_locked, delete_record, edit_unlocked, is_locked
@@ -53,3 +54,42 @@ def child_editable(parent, user):
         return True
     locked = bool(parent.closed_at) if isinstance(parent, Nonconformance) else is_locked(parent)
     return not locked or can_edit_locked(parent, user)
+
+
+DISPOSE_FIELDS = ('disposition', 'customer_approval_ref', 'cost')
+
+
+def sign_disposition(nc, user, password):
+    """MRB 승인 서명: 본인 비밀번호를 다시 확인하고 승인자·승인 시각을 기록한다 (승인자 자격은 모델 clean이 본다)."""
+    if not user.check_password(password):
+        raise ValidationError('MRB 승인 비밀번호가 맞지 않습니다.')
+    nc.approved_by, nc.approved_at = user, timezone.now()
+
+
+def missing_message(nc):
+    if missing := nc.missing_fields():
+        return '보완 필요: ' + ', '.join(missing)
+
+
+@transaction.atomic
+def dispose_nc(nc, user, password, data):
+    if nc.closed_at:
+        raise Locked(LOCKED_MSG)
+    if extra := set(data) - set(DISPOSE_FIELDS):
+        raise ValidationError('처분에서 바꿀 수 없는 칸: ' + ', '.join(sorted(extra)))
+    for name, value in data.items():
+        setattr(nc, name, value)
+    sign_disposition(nc, user, password)
+    if msg := missing_message(nc):
+        raise ValidationError(msg)
+    nc.full_clean()
+    nc.save()
+
+
+def nc_locked_fields(nc, user):
+    """종결된 부적합에서 읽기 전용인 모델 칸. 보류 인터록 칸은 관리자·수정 승인으로도 못 바꾼다."""
+    if not nc or not nc.closed_at:
+        return []
+    if can_edit_locked(nc, user):
+        return list(Nonconformance.INTERLOCK)
+    return [f.name for f in nc._meta.fields if f.name not in Nonconformance.AFTER_APPROVAL]
