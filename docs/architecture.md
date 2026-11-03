@@ -33,13 +33,15 @@ docs/        구조·업무 규칙·테스트 문서, superpowers/ 설계·계�
 
 | 파일 | 역할 |
 | --- | --- |
-| `models.py` | `Approvable`(승인 필드·잠금 기반 클래스), 품번 `Item`·공정 `Process`·BOM `BomLine`·라우팅 `RoutingStep`, 작업지시 `WorkOrder`·실적 `WorkResult`, LOT `Lot`·계보 `LotLink`, 부적합 `Nonconformance`·사진 `NonconformancePhoto`, 보류 `Hold`, 출하 `Shipment`, 삭제·수정 요청 `EditRequest`, 엑셀 가져오기 설정 `ImportProfile` |
+| `models.py` | `Approvable`(승인 필드·잠금 기반 클래스), 품번 `Item`·공정 `Process`·BOM `BomLine`·라우팅 `RoutingStep`, 작업지시 `WorkOrder`·실적 `WorkResult`, LOT `Lot`·계보 `LotLink`, 부적합 `Nonconformance`·사진 `NonconformancePhoto`, 보류 `Hold`, 출하 `Shipment`, 삭제·수정 요청 `EditRequest`, 엑셀 가져오기 설정 `ImportProfile`, 개정 이력 `RevisionLog`(신청 → 승인자 확정, 확정 후 수정·삭제 불가) |
 | `admin.py` | `BaseAdmin`(삭제는 시스템 관리자만, 승인 잠금, 요청 링크, 상세 화면 관련 기록 `related_panel`), 부적합 폼(MRB 처분 시 비밀번호·보완 필수 칸 검사) |
 | `records.py` | 삭제(`delete_record`), 잠금(`is_locked`), 잠금 해제 확인(`can_edit_locked`) 규칙 |
 | `views.py` | LOT 추적, 통합 검색, 부적합 간편 등록, 승인 서명, 삭제·수정 요청, 출력, 부적합 메일·사진 ZIP, 엑셀 가져오기 |
 | `timeline.py`, `search.py`, `nav.py`, `context_processors.py` | LOT 타임라인, 검색, 사이드바 메뉴(권한별, 업무 영역 7묶음). 전체 메뉴(`/admin/`)도 `core/admin.py` `grouped_app_list`가 같은 묶음으로 정렬한다 |
 | `middleware.py` | 로그인 사용자 HTML 화면에 `no-store` 헤더(뒤로가기 때 최신 내용) |
 | `importer.py` | 엑셀/CSV 일괄 등록 |
+| `export.py` | 문서 구조(dict)·표를 A4 `.xlsx`로 내보낸다(`document_xlsx`, `table_xlsx`, `xlsx_response`). React 인쇄 화면도 같은 문서 구조를 쓴다 |
+| `audit.py` | simple-history 이력을 감사 기록 화면용으로 읽는다(`audited_models`는 `PRIVATE_APPS` 제외, `row_payload`는 `password` 변경 제외) |
 | `rules.py` | admin·기존 뷰·API가 함께 쓰는 업무 규칙(잠금·삭제·승인 등). 규칙 본문은 한 곳에만 둔다 |
 | `api/` | DRF 기반 JSON API: 로그인·`/api/auth/me/`, 오류 응답 형식(`exceptions.py`), 모델 권한(`permissions.py`). 업무 규칙은 `core/rules.py`·모델 `save()`를 그대로 쓴다 |
 | `management/commands/` | `backup`, `restore` |
@@ -54,6 +56,7 @@ docs/        구조·업무 규칙·테스트 문서, superpowers/ 설계·계�
 | `views.py` | 내 할 일·대시보드, 공장 종합현황, KPI, 협력사 성적표, 검사 입력, SPC, 현장 메모, 심사 자료 출력, 엑셀 양식 출력 |
 | `rules.py` | 검사 판정·입고 업무 규칙(기존 `views.py`에서 옮김). 화면과 API가 함께 쓴다 |
 | `api/` | 공장 종합현황 `GET /api/qms/overview/`, 내 할 일 `GET /api/qms/todo/`, 위젯 배치 저장 `POST /api/qms/dashboard/` |
+| `api/specs.py` | 검사기준서 API `/api/qms/specs/`(목록·`?export=xlsx`·생성), `<id>/`(조회·저장), `new-revision/`, `approve/`, `revision-log/`, `document/`(`?export=xlsx`). 규칙은 `qms/rules.py`(`save_spec`·`spec_version`·`compare_specs`)를 쓴다. 다운로드 형식은 DRF가 `?format=`을 가로채므로 `?export=`로 고른다 |
 | `overview.py` | 공장 종합현황 카드 계산 (`/overview/` 화면과 API가 공유) |
 | `due.py` | 기한·대기 항목 계산 (내 할 일과 `notify`가 공유) |
 | `widgets.py` | 대시보드 위젯 목록·역할별 기본 배치·격자 자리 잡기(`place`) |
@@ -62,14 +65,15 @@ docs/        구조·업무 규칙·테스트 문서, superpowers/ 설계·계�
 
 ### frontend (`frontend/`)
 
-React 19·TypeScript·Vite·Ant Design 새 화면. 개발 PC에서 `npm run build`로 `frontend/dist/`를 만들고 그 결과를 저장소에 함께 넣는다. Django는 `/app/` 아래 모든 주소에 `dist/index.html`을 내려 주고(`core/views.py` `spa`), JS·CSS는 whitenoise가 `/static/app/`에서 제공하므로 운영 PC에는 Node가 필요 없다. 지금은 `/app/overview`·`/app/todo`만 있고 데이터는 위 API로만 받는다.
+React 19·TypeScript·Vite·Ant Design 새 화면. 개발 PC에서 `npm run build`로 `frontend/dist/`를 만들고 그 결과를 저장소에 함께 넣는다. Django는 `/app/` 아래 모든 주소에 `dist/index.html`을 내려 주고(`core/views.py` `spa`), JS·CSS는 whitenoise가 `/static/app/`에서 제공하므로 운영 PC에는 Node가 필요 없다. 지금은 `/app/overview`·`/app/todo`·`/app/specs`(목록·`:id` 기록 페이지·`:id/print` 인쇄)·`/app/audit`가 있고 데이터는 API로만 받는다. `core/api/views.py`에는 통합 검색(`/api/search/`)·품번 조회(`/api/items/`)·감사 기록(`/api/audit-log/`, 승인자만)·개정 이력 확정(`/api/revision-log/<id>/approve/`)이 있다.
 
 | 위치 | 역할 |
 | --- | --- |
 | `src/main.tsx` | 라우터(`basename="/app"`)·테마·쿼리 클라이언트 |
 | `src/api/` | `client.ts`(CSRF·오류 형식·세션 만료 시 로그인 이동), `auth.ts` |
 | `src/layout/AppLayout.tsx`, `src/theme.ts` | 상단 바·사이드 메뉴, Fiori 색 토큰(라이트·다크) |
-| `src/pages/`, `src/components/` | 화면(`Login`, `Overview`, `Todo`)과 공통 타일(`Tile`) |
+| `src/pages/`, `src/components/` | 화면(`Login`, `Overview`, `Todo`, `specs/SpecList`·`SpecPage`·`SpecPrint`, `AuditLog`)과 공통 부품(`Tile`, `DataList`, `EditGrid`, `RecordPage`, `SaveBar`, `SignModal`, `DocumentView`, `CommandPalette`) |
+| `src/api/specs.ts`, `src/app.css`, `src/lib/` | 검사기준서 API 호출, 화면 스타일(`DESIGN.md`), 붙여넣기 분해(`tsv.ts`)·최근 연 기록(`recent.ts`) |
 
 전환 검토와 단계 계획은 `docs/architecture-migration-plan.md`에 있다.
 

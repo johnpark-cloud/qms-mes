@@ -37,8 +37,18 @@
 | 승인 대상(`Approvable`: 검사기준, 관리계획서, 4M 변경, 문서 개정, PPAP)은 승인 서명 화면에서만 승인된다. 승인자는 품질팀장 그룹이나 시스템 관리자이고, 비밀번호를 다시 입력한다. | `core/views.py` `approve`, `core/models.py` `is_approver` |
 | 승인된 기록은 수정할 수 없다. 새 개정을 만든다. | `Approvable.save`, `Characteristic.save`, `ControlPlanLine` 저장 |
 | 검사·문서 기준은 "승인된 최신 개정"이 유효본이다. | `InspectionSpec.current` |
+| 검사기준 저장은 `qms.rules.save_spec`이 한다(admin과 같은 잠금: `save_with_lock`). 기준서 속성과 검사항목 줄을 한꺼번에 저장하고 하나라도 잘못이면 아무것도 저장하지 않는다. 다른 기준서의 항목 id는 400으로 거부한다. 동시 수정은 `spec_version`(기준서·항목 이력 중 가장 큰 `history_id`)이 달라지면 409 `다른 사람이 먼저 고쳤습니다. 다시 불러오세요.`다. 항목 삭제는 `delete_characteristic` 권한이 필요하다(역할 그룹에는 없어 사실상 시스템 관리자만). | `qms/rules.py` `save_spec`·`spec_version`, `qms/api/specs.py` |
 | 4M 변경 중 고객 통보 대상은 고객 승인 문서번호가 있어야 승인할 수 있다. | `ChangeRequest.clean` |
 | PPAP: 제출(S) 요소마다 증적이 있어야 PSW를 승인할 수 있다. 승인 후에는 제출일·고객 승인일만 기록할 수 있다. | `PpapSubmission.clean`/`save`, `PpapElement` 저장 |
+
+### 개정 이력(RevisionLog)
+
+| 규칙 | 위치 |
+| --- | --- |
+| 개정 이력은 신청자가 변경 내용·사유(둘 다 필수)로 신청하면 "대기"이고, 승인자(`is_approver`)가 비밀번호를 다시 입력하면 "확정"이다. | `core/rules.py` `request_revision_log`·`confirm_revision_log`, API `POST /api/revision-log/<id>/approve/` |
+| 확정된 개정 이력은 수정·삭제할 수 없다. 오류 문구는 `확정된 개정 이력은 수정할 수 없습니다.` | `core/models.py` `RevisionLog.save`·`delete` |
+| 승인 서명과 확정 이력을 함께 남기는 경우(`approve_and_log`)는 한 트랜잭션이라 한쪽이 실패하면 둘 다 취소된다. | `core/rules.py` `approve_and_log` |
+| `RevisionLog`도 `history = HistoricalRecords()`로 변경을 남긴다. | `core/models.py` |
 
 ## 4. 삭제와 수정 요청
 
@@ -110,5 +120,7 @@
 | KPI는 소속 부서 것만 본다(`/kpi/` 화면과 내 할 일 KPI 위젯 모두). 부서는 역할 그룹 묶음이고 지금은 `품질`(품질엔지니어·품질팀장·검사원)뿐이다. PPM·직행률·8D·실패비용·불량유형 파레토는 품질, 공정 수율은 품질·생산 부서 KPI다. 품질팀장·시스템 관리자는 모든 부서 KPI를 본다. KPI 위젯은 `/kpi/`와 같은 `qms.view_customerclaim` 권한도 있어야 보인다. 부서를 늘리려면 `DEPARTMENTS`에 그룹을 더한다. | `qms/kpi.py` `DEPARTMENTS`·`KPI_DEPARTMENTS`·`can_see`, `qms/views.py` `kpi_view`, `qms/widgets.py` `kpi_allowed` |
 
 ## 11. 이력
+
+감사 기록 화면(`/app/audit`, API `GET /api/audit-log/`)은 승인자(`is_approver`: 품질팀장·시스템 관리자)만 본다. 개인정보 앱(`PRIVATE_APPS`, `personal` 등)의 이력은 보여 주지 않고, `password` 필드 변경은 가린다(`core/api/views.py` `AuditLogView`, `core/audit.py` `audited_models`·`SECRET_FIELDS`). 사이드바의 "감사 기록" 메뉴도 승인자에게만 나온다(`core/nav.py`).
 
 업무 모델은 `history = HistoricalRecords()`로 모든 변경을 남긴다. 새 업무 모델에도 붙이고, 기존 모델에서 제거하지 않는다. 여러 행을 한꺼번에 저장할 때는 `bulk_create`·`update()` 대신 이력을 남기는 `simple_history.utils.bulk_create_with_history`·`bulk_update_with_history`를 쓴다(보류 생성·해제, 부적합 메일 발송 표시가 이 방식이다: `core/models.py` `Nonconformance.save`, `core/views.py` `_mark_mailed`).

@@ -310,6 +310,13 @@ components:
 ### LOT Timeline (Signature)
 공정 순서대로 가로로 놓인 회색 카드 줄이다. 카드 위쪽 3px 선은 공정이면 파랑, 부적합이면 빨강이다. 시간은 14px 보조 slate, 사진 썸네일은 64px에 4px 모서리. 960px 미만에서는 세로로 쌓인다.
 
+### React 화면 (`/app/`)
+`frontend/src/app.css`의 규칙이다. 색은 `frontend/src/theme.ts`의 Fiori 값을 따르고, 다크 모드 값은 `prefers-color-scheme`으로 맞춘다.
+- 밀도: 표·속성(`.grid-table`, `.prop-grid`) 글자는 14px, 페이지 제목(`.page-title`)은 24px·600이다.
+- 구분선: 1px `--app-border`(`#eaecee`, 다크 `#2d3540`)만 쓴다. 칸은 `4px 8px` 여백이다.
+- 이전 개정 비교 색: 바뀐 칸 `.diff-changed`(주황 계열 면), 추가 `.diff-added`(초록 계열 면), 삭제 `.diff-removed`(빨강 글자 + 취소선). 색만으로 전달하지 않도록 비교 결과 글(`diff_text`)을 함께 보인다. 저장 오류 칸은 `.cell-error`(빨강 테두리)다.
+- 인쇄: 문서 화면(`.doc-page`)은 A4 세로, 여백 12mm, 글자 10pt, 흰 바탕에 검정 글자다. `@media print`에서 `.print-bar`는 숨긴다. 승인 전 문서에는 `.doc-watermark`로 `초안 — 승인 전`을 대각선으로 크게 깐다. 표 행은 쪽 중간에서 끊지 않는다(`break-inside: avoid`).
+
 ## Do's and Don'ts
 
 ### Do:

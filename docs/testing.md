@@ -6,11 +6,11 @@
 
 | 목적 | 명령 | 비고 |
 | --- | --- | --- |
-| 단위 테스트 전체 | `.\.venv\Scripts\python manage.py test` | core·qms·personal 모두. 테스트용 DB를 따로 만들므로 `data/`의 운영 DB는 건드리지 않는다. 2026-11-02 기준 215개, 약 4분 |
+| 단위 테스트 전체 | `.\.venv\Scripts\python manage.py test` | core·qms·personal 모두. 테스트용 DB를 따로 만들므로 `data/`의 운영 DB는 건드리지 않는다. 2026-11-03 기준 281개 |
 | 앱 하나만 | `.\.venv\Scripts\python manage.py test qms` | 작업 중 빠른 확인용. 완료 판단에는 전체 실행이 필요하다 |
 | 테스트 하나만 | `.\.venv\Scripts\python manage.py test core.tests.ShellTest.test_logged_in_pages_not_stored` | |
-| 화면 흐름(e2e) | `.\.venv\Scripts\python scripts\e2e_check.py` | 임시 폴더에 새 DB를 만들고 포트 8765에 서버를 띄워 실제 HTTP로 인터록·화면을 점검한다. 2026-10-28 기준 76개 |
-| 브라우저 흐름(React `/app/`) | `python scripts\e2e_browser.py` | **시스템 Python**(`.venv` 아님)의 Playwright가 필요하다(`python -m playwright`). 임시 폴더에 새 DB를 만들고 포트 8766에 서버를 띄워 실제 브라우저로 로그인, 종합현황 카드 수(API와 같은지), 내 할 일 위젯 추가 후 새로고침, 390px 폭 가로 스크롤, 로고(없으면 글자·넣으면 왼쪽 위 그림), 다크 모드 배경색, 세션 끊김 시 로그인 이동을 점검한다. 2026-11-03 기준 8개. Playwright는 `requirements.txt`에 넣지 않는다 |
+| 화면 흐름(e2e) | `.\.venv\Scripts\python scripts\e2e_check.py` | 임시 폴더에 새 DB를 만들고 포트 8765에 서버를 띄워 실제 HTTP로 인터록·화면을 점검한다. 2026-11-03 기준 76개 |
+| 브라우저 흐름(React `/app/`) | `python scripts\e2e_browser.py` | **시스템 Python**(`.venv` 아님)의 Playwright가 필요하다(`python -m playwright`). 임시 폴더에 새 DB를 만들고 포트 8766에 서버를 띄워 실제 브라우저로 로그인, 종합현황 카드 수(API와 같은지), 내 할 일 위젯 추가 후 새로고침, 390px 폭 가로 스크롤, 로고(없으면 글자·넣으면 왼쪽 위 그림), 다크 모드 배경색, 명령창(결과 없음 Enter·localStorage 차단), 검사기준서(새 기준서 → Rev.1, 목록 줄 수·엑셀 받기, 10줄 붙여넣기 저장, 잠긴 기준서 붙여넣기 거부, 새 개정, 인쇄 화면 PDF A4 1쪽·초안 표시), 감사 기록 화면, 세션 끊김 시 로그인 이동을 점검한다. 2026-11-03 기준 20개(20/20 통과). Playwright는 `requirements.txt`에 넣지 않는다 |
 | 설정 점검 | `.\.venv\Scripts\python manage.py check` | |
 | 마이그레이션 누락 확인 | `.\.venv\Scripts\python manage.py makemigrations --check --dry-run` | 모델을 바꿨는데 마이그레이션이 없으면 실패한다 |
 
@@ -24,8 +24,11 @@ e2e를 Git Bash에서 실행할 때 한글이 깨지면 `PYTHONIOENCODING=utf-8`
 | `qms/tests.py` | `QmsTest`(검사 판정·계측기·자격·SPC·4M·클레임·SCAR·CAPA·심사·PPAP·엑셀 가져오기·양식·백업·복원·알림 등), `TimelineTest`, `MemoTest`, `AuditPackTest`, `DashboardTest` |
 | `personal/tests.py` | `LeaveTests`(연차 계산), `PayTests`(급여), `OwnerOnlyTests`(본인만 열람) |
 | `core/tests_rules.py`, `qms/tests_rules.py` | 공통 업무 규칙(`rules.py`): 잠금·처분·승인, 검사 판정·입고 |
-| `core/api/tests.py`, `qms/api/tests.py` | API: 로그인·권한·오류 형식·SPA 서빙, 공장 종합현황·내 할 일·배치 저장 |
-| `scripts/e2e_browser.py` | React 화면을 브라우저로: 로그인, 카드 수, 위젯 추가 유지, 휴대폰 폭, 로고, 다크 모드, 세션 끊김 |
+| `core/api/tests.py`, `qms/api/tests.py` | API: 로그인·권한·오류 형식·SPA 서빙(`AuthApiTest`·`SpaTest`·`CommonApiTest`: 검색·품번 조회·감사 기록·개정 이력 승인), 공장 종합현황·내 할 일·배치 저장, 검사기준서 API(`SpecApiTest`) |
+| `core/tests_rules.py` `RevisionLogTest` | 개정 이력: 신청·승인자 비밀번호 확정·확정 후 수정·삭제 불가 |
+| `qms/tests_rules.py` `SpecRulesTest` | `save_spec`·`spec_version`·이전 개정 비교 |
+| `qms/tests.py` `SpecDocumentTest` | 문서 구조·엑셀 내보내기(A4 한 시트·초안 표시·수식 문자 방어)·양식 여러 줄 매핑 |
+| `scripts/e2e_browser.py` | React 화면을 브라우저로: 로그인, 카드 수, 위젯 추가 유지, 휴대폰 폭, 로고, 다크 모드, 명령창, 검사기준서(붙여넣기·새 개정·인쇄), 감사 기록, 세션 끊김 |
 | `scripts/e2e_check.py` | 로그인부터 화면별 HTTP 흐름, 정적 파일·디자인 토큰 제공 |
 
 ## 변경 종류별 검증
