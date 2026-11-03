@@ -68,9 +68,10 @@ def document_xlsx(doc):
     for t in doc['tables']:
         _put(ws, row, 1, t['title']).font = _BOLD
         row = _grid(ws, row + 1, t['columns'], t['rows']) + 1
-    _put(ws, row, 1, '개정 이력').font = _BOLD
-    row = _grid(ws, row + 1, REVISION_COLUMNS, [[r['label'], r['changes'], r['reason'], r['requested_by'], r['approved_by'],
-                                                  r['approved_at']] for r in doc['revisions']]) + 1
+    if doc['revisions'] is not None:  # None = 개정 이력이 없는 문서(검사 성적서)
+        _put(ws, row, 1, '개정 이력').font = _BOLD
+        row = _grid(ws, row + 1, REVISION_COLUMNS, [[r['label'], r['changes'], r['reason'], r['requested_by'], r['approved_by'],
+                                                      r['approved_at']] for r in doc['revisions']]) + 1
     s = doc['signoff']
     _grid(ws, row, ['구분', '이름', '일자'], [['작성', s['written_by'], s['written_at']], ['승인', s['approved_by'], s['approved_at']]])
     for col in 'ABCDEF':

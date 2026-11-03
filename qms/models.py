@@ -102,6 +102,13 @@ class Characteristic(models.Model):
         """규격이 있으면 계량형, 없으면 OK/NG 계수형."""
         return self.lsl is not None or self.usl is not None
 
+    def spec_text(self):
+        """규격 글: '9.9 ~ 10.1 mm', '- ~ 10.1 mm', 계수형은 'OK/NG'."""
+        if not self.is_variable:
+            return 'OK/NG'
+        n = lambda d: '-' if d is None else format(d.normalize(), 'f')
+        return f'{n(self.lsl)} ~ {n(self.usl)} {self.unit}'.strip()
+
     def clean(self):
         check_limits(self)
 
@@ -146,20 +153,36 @@ class Inspection(models.Model):
     def __str__(self):
         return f'{self.lot} {self.spec}'
 
-    def print_table(self):
-        """인쇄 화면 = 검사 성적서: 머리 정보 다음에 항목별 규격·측정값·판정."""
+    def document(self):
+        """검사 성적서 문서 구조. 키는 InspectionSpec.document()와 같다. 검사 기록에는 개정 이력이 없어 revisions는 None이다."""
         lot, item = self.lot, self.lot.item
-        head = [['LOT', str(lot), ''], ['품번', f'{item.code} {item.name}', ''], ['협력사', lot.supplier or '-', ''],
-                ['수량', f'{lot.qty.normalize():f}', ''], ['검사기준', str(self.spec), self.spec.sampling],
-                ['검사자', str(self.inspector or '-'), timezone.localtime(self.inspected_at).strftime('%Y-%m-%d %H:%M')]]
         rows = []
-        for m in self.measurements.select_related('characteristic', 'gauge'):
+        for m in self.measurements.select_related('characteristic', 'gauge').order_by('pk'):
             c = m.characteristic
-            spec = f'{c.lsl if c.lsl is not None else "-"} ~ {c.usl if c.usl is not None else "-"} {c.unit}' if c.is_variable else 'OK/NG'
-            got = (f'{m.value.normalize():f}' if m.value is not None else '-') if c.is_variable else {True: 'OK', False: 'NG'}.get(m.ok, '-')
-            rows.append([c.name, f'{spec} → {got}' + (f' ({m.gauge.number})' if m.gauge else ''), '합격' if m.passed else '불합격'])
-        foot = [['판정', self.get_result_display() or '미판정', str(self.nonconformance or '')]]
-        return f'{self.spec.get_inspection_type_display()} 성적서', ['항목', '내용', '비고·판정'], head + rows + foot
+            got = (format(m.value.normalize(), 'f') if m.value is not None else '-') if c.is_variable else {True: 'OK', False: 'NG'}.get(m.ok, '-')
+            rows.append([c.name, c.spec_text(), got, m.gauge.number if m.gauge else '', '합격' if m.passed else '불합격'])
+        return {
+            'title': f'{self.spec.get_inspection_type_display()} 성적서', 'number': None, 'revision': f'Rev.{self.spec.revision}',
+            'draft': self.result == '',
+            'head': [['LOT', str(lot)], ['품번', item.code], ['품명', item.name], ['협력사', lot.supplier or '-'],
+                     ['수량', format(lot.qty.normalize(), 'f')], ['검사기준', str(self.spec)], ['샘플링', self.spec.sampling],
+                     ['검사자', str(self.inspector or '-')],
+                     ['검사 일시', timezone.localtime(self.inspected_at).strftime('%Y-%m-%d %H:%M')],
+                     ['판정', self.get_result_display() or '미판정'], ['부적합', self.nonconformance.number if self.nonconformance else '']],
+            'tables': [{'title': '측정 결과', 'columns': ['검사항목', '규격', '측정값', '계측기', '판정'], 'rows': rows}],
+            'revisions': None,
+            'signoff': {'written_by': str(self.inspector or ''), 'written_at': timezone.localtime(self.inspected_at).strftime('%Y-%m-%d'),
+                        'approved_by': '', 'approved_at': ''},
+        }
+
+    def print_table(self):
+        """옛 인쇄 화면 = 검사 성적서. document()에서 만든다: 머리 정보 다음에 항목별 규격·측정값·판정."""
+        d = self.document()
+        head = dict(d['head'])
+        rows = [[k, v, ''] for k, v in d['head'] if k not in ('판정', '부적합')]
+        rows += [[n, f'{spec} → {got}' + (f' ({gauge})' if gauge else ''), res] for n, spec, got, gauge, res in d['tables'][0]['rows']]
+        rows.append(['판정', head['판정'], head['부적합']])
+        return d['title'], ['항목', '내용', '비고·판정'], rows
 
     def clean(self):
         if self.spec_id and not self.spec.is_approved:

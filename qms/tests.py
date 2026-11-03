@@ -1312,3 +1312,56 @@ class SpecDocumentTest(TestCase):
         self.assertEqual(cells['=1+1'].data_type, 's')
         self.assertIn('ab', cells)
         self.assertTrue(table_xlsx('a/b:c', ['x'], [['@x']]))
+
+
+class InspectionDocumentTest(TestCase):
+    def setUp(self):
+        from .rules import submit_inspection
+        self.user = User.objects.create_user('insp', password='pw-insp-123', is_staff=True)
+        self.item = Item.objects.create(code='D-1', name='강판', item_type=Item.RAW)
+        self.lot = Lot.objects.create(number='D-LOT-1', item=self.item, supplier='성일철강', qty=Decimal('50'))
+        self.spec = InspectionSpec.objects.create(item=self.item, inspection_type=InspectionSpec.INCOMING)
+        self.thk = Characteristic.objects.create(spec=self.spec, name='두께', lsl=Decimal('9.9'), usl=Decimal('10.1'), unit='mm')
+        self.look = Characteristic.objects.create(spec=self.spec, name='외관')
+        approve(self.spec, self.user)
+        gauge = Gauge.objects.create(number='G-01', name='마이크로미터', last_calibrated=timezone.localdate())
+        self.insp = submit_inspection(self.lot, self.spec, self.user, gauge, {self.thk.pk: '11.0', self.look.pk: 'OK'})
+
+    def test_document_structure(self):
+        d = self.insp.document()
+        self.assertEqual(d['title'], '수입검사 성적서')
+        self.assertEqual(d['revision'], 'Rev.1')
+        self.assertFalse(d['draft'])
+        self.assertIsNone(d['revisions'])
+        head = dict(d['head'])
+        self.assertEqual((head['LOT'], head['협력사'], head['수량'], head['판정']), ('D-LOT-1', '성일철강', '50', '불합격'))
+        self.assertEqual(head['부적합'], self.insp.nonconformance.number)
+        t = d['tables'][0]
+        self.assertEqual(t['columns'], ['검사항목', '규격', '측정값', '계측기', '판정'])
+        self.assertEqual(t['rows'][0], ['두께', '9.9 ~ 10.1 mm', '11', 'G-01', '불합격'])
+        self.assertEqual(t['rows'][1], ['외관', 'OK/NG', 'OK', '', '합격'])
+        self.assertEqual(d['signoff']['written_by'], self.user.username)
+        self.assertEqual(d['signoff']['approved_by'], '')
+        json.dumps(d)
+
+    def test_spec_text_forms(self):
+        self.assertEqual(Characteristic(lsl=Decimal('9.90000'), unit='mm').spec_text(), '9.9 ~ - mm')
+        self.assertEqual(Characteristic(usl=Decimal('10.1'), unit='mm').spec_text(), '- ~ 10.1 mm')
+        self.assertEqual(Characteristic(name='외관').spec_text(), 'OK/NG')
+
+    def test_unjudged_is_draft(self):
+        insp = Inspection.objects.create(lot=self.lot, spec=self.spec, inspector=self.user)
+        self.assertTrue(insp.document()['draft'])
+        self.assertEqual(dict(insp.document()['head'])['판정'], '미판정')
+
+    def test_xlsx_without_revisions(self):
+        ws = load_workbook(BytesIO(document_xlsx(self.insp.document()))).active
+        texts = [c.value for row in ws.iter_rows() for c in row if c.value]
+        self.assertNotIn('개정 이력', texts)
+        self.assertIn('측정 결과', texts)
+
+    def test_print_table_from_document(self):
+        title, header, rows = self.insp.print_table()
+        self.assertEqual(title, '수입검사 성적서')
+        self.assertIn('성일철강', str(rows))
+        self.assertIn('11', str(rows))
