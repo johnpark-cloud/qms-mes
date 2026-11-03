@@ -74,3 +74,31 @@ export const submitInspection = (body: {
   defect_type?: string
   defect_qty?: string
 }) => post<SubmitResult>('/api/qms/inspect/submit/', body)
+
+export interface InspectionRow {
+  id: number
+  inspected_at: string
+  lot_number: string
+  item_code: string
+  item_name: string
+  supplier: string
+  spec_title: string
+  inspector: string
+  result: string
+  result_display: '합격' | '불합격' | '미판정'
+  nc_number: string
+}
+
+export interface InspectionDetail {
+  id: number
+  title: string
+  status: '합격' | '불합격' | '미판정'
+  lot: { id: number; number: string; trace_url: string }
+  item: { code: string; name: string }
+  spec: { id: number; title: string }
+  inspector: string
+  inspected_at: string
+  nonconformance: { id: number; number: string; url: string } | null
+  measurements: { name: string; spec_text: string; value: string | null; gauge: string; passed: boolean | null }[]
+  templates: { id: number; name: string; url: string }[]
+}

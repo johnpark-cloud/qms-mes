@@ -12,10 +12,13 @@ interface Props<T> {
   toolbar?: ReactNode
   rowKey: (row: T) => Key
   emptyText?: string
+  tab?: string // 주소 ?tab= 과 맞출 때 쓴다
+  onTab?: (tab: string) => void
 }
 
-export default function DataList<T extends object>({ columns, tabs, fetchPage, exportHref, peek, onOpen, toolbar, rowKey, emptyText }: Props<T>) {
-  const [tab, setTab] = useState(tabs[0].key)
+export default function DataList<T extends object>({ columns, tabs, fetchPage, exportHref, peek, onOpen, toolbar, rowKey, emptyText, tab: tabProp, onTab }: Props<T>) {
+  const [tabState, setTab] = useState(tabs[0].key)
+  const tab = tabProp ?? tabState
   const [text, setText] = useState('')
   const [q, setQ] = useState('')
   const [rows, setRows] = useState<T[]>([])
@@ -66,7 +69,10 @@ export default function DataList<T extends object>({ columns, tabs, fetchPage, e
 
   return (
     <div>
-      <Tabs activeKey={tab} onChange={setTab} items={tabs} />
+      <Tabs activeKey={tab} onChange={(k) => {
+          setTab(k)
+          onTab?.(k)
+        }} items={tabs} />
       <Space style={{ marginBottom: 12 }} wrap>
         <Input.Search allowClear placeholder="검색" value={text} onChange={(e) => setText(e.target.value)} style={{ width: 260 }} />
         <a href={exportHref(tab, q)} download>

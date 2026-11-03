@@ -37,6 +37,7 @@ export default function DocumentView({ doc }: { doc: DocStruct }) {
           </table>
         </section>
       ))}
+      {doc.revisions && <>
       <h2 className="doc-h2">개정 이력</h2>
       <table className="doc-table">
         <thead><tr><th>개정</th><th>변경 내용</th><th>사유</th><th>요청자</th><th>승인자</th><th>승인일</th></tr></thead>
@@ -46,6 +47,7 @@ export default function DocumentView({ doc }: { doc: DocStruct }) {
           ))}
         </tbody>
       </table>
+      </>}
     </div>
   )
 }

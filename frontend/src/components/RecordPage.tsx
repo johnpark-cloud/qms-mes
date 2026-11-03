@@ -3,14 +3,14 @@ import type { ReactNode } from 'react'
 
 interface Props {
   title: string
-  status: '초안' | '승인됨' | '잠김'
+  status: '초안' | '승인됨' | '잠김' | '합격' | '불합격' | '미판정'
   actions: ReactNode
   props: { label: string; node: ReactNode }[]
   children: ReactNode
   side: { key: string; label: string; node: ReactNode }[]
 }
 
-const COLOR = { 초안: 'orange', 승인됨: 'green', 잠김: 'default' } as const
+const COLOR = { 초안: 'orange', 승인됨: 'green', 잠김: 'default', 합격: 'green', 불합격: 'red', 미판정: 'orange' } as const
 
 export default function RecordPage({ title, status, actions, props, children, side }: Props) {
   return (

@@ -13,6 +13,9 @@ const MOVED: Record<string, string> = {
   '/overview/': '/app/overview',
   '/inspect/': '/app/inspect',
   '/admin/qms/inspectionspec/': '/app/specs',
+  '/admin/qms/inspection/?spec__inspection_type__exact=INCOMING': '/app/inspections?tab=INCOMING',
+  '/admin/qms/inspection/?spec__inspection_type__exact=PROCESS': '/app/inspections?tab=PROCESS',
+  '/admin/qms/inspection/?spec__inspection_type__exact=OUTGOING': '/app/inspections?tab=OUTGOING',
 }
 const to = (href: string) => MOVED[href] ?? href
 
@@ -49,7 +52,7 @@ export default function AppLayout() {
       children: g.items.map((i) => ({ key: to(i.href), label: i.label })),
     })),
   ]
-  const selected = '/app' + pathname
+  const selected = '/app' + pathname + (pathname === '/inspections' ? search : '')
   const open = user.nav.filter((g) => g.items.some((i) => to(i.href) === selected)).map((g) => g.group)
 
   return (

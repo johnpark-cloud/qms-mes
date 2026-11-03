@@ -12,6 +12,9 @@ import AuditLog from './pages/AuditLog'
 import InspectPage from './pages/inspect/InspectPage'
 import MeasurePage from './pages/inspect/MeasurePage'
 import Login from './pages/Login'
+import InspectionList from './pages/inspections/InspectionList'
+import InspectionPage from './pages/inspections/InspectionPage'
+import InspectionPrint from './pages/inspections/InspectionPrint'
 import Overview from './pages/Overview'
 import SpecList from './pages/specs/SpecList'
 import SpecPage from './pages/specs/SpecPage'
@@ -33,6 +36,7 @@ function App() {
           <Routes>
             <Route path="login" element={<Login />} />
             <Route path="specs/:id/print" element={<SpecPrint />} />
+            <Route path="inspections/:id/print" element={<InspectionPrint />} />
             <Route element={<AppLayout />}>
               <Route path="overview" element={<Overview />} />
               <Route path="todo" element={<Todo />} />
@@ -40,6 +44,8 @@ function App() {
               <Route path="specs/:id" element={<SpecPage />} />
               <Route path="inspect" element={<InspectPage />} />
               <Route path="inspect/:lotId/:specId" element={<MeasurePage />} />
+              <Route path="inspections" element={<InspectionList />} />
+              <Route path="inspections/:id" element={<InspectionPage />} />
               <Route path="audit" element={<AuditLog />} />
             </Route>
             <Route path="*" element={<Navigate to="/todo" replace />} />
