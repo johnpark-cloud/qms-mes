@@ -19,6 +19,7 @@ from core.rules import child_editable
 from .models import (AuditChecklist, AuditFinding, AuditItem, Capa, ChangeRequest, Characteristic, ControlPlan,
                      ControlPlanLine, CustomerClaim, CustomerRule, Document, DocumentRevision, Evidence, ExcelTemplate, Gauge,
                      Inspection, InspectionSpec, InternalAudit, Measurement, Memo, MemoPhoto, PpapElement, PpapSubmission, Qualification, Scar)
+from .rules import new_spec_revision
 from .similar import similar_html
 
 
@@ -61,14 +62,7 @@ class InspectionSpecAdmin(ApprovalAdminMixin, BaseAdmin):
     def new_revision(self, request, queryset):
         with transaction.atomic():
             for spec in queryset:
-                items = list(spec.characteristics.all())
-                top = InspectionSpec.objects.filter(item=spec.item, inspection_type=spec.inspection_type
-                                                    ).aggregate(m=Max('revision'))['m']
-                new = InspectionSpec.objects.create(item=spec.item, inspection_type=spec.inspection_type,
-                                                    revision=top + 1, sampling=spec.sampling, note=spec.note)
-                for c in items:
-                    Characteristic.objects.create(spec=new, name=c.name, lsl=c.lsl, usl=c.usl, unit=c.unit,
-                                                  special=c.special, plan_line=c.plan_line)
+                new_spec_revision(spec)
         self.message_user(request, '새 개정을 만들었습니다. 내용을 고친 뒤 승인 서명하세요.')
 
 

@@ -1,14 +1,17 @@
 from datetime import date
 from decimal import Decimal
 
-from django.contrib.auth.models import Group, User
-from django.core.exceptions import ValidationError
+from django.contrib.auth.models import Group, Permission, User
+from django.core.exceptions import PermissionDenied, ValidationError
 from django.test import TestCase
+from django.urls import reverse
 from django.utils import timezone
 
 from core.models import Item, Lot
-from qms.models import Characteristic, Inspection, InspectionSpec, Qualification
-from qms.rules import RECEIVE_MSG, measurement, receive_lot, submit_inspection
+from core.rules import Locked
+from qms.models import Characteristic, ControlPlan, ControlPlanLine, Inspection, InspectionSpec, Qualification
+from qms.rules import (RECEIVE_MSG, Stale, compare_specs, diff_text, measurement, new_spec_revision, open_or_new_revision,
+                       receive_lot, save_spec, spec_version, submit_inspection)
 
 
 class InspectionRulesTest(TestCase):
@@ -48,3 +51,115 @@ class InspectionRulesTest(TestCase):
         self.assertTrue(created)
         with self.assertRaisesMessage(ValidationError, RECEIVE_MSG):
             receive_lot('NEW-2', self.item, '0', '')
+
+
+class SpecRulesTest(TestCase):
+    def setUp(self):
+        self.eng = User.objects.create_user('eng', password='pw-eng-123', is_staff=True)
+        self.eng.groups.add(Group.objects.get(name='품질엔지니어'))
+        # 품질엔지니어 그룹에는 delete_ 권한이 없다. 삭제 줄 저장 테스트용으로 항목 삭제 권한만 더한다
+        self.eng.user_permissions.add(Permission.objects.get(codename='delete_characteristic', content_type__app_label='qms'))
+        self.lead = User.objects.create_user('lead2', password='pw-lead-123', is_staff=True)
+        self.lead.groups.add(Group.objects.get(name='품질팀장'))
+        self.superuser = User.objects.create_superuser('root', password='pw-root-123')
+        self.item = Item.objects.create(code='R1', name='양극재', item_type=Item.RAW)
+        self.item2 = Item.objects.create(code='R2', name='양극재2', item_type=Item.RAW)
+        self.item3 = Item.objects.create(code='R3', name='양극재3', item_type=Item.RAW)
+        self.spec = self._approved(self.item)
+        self.spec2 = self._approved(self.item2)
+        self.other_draft = InspectionSpec.objects.create(item=self.item3, inspection_type=InspectionSpec.INCOMING)
+
+    def _approved(self, item):
+        line = ControlPlanLine.objects.create(plan=ControlPlan.objects.create(item=item), characteristic='폭')
+        spec = InspectionSpec.objects.create(item=item, inspection_type=InspectionSpec.INCOMING, sampling='n=5', note='비고')
+        Characteristic.objects.create(spec=spec, name='두께', lsl=Decimal('9'), usl=Decimal('11'), unit='mm', special='SC')
+        Characteristic.objects.create(spec=spec, name='폭', lsl=Decimal('4'), usl=Decimal('6'), unit='mm', plan_line=line)
+        spec.approved_by, spec.approved_at = self.lead, timezone.now()
+        spec.save()
+        return spec
+
+    def test_new_revision_matches_admin(self):
+        # 같은 원본을 두 번 만들어 하나는 admin 동작, 하나는 공용 함수로 개정한다
+        via_func = new_spec_revision(self.spec)
+        self.client.force_login(self.superuser)
+        self.client.post(reverse('admin:qms_inspectionspec_changelist'),
+                         {'action': 'new_revision', '_selected_action': [self.spec2.pk]})
+        via_admin = InspectionSpec.objects.get(item=self.item2, revision=2)
+        snap = lambda s: (s.revision, s.sampling, s.note, sorted(
+            (c.name, c.lsl, c.usl, c.unit, c.special, c.plan_line_id is not None) for c in s.characteristics.all()))
+        self.assertEqual(snap(via_func), snap(via_admin))
+        self.assertEqual(via_func.revision, 2)
+        self.assertFalse(via_func.is_approved)
+
+    def test_open_or_new_reuses_draft(self):
+        draft, created = open_or_new_revision(self.spec)
+        again, created2 = open_or_new_revision(self.spec)
+        self.assertEqual((created, created2, again.pk), (True, False, draft.pk))
+
+    def test_save_adds_changes_deletes_in_one_go(self):
+        draft, _ = open_or_new_revision(self.spec)
+        keep, drop = draft.characteristics.order_by('name')   # 두께, 폭
+        rows = [{'id': keep.pk, 'name': '두께', 'lsl': '9.5', 'usl': '11', 'unit': 'mm', 'special': 'SC', 'plan_line': None},
+                {'id': drop.pk, 'delete': True},
+                {'id': None, 'name': '길이', 'lsl': '', 'usl': '', 'unit': '', 'special': '', 'plan_line': None},
+                {'id': None, 'name': '', 'lsl': '', 'usl': '', 'unit': '', 'special': '', 'plan_line': None}]  # 빈 줄은 무시
+        save_spec(draft, self.eng, {'sampling': 'n=8', 'note': ''}, rows, spec_version(draft))
+        self.assertEqual(sorted(draft.characteristics.values_list('name', flat=True)), ['길이', '두께'])
+        self.assertEqual(draft.characteristics.get(name='두께').lsl, Decimal('9.5'))
+        self.assertEqual(InspectionSpec.objects.get(pk=draft.pk).sampling, 'n=8')
+
+    def test_save_normalizes_numbers(self):          # Review Focus 2
+        draft, _ = open_or_new_revision(self.spec)
+        save_spec(draft, self.eng, {}, [{'id': None, 'name': '무게', 'lsl': ' 1,234.5 ', 'usl': '', 'unit': 'g'}], None)
+        c = draft.characteristics.get(name='무게')
+        self.assertEqual((c.lsl, c.usl), (Decimal('1234.5'), None))
+
+    def test_save_bad_row_saves_nothing_and_points_to_cell(self):
+        draft, _ = open_or_new_revision(self.spec)
+        before = draft.characteristics.count()
+        rows = [{'id': None, 'name': '가', 'lsl': '1'}, {'id': None, 'name': '나', 'lsl': 'abc'}]
+        with self.assertRaises(ValidationError) as cm:
+            save_spec(draft, self.eng, {}, rows, None)
+        self.assertIn('characteristics.1.lsl', cm.exception.message_dict)
+        self.assertEqual(draft.characteristics.count(), before)
+
+    def test_save_rejects_foreign_row(self):         # Review Focus 1
+        other = Characteristic.objects.create(spec=self.other_draft, name='남의 항목')
+        draft, _ = open_or_new_revision(self.spec)
+        with self.assertRaises(ValidationError) as cm:
+            save_spec(draft, self.eng, {}, [{'id': other.pk, 'name': '바꿈'}], None)
+        self.assertIn('characteristics.0.id', cm.exception.message_dict)
+        self.assertEqual(Characteristic.objects.get(pk=other.pk).name, '남의 항목')
+
+    def test_save_on_approved_is_locked(self):
+        c = self.spec.characteristics.first()
+        with self.assertRaises(Locked):
+            save_spec(self.spec, self.eng, {}, [{'id': c.pk, 'name': '바꿈', 'lsl': '9', 'usl': '11'}], None)
+
+    def test_save_delete_on_approved_rejected(self):  # Review Focus 3
+        c = self.spec.characteristics.first()
+        with self.assertRaises((Locked, PermissionDenied)):
+            save_spec(self.spec, self.eng, {}, [{'id': c.pk, 'delete': True}], None)
+        self.assertTrue(Characteristic.objects.filter(pk=c.pk).exists())
+
+    def test_stale_version_rejected(self):
+        draft, _ = open_or_new_revision(self.spec)
+        v = spec_version(draft)
+        save_spec(draft, self.lead, {'note': '먼저'}, [], v)
+        with self.assertRaises(Stale):
+            save_spec(InspectionSpec.objects.get(pk=draft.pk), self.eng, {'note': '나중'}, [], v)
+
+    def test_compare_and_text(self):
+        draft, _ = open_or_new_revision(self.spec)
+        rows = [{'id': c.pk, 'delete': True} for c in draft.characteristics.filter(name='폭')]
+        rows += [{'id': draft.characteristics.get(name='두께').pk, 'name': '두께', 'lsl': '9', 'usl': '10.5', 'unit': 'mm', 'special': 'SC'},
+                 {'id': None, 'name': '길이'}]
+        save_spec(draft, self.eng, {'sampling': 'n=8'}, rows, None)
+        diff = compare_specs(self.spec, draft)
+        self.assertEqual(diff['fields']['sampling'][1], 'n=8')
+        self.assertEqual({r['name']: r['status'] for r in diff['rows']}, {'두께': 'changed', '폭': 'removed', '길이': 'added'})
+        self.assertEqual(next(r for r in diff['rows'] if r['name'] == '두께')['cells'], ['usl'])
+        text = diff_text(diff)
+        for part in ('샘플링', '항목 추가: 길이', '항목 삭제: 폭', '두께'):
+            self.assertIn(part, text)
+        self.assertEqual(diff_text(compare_specs(None, self.spec)), '최초 제정')
