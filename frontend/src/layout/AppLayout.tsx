@@ -11,6 +11,7 @@ import { getRecent } from '../lib/recent'
 const MOVED: Record<string, string> = {
   '/todo/': '/app/todo',
   '/overview/': '/app/overview',
+  '/inspect/': '/app/inspect',
   '/admin/qms/inspectionspec/': '/app/specs',
 }
 const to = (href: string) => MOVED[href] ?? href
