@@ -1,4 +1,4 @@
-import { Button, Drawer, Input, Space, Table, Tabs } from 'antd'
+import { Button, Drawer, Input, Space, Table, Tabs, Typography } from 'antd'
 import type { ColumnsType } from 'antd/es/table'
 import { useCallback, useEffect, useRef, useState, type Key, type ReactNode } from 'react'
 
@@ -44,7 +44,14 @@ export default function DataList<T extends object>({ columns, tabs, fetchPage, e
         setMore(r.has_more)
         setPage(p)
       } catch (e) {
-        if (my === seq.current) setError(e instanceof Error ? e.message : '목록을 불러오지 못했습니다.')
+        if (my === seq.current) {
+          setError(e instanceof Error ? e.message : '목록을 불러오지 못했습니다.')
+          if (p === 1) {
+            setRows([])
+            setCount(0)
+            setMore(false)
+          }
+        }
       } finally {
         if (my === seq.current) setLoading(false)
       }
@@ -68,9 +75,9 @@ export default function DataList<T extends object>({ columns, tabs, fetchPage, e
         <span>총 {count}건</span>
       </Space>
       {error && (
-        <div role="alert" style={{ color: '#c00', marginBottom: 8 }}>
+        <Typography.Text type="danger" role="alert" style={{ display: 'block', marginBottom: 8 }}>
           {error}
-        </div>
+        </Typography.Text>
       )}
       <Table<T>
         size="small"

@@ -40,7 +40,7 @@ const fetchPage = (tab: string, q: string, page: number) =>
 const exportHref = (tab: string, q: string) => `/api/qms/specs/?tab=${tab}&q=${encodeURIComponent(q)}&export=xlsx`
 
 function Peek({ row }: { row: SpecRow }) {
-  const { data } = useQuery({ queryKey: ['spec', row.id], queryFn: () => api<SpecDetail>(`/api/qms/specs/${row.id}/`) })
+  const { data, error } = useQuery({ queryKey: ['spec', row.id], queryFn: () => api<SpecDetail>(`/api/qms/specs/${row.id}/`) })
   return (
     <div>
       <div className="prop-grid">
@@ -66,6 +66,8 @@ function Peek({ row }: { row: SpecRow }) {
         ) : (
           '검사항목이 없습니다'
         )
+      ) : error ? (
+        error instanceof ApiError ? error.detail : '불러오지 못했습니다.'
       ) : (
         '불러오는 중'
       )}
@@ -78,6 +80,7 @@ function NewSpec({ open, onClose }: { open: boolean; onClose: () => void }) {
   const [items, setItems] = useState<{ value: number; label: string }[]>([])
   const [dup, setDup] = useState<number | null>(null)
   const [err, setErr] = useState('')
+  const [saving, setSaving] = useState(false)
   const timer = useRef<ReturnType<typeof setTimeout>>(undefined)
 
   const search = (q: string) => {
@@ -88,6 +91,9 @@ function NewSpec({ open, onClose }: { open: boolean; onClose: () => void }) {
     }, 300)
   }
   useEffect(() => {
+    setDup(null)
+    setErr('')
+    setSaving(false)
     if (open) search('')
     return () => clearTimeout(timer.current)
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -96,12 +102,15 @@ function NewSpec({ open, onClose }: { open: boolean; onClose: () => void }) {
   const submit = async (v: { item: number; inspection_type: string }) => {
     setDup(null)
     setErr('')
+    setSaving(true)
     try {
       const d = await api<SpecDetail>('/api/qms/specs/', { method: 'POST', body: JSON.stringify(v) })
       nav(`/specs/${d.id}`)
     } catch (e) {
       if (e instanceof ApiError && e.status === 409) setDup(e.body.existing)
       else setErr(e instanceof Error ? e.message : '만들지 못했습니다.')
+    } finally {
+      setSaving(false)
     }
   }
 
@@ -128,7 +137,7 @@ function NewSpec({ open, onClose }: { open: boolean; onClose: () => void }) {
         )}
         {err && <Alert style={{ marginBottom: 12 }} type="error" message={err} />}
         <Space>
-          <Button type="primary" htmlType="submit">
+          <Button type="primary" htmlType="submit" loading={saving}>
             만들기
           </Button>
           <Button onClick={onClose}>취소</Button>
