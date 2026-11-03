@@ -817,6 +817,12 @@ def _resolve(obj, path):
     return value
 
 
+def _cell_value(value):
+    if isinstance(value, datetime.datetime):
+        value = timezone.localtime(value).replace(tzinfo=None)  # 엑셀은 시간대를 저장하지 못한다
+    return '' if value is None else value
+
+
 class ExcelTemplate(models.Model):
     """고객사 엑셀 양식에 값을 채운다. 양식이 바뀌면 매핑만 고친다."""
     name = models.CharField('양식 이름', max_length=100)
@@ -844,12 +850,12 @@ class ExcelTemplate(models.Model):
             if ref.endswith(':rows'):  # 여러 줄: 관계의 각 행을 지정 셀부터 아래로, 열마다 경로를 읽어 채운다
                 ws = wb[sheet] if sheet else wb.active
                 rows = _resolve(obj, path['path'])
-                rows = rows.all() if isinstance(rows, models.Manager) else rows or []
+                rows = rows.all() if isinstance(rows, models.Manager) else rows if isinstance(rows, (models.QuerySet, list, tuple)) else []
                 top = ws[ref[:-5]]
                 for i, row in enumerate(rows):
                     for col, col_path in path['cols'].items():
                         v = _resolve(row, col_path)
-                        ws.cell(row=top.row + i, column=column_index_from_string(col), value='' if v is None else v)
+                        ws.cell(row=top.row + i, column=column_index_from_string(col), value=_cell_value(v))
                 continue
             value = _resolve(obj, path)
             ws = wb[sheet] if sheet else wb.active
@@ -859,9 +865,7 @@ class ExcelTemplate(models.Model):
                     for j, v in enumerate(row):
                         ws.cell(row=top.row + i, column=top.column + j, value=v)
                 continue
-            if isinstance(value, datetime.datetime):
-                value = timezone.localtime(value).replace(tzinfo=None)  # 엑셀은 시간대를 저장하지 못한다
-            ws[ref] = '' if value is None else value
+            ws[ref] = _cell_value(value)
         out = BytesIO()
         wb.save(out)
         return out.getvalue()

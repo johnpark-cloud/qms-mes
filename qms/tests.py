@@ -1274,3 +1274,32 @@ class SpecDocumentTest(TestCase):
         self.assertEqual(ws['B2'].value, 'R1')
         self.assertEqual({ws['A5'].value, ws['A6'].value}, {'두께', '폭'})
         self.assertIsNone(ws['C5'].value)          # 안전 규칙은 줄 매핑에도 적용된다
+
+    def _tpl(self, mapping):
+        buf = BytesIO()
+        Workbook().save(buf)
+        return ExcelTemplate.objects.create(name='스펙', target=ContentType.objects.get_for_model(InspectionSpec),
+                                            file=SimpleUploadedFile('s.xlsx', buf.getvalue()), mapping=mapping)
+
+    def test_template_rows_scalar_path_writes_nothing(self):
+        for path in ('revision', 'sampling', 'approved_at', 'approved_by', 'nope'):
+            ws = load_workbook(BytesIO(self._tpl({'A5:rows': {'path': path, 'cols': {'A': 'name'}}}).fill(self.spec))).active
+            self.assertIsNone(ws['A5'].value, path)
+
+    def test_template_rows_datetime_is_naive(self):
+        lot = Lot.objects.create(number='L-1', item=self.spec.item)
+        Inspection.objects.create(lot=lot, spec=self.spec)
+        tpl = self._tpl({'A5:rows': {'path': 'inspection_set', 'cols': {'A': 'inspected_at'}}})
+        v = load_workbook(BytesIO(tpl.fill(self.spec))).active['A5'].value
+        self.assertIsInstance(v, datetime.datetime)
+
+    def test_xlsx_text_is_not_formula_and_strips_control_chars(self):
+        for name in ('=1+1', 'ab'):
+            c = Characteristic(spec=self.spec, name=name)
+            c._edit_unlocked = True
+            c.save()
+        ws = load_workbook(BytesIO(document_xlsx(self.spec.document()))).active
+        cells = {c.value: c for row in ws.iter_rows() for c in row if c.value is not None}
+        self.assertEqual(cells['=1+1'].data_type, 's')
+        self.assertIn('ab', cells)
+        self.assertTrue(table_xlsx('a/b:c', ['x'], [['@x']]))
