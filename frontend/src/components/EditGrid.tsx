@@ -51,6 +51,7 @@ export default function EditGrid({ columns, rows, onChange, readOnly, errors, di
   }
 
   const paste = (e: ClipboardEvent<HTMLElement>, i: number, key: string) => {
+    if (readOnly || rows[i]?.delete) return // 읽기 전용 칸에도 붙여넣기 이벤트는 오므로 직접 막는다
     const text = e.clipboardData.getData('text/plain')
     if (!/[\t\r\n]/.test(text)) return // 한 칸 붙여넣기는 기본 동작에 맡긴다
     e.preventDefault()
@@ -71,7 +72,7 @@ export default function EditGrid({ columns, rows, onChange, readOnly, errors, di
   }
 
   const keys = (e: KeyboardEvent<HTMLElement>, key: string) => {
-    if (e.key !== 'Enter' || e.nativeEvent.isComposing) return
+    if (e.key !== 'Enter' || e.nativeEvent.isComposing || e.nativeEvent.keyCode === 229) return
     const tr = (e.target as HTMLElement).closest('[data-grid-row]')
     const below = tr?.nextElementSibling?.querySelector<HTMLElement>(`[data-col="${key}"] input`)
     if (below) {

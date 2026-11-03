@@ -207,6 +207,14 @@ try:
             page.get_by_label('비밀번호').fill('e2e-pass-123')
             page.get_by_role('button', name='서명', exact=True).click()
             page.get_by_text('승인됨').first.wait_for(timeout=5000)
+            page.get_by_role('button', name='새 개정').wait_for(timeout=5000)
+            before = page.locator('[data-grid] [data-grid-row] input').first.input_value()
+            page.locator('[data-grid] [data-grid-row] input').first.click()
+            page.evaluate("t => { const dt = new DataTransfer(); dt.setData('text/plain', t);"
+                          " document.activeElement.dispatchEvent(new ClipboardEvent('paste', {clipboardData: dt, bubbles: true})) }", 'X1\tX2\nY1\tY2')
+            page.wait_for_timeout(300)
+            after = page.locator('[data-grid] [data-grid-row] input').first.input_value()
+            check('잠긴 기준서 붙여넣기 → 변경 없음', page.get_by_text('변경 ').count() == 0 and after == before, f'{before!r} → {after!r}')
             page.get_by_role('button', name='새 개정').click()
             page.wait_for_function(f"() => !location.pathname.endsWith('/{spec_id}')", timeout=5000)
             draft_id = page.url.rstrip('/').split('/')[-1]  # 감사 기록·문서 점검이 쓴다
