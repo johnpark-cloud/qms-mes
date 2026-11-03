@@ -15,6 +15,10 @@ from qms.rules import (Stale, compare_specs, diff_text, open_or_new_revision, pr
                        spec_version)
 
 PAGE_SIZE = 50
+
+
+def _bad(msg, field=None):
+    return Response({'detail': msg, 'fields': {field: [msg]} if field else {}}, status=400)
 LIST_COLUMNS = ['품번', '품명', '검사 구분', '개정', '상태', '항목 수', '승인자', '승인일']
 
 
@@ -78,7 +82,7 @@ def _detail(spec, user):
                              'special': c.special, 'plan_line': c.plan_line_id, 'spc_url': reverse('spc', args=[c.pk])}
                             for c in spec.characteristics.order_by('pk')],
         'plan_line_options': [{'value': ln.pk, 'label': str(ln)} for ln in lines],
-        'special_options': [(v, '없음' if v == '' else label) for v, label in SPECIAL],
+        'special_options': [{'value': v, 'label': '없음' if v == '' else label} for v, label in SPECIAL],
         'diff': compare_specs(prev, spec),
         'templates': [{'id': t.pk, 'name': t.name, 'url': reverse('excel_report', args=[t.pk, spec.pk])}
                       for t in ExcelTemplate.objects.filter(target=ct)],
@@ -115,9 +119,11 @@ class SpecListView(APIView):
 
     def post(self, request):
         require_perm(request.user, 'qms.add_inspectionspec')
+        if not isinstance(request.data, dict):
+            return _bad('요청 형식이 올바르지 않습니다.')
         kind = request.data.get('inspection_type')
         item = Item.objects.filter(pk=request.data.get('item')).first() if str(request.data.get('item') or '').isdigit() else None
-        if item is None or kind not in dict(InspectionSpec.TYPES):
+        if item is None or not isinstance(kind, str) or kind not in dict(InspectionSpec.TYPES):
             return Response({'detail': '품번과 검사 구분을 고르세요.'}, status=400)
         top = InspectionSpec.objects.filter(item=item, inspection_type=kind).order_by('-revision').first()
         if top:
@@ -135,8 +141,14 @@ class SpecDetailView(APIView):
 
     def put(self, request, pk):
         spec = get_object_or_404(InspectionSpec, pk=pk)  # 권한은 save_spec이 확인한다
+        data = request.data
+        if not isinstance(data, dict):
+            return _bad('요청 형식이 올바르지 않습니다.')
+        rows = data.get('characteristics') or []
+        if not isinstance(rows, list) or not all(isinstance(r, dict) for r in rows):
+            return _bad('목록이어야 합니다.', 'characteristics')
         try:
-            save_spec(spec, request.user, request.data, request.data.get('characteristics') or [], request.data.get('version'))
+            save_spec(spec, request.user, data, rows, data.get('version'))
         except Stale as e:
             return Response({'detail': str(e)}, status=409)
         return Response(_detail(spec, request.user))
@@ -147,7 +159,10 @@ class SpecNewRevisionView(APIView):
 
     def post(self, request, pk):
         require_perm(request.user, 'qms.add_inspectionspec')
-        draft, created = open_or_new_revision(get_object_or_404(InspectionSpec, pk=pk))
+        spec = get_object_or_404(InspectionSpec, pk=pk)
+        # 옛 개정에서 시작하면 낡은 값이 되살아나므로 같은 품번·구분의 최신 승인본을 기준으로 한다
+        spec = InspectionSpec.current(spec.item, spec.inspection_type) or spec
+        draft, created = open_or_new_revision(spec)
         return Response({'id': draft.pk, 'created': created})
 
 
@@ -157,6 +172,8 @@ class SpecApproveView(APIView):
     def post(self, request, pk):
         spec = get_object_or_404(InspectionSpec, pk=pk)
         password, log = request.data.get('password') or '', request.data.get('log')
+        if log and not isinstance(log, dict):
+            return _bad('log 형식이 올바르지 않습니다.', 'log')
         if log:
             approve_and_log(spec, request.user, password, f'Rev.{spec.revision}', log.get('changes'), log.get('reason'))
         else:

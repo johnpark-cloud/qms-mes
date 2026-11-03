@@ -1,4 +1,5 @@
 import datetime
+from io import BytesIO
 from dataclasses import replace
 from types import SimpleNamespace
 from unittest import mock
@@ -7,11 +8,8 @@ from django.contrib.auth.models import Group, User
 from django.contrib.contenttypes.models import ContentType
 from django.test import TestCase
 from django.utils import timezone
-from rest_framework.test import APIClient
-
-from io import BytesIO
-
 from openpyxl import load_workbook
+from rest_framework.test import APIClient
 
 from core.export import XLSX
 from core.models import EditRequest, Hold, Item, Lot, Nonconformance, WorkOrder
@@ -181,7 +179,6 @@ class TodoApiTest(TestCase):
         self.assertEqual(sorted((a['kind'], a['label']) for a in t['approvals']), sorted([('4M 변경', str(cr)), ('PSW', str(ppap))]))
 
 
-
 class SpecApiTest(TestCase):
     def setUp(self):
         def mk(name, group, pw='x'):
@@ -272,3 +269,40 @@ class SpecApiTest(TestCase):
         self.assertEqual((r.status_code, r.json()['label'], r.json()['status']), (201, 'Rev.2', 'PENDING'))
         r = self.c(self.insp).post(f'/api/qms/specs/{draft.pk}/revision-log/', {'changes': '가', 'reason': '나'}, format='json')
         self.assertEqual(r.status_code, 403)
+
+    def test_malformed_bodies_are_400(self):
+        draft = self.new_draft()
+        url = f'/api/qms/specs/{draft.pk}/'
+        for body in ('x', [1], {'characteristics': 'x'}, {'characteristics': {'a': 1}}, {'characteristics': [1]}):
+            r = self.c(self.eng).put(url, body, format='json')
+            self.assertEqual(r.status_code, 400, body)
+        self.assertIn('characteristics', self.c(self.eng).put(url, {'characteristics': 'x'}, format='json').json()['fields'])
+        for body in ('x', [1], {'item': self.item.pk, 'inspection_type': ['a']}, {'item': self.item.pk, 'inspection_type': {'a': 1}}):
+            self.assertEqual(self.c(self.eng).post('/api/qms/specs/', body, format='json').status_code, 400, body)
+        new_id = self.c(self.eng).post(f'/api/qms/specs/{self.spec.pk}/new-revision/').json()['id']
+        ap = f'/api/qms/specs/{new_id}/approve/'
+        for log in ('x', ['a'], {'changes': '가'}, {'reason': '나'}):
+            r = self.c(self.lead).post(ap, {'password': 'pw-lead-123', 'log': log}, format='json')
+            self.assertEqual(r.status_code, 400, log)
+        self.assertIsNone(InspectionSpec.objects.get(pk=new_id).approved_at)
+
+    def test_no_perm_staff_and_anonymous(self):
+        nobody = User.objects.create_user('nobody', password='x', is_staff=True)
+        c, pk = self.c(nobody), self.spec.pk
+        for path in ('/api/qms/specs/', f'/api/qms/specs/{pk}/', f'/api/qms/specs/{pk}/revision-log/', f'/api/qms/specs/{pk}/document/'):
+            self.assertEqual(c.get(path).status_code, 403, path)
+        self.assertEqual(APIClient().get('/api/qms/specs/').status_code, 403)
+
+    def test_new_revision_from_old_revision_uses_latest_approved(self):
+        r2 = self.new_draft()
+        r2.characteristics.filter(name='두께').update(name='두께B')
+        r2.approved_by, r2.approved_at = self.lead, timezone.now()
+        r2.save()
+        new_id = self.c(self.eng).post(f'/api/qms/specs/{self.spec.pk}/new-revision/').json()['id']
+        new = InspectionSpec.objects.get(pk=new_id)
+        self.assertEqual(new.revision, 3)
+        self.assertEqual(sorted(new.characteristics.values_list('name', flat=True)), ['두께B', '폭'])
+
+    def test_special_options_shape(self):
+        d = self.c(self.eng).get(f'/api/qms/specs/{self.spec.pk}/').json()
+        self.assertEqual(d['special_options'][0], {'value': '', 'label': '없음'})
