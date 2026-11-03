@@ -41,6 +41,34 @@ class InspectionSpec(Approvable):
         return (cls.objects.filter(item=item, inspection_type=inspection_type, approved_at__isnull=False)
                 .order_by('-revision').first())
 
+    def document(self):
+        """검사기준서 문서 구조. 값은 모두 JSON 글이다(React 인쇄·PDF와 엑셀이 함께 쓴다)."""
+        from .rules import spec_logs  # rules가 models를 가져오므로 안에서 불러온다
+
+        def who(u):
+            return (u.get_full_name() or u.username) if u else ''
+
+        def day(dt):
+            return timezone.localtime(dt).strftime('%Y-%m-%d') if dt else ''
+
+        def num(d):
+            return '' if d is None else format(d.normalize(), 'f')
+
+        first = self.history.order_by('history_date', 'history_id').first()
+        rows = [[c.name, num(c.lsl), num(c.usl), c.unit, c.special, str(c.plan_line or '')]
+                for c in self.characteristics.select_related('plan_line').order_by('pk')]
+        logs = spec_logs(self, confirmed_only=True).select_related('requested_by', 'approved_by')
+        return {
+            'title': str(self), 'number': None, 'revision': f'Rev.{self.revision}', 'draft': self.approved_by_id is None,
+            'head': [['품번', self.item.code], ['품명', self.item.name], ['검사 구분', self.get_inspection_type_display()],
+                     ['개정', f'Rev.{self.revision}'], ['샘플링', self.sampling], ['비고', self.note]],
+            'tables': [{'title': '검사항목', 'columns': ['항목명', '하한', '상한', '단위', '특별특성', '관리계획서 항목'], 'rows': rows}],
+            'revisions': [{'label': g.label, 'changes': g.changes, 'reason': g.reason, 'requested_by': who(g.requested_by),
+                           'approved_by': who(g.approved_by), 'approved_at': day(g.approved_at)} for g in logs],
+            'signoff': {'written_by': who(first and first.history_user), 'written_at': day(first and first.history_date),
+                        'approved_by': who(self.approved_by), 'approved_at': day(self.approved_at)},
+        }
+
 
 SPECIAL = [('', '-'), ('CC', 'CC(핵심·안전)'), ('SC', 'SC(중요)')]
 
@@ -767,13 +795,36 @@ USER_FIELDS = {'username', 'first_name', 'last_name', 'get_full_name'}
 READ_METHODS = {'all', 'first', 'last', 'count', 'exists'}  # 관계 관리자·쿼리셋에서 부를 수 있는 메서드
 
 
+def _resolve(obj, path):
+    """점 경로로 값을 읽는다. 사용자 비밀·개인 자료·쓰기 메서드는 막는다(None)."""
+    value = obj
+    for attr in path.split('.'):
+        if attr.startswith('_') or attr == 'password' or isinstance(value, AbstractBaseUser) and attr not in USER_FIELDS:
+            value = None  # 사용자 계정은 이름만 내보낸다 (암호·메일·개인 자료 차단)
+            break
+        prev, value = value, getattr(value, attr, None) if value is not None else None
+        cls = value.model if isinstance(value, (models.Manager, models.QuerySet)) else type(value)
+        if getattr(getattr(cls, '_meta', None), 'app_label', None) in PRIVATE_APPS and not isinstance(value, AbstractBaseUser):
+            value = None  # 증적 기록 등으로 급여·연차·인증 기록에 닿으면 비운다 (사용자 이름은 위 규칙으로)
+            break
+        if callable(value) and not isinstance(value, models.Manager):  # 관계 관리자 자체는 호출하지 않는다
+            # 읽기 전용만 호출한다: save·delete·update 등이 보고서 출력으로 기록을 바꾸지 못하게
+            safe = (isinstance(prev, (models.Manager, models.QuerySet)) and attr in READ_METHODS
+                    or isinstance(prev, models.Model) and attr.startswith('get_') and attr.endswith('_display')
+                    or isinstance(prev, AbstractBaseUser) and attr == 'get_full_name'
+                    or getattr(value, 'report_safe', False))
+            value = value() if safe else None
+    return value
+
+
 class ExcelTemplate(models.Model):
     """고객사 엑셀 양식에 값을 채운다. 양식이 바뀌면 매핑만 고친다."""
     name = models.CharField('양식 이름', max_length=100)
     target = models.ForeignKey(ContentType, on_delete=models.PROTECT, verbose_name='대상 기록',
                                limit_choices_to=~models.Q(app_label__in=PRIVATE_APPS))
     file = models.FileField('엑셀 양식', upload_to='templates/')
-    mapping = models.JSONField('셀 매핑', help_text='예: {"B3": "number", "B4": "lot.number", "Sheet2!C5": "d4_root_cause"}')
+    mapping = models.JSONField('셀 매핑', help_text='예: {"B3": "number", "B4": "lot.number", "Sheet2!C5": "d4_root_cause"}. '
+                                '여러 줄: {"A12:rows": {"path": "characteristics", "cols": {"A": "name", "B": "lsl"}}}')
     history = HistoricalRecords()
 
     class Meta:
@@ -786,26 +837,21 @@ class ExcelTemplate(models.Model):
         from io import BytesIO
 
         from openpyxl import load_workbook
+        from openpyxl.utils import column_index_from_string
         wb = load_workbook(self.file.path)
         for cell, path in self.mapping.items():
             sheet, _, ref = cell.rpartition('!')
-            value = obj
-            for attr in path.split('.'):
-                if attr.startswith('_') or attr == 'password' or isinstance(value, AbstractBaseUser) and attr not in USER_FIELDS:
-                    value = None  # 사용자 계정은 이름만 내보낸다 (암호·메일·개인 자료 차단)
-                    break
-                prev, value = value, getattr(value, attr, None) if value is not None else None
-                cls = value.model if isinstance(value, (models.Manager, models.QuerySet)) else type(value)
-                if getattr(getattr(cls, '_meta', None), 'app_label', None) in PRIVATE_APPS and not isinstance(value, AbstractBaseUser):
-                    value = None  # 증적 기록 등으로 급여·연차·인증 기록에 닿으면 비운다 (사용자 이름은 위 규칙으로)
-                    break
-                if callable(value) and not isinstance(value, models.Manager):  # 관계 관리자 자체는 호출하지 않는다
-                    # 읽기 전용만 호출한다: save·delete·update 등이 보고서 출력으로 기록을 바꾸지 못하게
-                    safe = (isinstance(prev, (models.Manager, models.QuerySet)) and attr in READ_METHODS
-                            or isinstance(prev, models.Model) and attr.startswith('get_') and attr.endswith('_display')
-                            or isinstance(prev, AbstractBaseUser) and attr == 'get_full_name'
-                            or getattr(value, 'report_safe', False))
-                    value = value() if safe else None
+            if ref.endswith(':rows'):  # 여러 줄: 관계의 각 행을 지정 셀부터 아래로, 열마다 경로를 읽어 채운다
+                ws = wb[sheet] if sheet else wb.active
+                rows = _resolve(obj, path['path'])
+                rows = rows.all() if isinstance(rows, models.Manager) else rows or []
+                top = ws[ref[:-5]]
+                for i, row in enumerate(rows):
+                    for col, col_path in path['cols'].items():
+                        v = _resolve(row, col_path)
+                        ws.cell(row=top.row + i, column=column_index_from_string(col), value='' if v is None else v)
+                continue
+            value = _resolve(obj, path)
             ws = wb[sheet] if sheet else wb.active
             if isinstance(value, list):  # 표(예: coa_rows)는 지정 셀부터 오른쪽·아래로 채운다
                 top = ws[ref]

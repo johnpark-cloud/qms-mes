@@ -18,8 +18,11 @@ from django.test import TestCase, override_settings
 from django.utils import timezone
 from openpyxl import Workbook, load_workbook
 
+from core.export import DRAFT_MARK, document_xlsx, table_xlsx
 from core.importer import run_import
 from core.models import APPROVER_GROUP, ImportProfile, Item, Lot, LotLink, Nonconformance, Shipment, WorkOrder
+
+from core.rules import confirm_revision_log, request_revision_log
 
 from . import kpi, spc
 from .management.commands.collect import ingest
@@ -27,6 +30,7 @@ from .models import (AuditChecklist, AuditFinding, AuditItem, Capa, ChangeReques
                      DashboardLayout,
                      Document, Evidence, ExcelTemplate, Gauge, Inspection, InspectionSpec, InternalAudit, Measurement, PpapElement, PpapSubmission,
                      Qualification, Scar)
+from .rules import open_or_new_revision
 from .similar import similar
 
 TMP_MEDIA = tempfile.mkdtemp()
@@ -1208,3 +1212,65 @@ class OverviewTest(TestCase):
                                               '/admin/qms/customerclaim/?closed_at__isempty=1', '/admin/qms/scar/?closed_at__isempty=0',
                                               '/admin/core/hold/?q=L-1']:
             self.assertEqual(self.client.get(url).status_code, 200, url)
+
+
+class SpecDocumentTest(TestCase):
+    def setUp(self):
+        self.lead = User.objects.create_user('lead', password='pw-lead-123', is_staff=True)
+        self.lead.groups.add(Group.objects.get(name='품질팀장'))
+        item = Item.objects.create(code='R1', name='양극재', item_type=Item.RAW)
+        self.spec = InspectionSpec.objects.create(item=item, inspection_type=InspectionSpec.INCOMING)
+        Characteristic.objects.create(spec=self.spec, name='두께', lsl=Decimal('9.00'), usl=Decimal('11.0'), unit='mm', special='SC')
+        Characteristic.objects.create(spec=self.spec, name='폭', lsl=Decimal('4'), usl=Decimal('6'), unit='mm')
+        approve(self.spec, self.lead)
+        log = request_revision_log(self.spec, self.lead, 'Rev.1', '최초 제정', '신규 품번')
+        confirm_revision_log(log, self.lead, 'pw-lead-123')
+
+    def cells(self, data):
+        ws = load_workbook(BytesIO(data)).active
+        return ws, {str(c.value) for row in ws.iter_rows() for c in row if c.value not in (None, '')}
+
+    def test_document_structure(self):
+        doc = self.spec.document()
+        self.assertEqual(doc['title'], 'R1 수입검사 Rev.1')
+        self.assertFalse(doc['draft'])
+        self.assertIn(['품번', 'R1'], doc['head'])
+        self.assertEqual(doc['tables'][0]['columns'], ['항목명', '하한', '상한', '단위', '특별특성', '관리계획서 항목'])
+        self.assertEqual(doc['tables'][0]['rows'][0][:4], ['두께', '9', '11', 'mm'])
+        self.assertEqual(doc['revisions'][0]['changes'], '최초 제정')
+        self.assertEqual(doc['signoff']['approved_by'], 'lead')
+        json.dumps(doc)
+
+    def test_xlsx_one_sheet_with_all_parts_and_a4(self):   # 스펙 9장 문서 출력
+        ws, vals = self.cells(document_xlsx(self.spec.document()))
+        self.assertEqual(len(ws.parent.worksheets), 1)
+        for v in ('R1 수입검사 Rev.1', '검사항목', '두께', '폭', '개정 이력', '최초 제정', '작성', '승인', 'lead'):
+            self.assertIn(v, vals)
+        self.assertEqual(str(ws.page_setup.paperSize), '9')
+        self.assertEqual(ws.page_setup.orientation, 'portrait')
+        self.assertTrue(ws.sheet_properties.pageSetUpPr.fitToPage)
+        self.assertNotIn(DRAFT_MARK, vals)
+
+    def test_draft_marked(self):                              # 스펙 9장 초안 표시
+        draft, _ = open_or_new_revision(self.spec)
+        doc = draft.document()
+        self.assertTrue(doc['draft'])
+        ws, vals = self.cells(document_xlsx(doc))
+        self.assertIn(DRAFT_MARK, vals)
+        self.assertIn(DRAFT_MARK, ws.oddHeader.center.text)
+
+    def test_table_xlsx(self):
+        ws, vals = self.cells(table_xlsx('목록', ['A', 'B'], [['x', 1]]))
+        self.assertEqual(vals, {'A', 'B', 'x', '1'})
+        self.assertEqual(ws.page_setup.orientation, 'landscape')
+
+    def test_template_rows_mapping(self):
+        buf = BytesIO()
+        Workbook().save(buf)
+        tpl = ExcelTemplate.objects.create(name='스펙', target=ContentType.objects.get_for_model(InspectionSpec),
+                                           file=SimpleUploadedFile('s.xlsx', buf.getvalue()), mapping={})
+        tpl.mapping = {'B2': 'item.code', 'A5:rows': {'path': 'characteristics', 'cols': {'A': 'name', 'B': 'lsl', 'C': 'spec.approved_by.password'}}}
+        ws = load_workbook(BytesIO(tpl.fill(self.spec))).active
+        self.assertEqual(ws['B2'].value, 'R1')
+        self.assertEqual({ws['A5'].value, ws['A6'].value}, {'두께', '폭'})
+        self.assertIsNone(ws['C5'].value)          # 안전 규칙은 줄 매핑에도 적용된다
