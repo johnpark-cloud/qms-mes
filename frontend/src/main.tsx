@@ -38,7 +38,7 @@ function App() {
               <Route path="specs" element={<SpecList />} />
               <Route path="specs/:id" element={<SpecPage />} />
               <Route path="inspect" element={<InspectPage />} />
-              <Route path="audit"element={<AuditLog />} />
+              <Route path="audit" element={<AuditLog />} />
             </Route>
             <Route path="*" element={<Navigate to="/todo" replace />} />
           </Routes>

@@ -37,8 +37,7 @@ function ReceiveModal({ init, onClose, onDone }: { init: Receive | null; onClose
   useEffect(() => {
     setErr('')
     setSaving(false)
-    if (init) form.setFieldsValue({ number: init.number, item: undefined, qty: '', supplier: '' })
-  }, [init, form])
+  }, [init])
 
   const submit = async (v: { number: string; item: number; qty: string; supplier?: string }) => {
     setErr('')
@@ -53,8 +52,8 @@ function ReceiveModal({ init, onClose, onDone }: { init: Receive | null; onClose
   }
 
   return (
-    <Modal open={init !== null} onCancel={onClose} title="입고 등록" footer={null} destroyOnHidden>
-      <Form form={form} layout="vertical" onFinish={submit}>
+    <Modal open={init !== null} onCancel={onClose} closable={!saving} maskClosable={!saving} keyboard={!saving} title="입고 등록" footer={null} destroyOnHidden>
+      <Form key={init?.number} form={form} layout="vertical" initialValues={{ number: init?.number, qty: '', supplier: '' }} onFinish={submit}>
         <Form.Item label="LOT 번호" name="number" rules={[{ required: true, whitespace: true, message: 'LOT 번호를 입력하세요.' }]}>
           <Input />
         </Form.Item>
@@ -78,7 +77,7 @@ function ReceiveModal({ init, onClose, onDone }: { init: Receive | null; onClose
           <Button type="primary" htmlType="submit" loading={saving}>
             저장
           </Button>
-          <Button onClick={onClose}>취소</Button>
+          <Button onClick={onClose} disabled={saving}>취소</Button>
         </Space>
       </Form>
     </Modal>
@@ -151,8 +150,8 @@ export default function InspectPage() {
       {result && (
         <div style={{ margin: '12px 0 20px' }}>
           <p>
-            <b>{result.lot.number}</b> · {result.lot.item_code} {result.lot.item_name} · {result.lot.supplier || '협력사 없음'} · 수량 {result.lot.qty}{' '}
-            {result.lot.on_hold && <Tag color="red">보류</Tag>}
+            <b>{result.lot.number}</b> · {result.lot.item_code} {result.lot.item_name} · {result.lot.supplier || '협력사 없음'} · 수량 {result.lot.qty}
+            {result.lot.on_hold && <Tag color="red" style={{ marginLeft: 8 }}>보류</Tag>}
           </p>
           {result.specs.length ? (
             <Space wrap>
@@ -176,6 +175,7 @@ export default function InspectPage() {
         exportHref={exportHref}
         onOpen={(r) => nav(`/inspect/${r.id}/${r.spec_id}`)}
         rowKey={(r) => r.id}
+        emptyText="검사 대기 중인 LOT이 없습니다."
       />
       <ReceiveModal init={receive} onClose={() => setReceive(null)} onDone={received} />
     </div>

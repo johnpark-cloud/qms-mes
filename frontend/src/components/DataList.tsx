@@ -11,9 +11,10 @@ interface Props<T> {
   onOpen: (row: T) => void
   toolbar?: ReactNode
   rowKey: (row: T) => Key
+  emptyText?: string
 }
 
-export default function DataList<T extends object>({ columns, tabs, fetchPage, exportHref, peek, onOpen, toolbar, rowKey }: Props<T>) {
+export default function DataList<T extends object>({ columns, tabs, fetchPage, exportHref, peek, onOpen, toolbar, rowKey, emptyText }: Props<T>) {
   const [tab, setTab] = useState(tabs[0].key)
   const [text, setText] = useState('')
   const [q, setQ] = useState('')
@@ -86,7 +87,7 @@ export default function DataList<T extends object>({ columns, tabs, fetchPage, e
         rowKey={rowKey}
         loading={loading && page === 1}
         pagination={false}
-        locale={{ emptyText: '표시할 기록이 없습니다' }}
+        locale={{ emptyText: emptyText ?? '표시할 기록이 없습니다' }}
         onRow={(row) => ({ 'data-row': '', onClick: () => (peek ? setPicked(row) : onOpen(row)), style: { cursor: 'pointer' } }) as object}
       />
       {more && (
