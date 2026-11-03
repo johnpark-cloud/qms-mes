@@ -122,6 +122,34 @@ try:
         check('다크 모드 배경색이 라이트와 다름', light != dark, f'{light} / {dark}')
         page.emulate_media(color_scheme='light')
 
+        manage('shell', '-c', "from core.models import Item, Lot; i=Item.objects.create(code='E2E-R1', name='E2E 양극재', item_type='RAW'); Lot.objects.create(number='RAW-2611-001', item=i)")
+        page.goto('/app/todo')
+        page.get_by_role('button', name='명령창 열기').wait_for()  # 화면이 뜬 뒤에 단축키를 누른다
+        page.keyboard.press('Control+k')
+        page.get_by_placeholder('LOT·품번·번호 또는 동작').fill('2611')
+        page.locator('[data-palette-item]').first.wait_for()
+        page.keyboard.press('Enter')
+        page.wait_for_url('**/trace/?lot=RAW-2611-001')
+        check('명령창: LOT 일부 + Enter → 그 기록', '/trace/?lot=RAW-2611-001' in page.url, page.url)
+
+        page.goto('/app/todo')
+        page.get_by_role('button', name='명령창 열기').wait_for()  # 화면이 뜬 뒤에 단축키를 누른다
+        page.keyboard.press('Control+k')
+        page.get_by_placeholder('LOT·품번·번호 또는 동작').fill('없는번호-zz')
+        page.get_by_text('찾는 기록이 없습니다').wait_for()
+        page.keyboard.press('Enter'); page.wait_for_timeout(300)
+        check('명령창 결과 없음 Enter → 이동 안 함', page.url.endswith('/app/todo'), page.url)
+
+        ctx2 = browser.new_context(base_url=BASE, storage_state=page.context.storage_state())
+        ctx2.add_init_script("Object.defineProperty(window, 'localStorage', {get() { throw new Error('blocked') }})")
+        p2 = ctx2.new_page(); p2.goto('/app/todo')
+        try:
+            p2.locator('[data-widget]').first.wait_for(); ok = True
+        except Exception:
+            ok = False
+        check('localStorage 차단에도 화면 정상', ok)
+        ctx2.close()
+
         # 세션이 끊기면 API를 부르는 화면이 로그인으로 보내야 한다 (client.ts 의 403 처리)
         page.context.clear_cookies()
         page.goto('/app/overview')

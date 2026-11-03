@@ -1,0 +1,32 @@
+/* 색은 theme.ts 의 Fiori 값이다. 다크 모드 값은 prefers-color-scheme 으로 맞춘다. */
+:root {
+  --app-border: #eaecee;
+  --app-warning-bg: #fff3e6;
+  --app-added-bg: #e8f5ec;
+  --app-removed: #aa0808;
+  --app-error: #aa0808;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --app-border: #2d3540;
+    --app-warning-bg: #3a2a14;
+    --app-added-bg: #16301f;
+    --app-removed: #ff8a8a;
+    --app-error: #ff8a8a;
+  }
+}
+.page-title { font-size: 24px; font-weight: 600; margin: 0 0 16px; }
+.prop-grid { display: grid; grid-template-columns: minmax(120px, 200px) 1fr; gap: 8px 16px; font-size: 14px; }
+.prop-grid > dt { opacity: 0.7; margin: 0; }
+.prop-grid > dd { margin: 0; }
+.grid-table { width: 100%; border-collapse: collapse; font-size: 14px; }
+.grid-table th, .grid-table td { border: 1px solid var(--app-border); padding: 4px 8px; text-align: left; }
+.diff-changed { background: var(--app-warning-bg); }
+.diff-added { background: var(--app-added-bg); }
+.diff-removed { color: var(--app-removed); text-decoration: line-through; }
+.cell-error { border: 1px solid var(--app-error) !important; }
+.palette-item { padding: 8px 12px; border-radius: 6px; cursor: pointer; }
+.palette-item[aria-selected="true"] { background: var(--app-border); }
+.palette-sub { opacity: 0.7; font-size: 12px; }
+.palette-btn { min-width: 200px; text-align: left; }
+@media (max-width: 576px) { .palette-btn { min-width: 0; padding: 0 8px; } }

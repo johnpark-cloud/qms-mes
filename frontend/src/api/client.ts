@@ -2,12 +2,16 @@ export class ApiError extends Error {
   status: number
   detail: string
   fields: Record<string, string[]>
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  body: any
 
-  constructor(status: number, detail: string, fields: Record<string, string[]> = {}) {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  constructor(status: number, detail: string, fields: Record<string, string[]> = {}, body: any = {}) {
     super(detail)
     this.status = status
     this.detail = detail
     this.fields = fields
+    this.body = body
   }
 }
 
@@ -41,5 +45,15 @@ export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
     location.href = '/app/login?next=' + encodeURIComponent(here)
     return new Promise<T>(() => {}) // 이동 중이라 이 호출은 끝내지 않는다
   }
-  throw new ApiError(r.status, body.detail ?? `요청에 실패했습니다 (${r.status}).`, body.fields ?? {})
+  // DRF 직렬화 오류는 {필드: ['메시지']} 모양이라 detail 이 없다. 그 키들을 fields 로 풀고 detail 은 첫 메시지로 쓴다.
+  let fields: Record<string, string[]> = body.fields ?? {}
+  let detail: string | undefined = body.detail
+  if (detail === undefined && body && typeof body === 'object') {
+    const shaped = Object.entries(body).filter(([, v]) => Array.isArray(v) && v.every((m) => typeof m === 'string'))
+    if (shaped.length) {
+      fields = Object.fromEntries(shaped) as Record<string, string[]>
+      detail = (shaped[0][1] as string[])[0]
+    }
+  }
+  throw new ApiError(r.status, detail ?? `요청에 실패했습니다 (${r.status}).`, fields, body)
 }
