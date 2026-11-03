@@ -73,6 +73,12 @@ class InspectionSpec(Approvable):
 SPECIAL = [('', '-'), ('CC', 'CC(핵심·안전)'), ('SC', 'SC(중요)')]
 
 
+def check_limits(obj):
+    """하한이 상한보다 크면 거부한다. 엑셀 붙여넣기로 열이 뒤바뀌는 실수를 막는다."""
+    if obj.lsl is not None and obj.usl is not None and obj.lsl > obj.usl:
+        raise ValidationError({'usl': '하한이 상한보다 클 수 없습니다.'})
+
+
 class Characteristic(models.Model):
     spec = models.ForeignKey(InspectionSpec, on_delete=models.CASCADE, related_name='characteristics', verbose_name='검사기준')
     name = models.CharField('검사항목', max_length=100)
@@ -95,6 +101,9 @@ class Characteristic(models.Model):
     def is_variable(self):
         """규격이 있으면 계량형, 없으면 OK/NG 계수형."""
         return self.lsl is not None or self.usl is not None
+
+    def clean(self):
+        check_limits(self)
 
     def save(self, *args, **kwargs):
         if self.spec.is_approved and not getattr(self, '_edit_unlocked', False):  # 부모 수정 승인 1회분(BaseAdmin.save_formset)
@@ -330,6 +339,9 @@ class ControlPlanLine(models.Model):
 
     def __str__(self):
         return f'{self.plan} / {self.characteristic}'
+
+    def clean(self):
+        check_limits(self)
 
     @property
     def action_priority(self):

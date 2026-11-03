@@ -65,6 +65,7 @@
 | 규칙 | 위치 |
 | --- | --- |
 | 승인된 검사기준으로만 검사할 수 있고, 검사기준 품번 = LOT 품번이어야 한다. 새 검사는 그 품번·검사구분의 승인된 최신 개정(`InspectionSpec.current`)으로만 만든다(지난 개정 금지). | `qms/models.py` `Inspection.clean` |
+| 검사항목과 관리계획서 항목은 하한(LSL)이 상한(USL)보다 크면 저장하지 않는다(`하한이 상한보다 클 수 없습니다.`). 같으면 허용한다. 모델 `clean()`에서 검사하므로 admin과 API 모두 적용된다. 이미 저장된 행은 바뀌지 않는다. | `qms/models.py` `check_limits`, `Characteristic.clean`, `ControlPlanLine.clean` |
 | 판정은 모든 검사항목에 측정값이 있어야 한다. 하나라도 규격(LSL/USL) 밖이면 불합격이다. | `Inspection.finalize`, `Measurement.passed` |
 | 불합격이면 부적합을 자동 생성한다(→ 계보 보류). | `Inspection.finalize` |
 | 판정된 검사와 그 측정값은 수정할 수 없다. | `Inspection.save`, `Measurement.clean` |

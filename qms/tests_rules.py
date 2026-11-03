@@ -146,6 +146,21 @@ class SpecRulesTest(TestCase):
         self.assertIn('characteristics.1.lsl', cm.exception.message_dict)
         self.assertEqual(draft.characteristics.count(), before)
 
+    def test_save_rejects_lsl_above_usl(self):
+        draft, _ = open_or_new_revision(self.spec)
+        before = draft.characteristics.count()
+        with self.assertRaises(ValidationError) as cm:
+            save_spec(draft, self.eng, {}, [{'id': None, 'name': '뒤바뀜', 'lsl': '11', 'usl': '9'}], None)
+        self.assertEqual(cm.exception.message_dict['characteristics.0.usl'], ['하한이 상한보다 클 수 없습니다.'])
+        self.assertEqual(draft.characteristics.count(), before)
+        save_spec(draft, self.eng, {}, [{'id': None, 'name': '같음', 'lsl': '10', 'usl': '10'}], None)  # 같으면 허용
+
+    def test_plan_line_rejects_lsl_above_usl(self):
+        line = ControlPlanLine(characteristic='x', lsl=5, usl=1)
+        with self.assertRaises(ValidationError) as cm:
+            line.clean()
+        self.assertIn('usl', cm.exception.message_dict)
+
     def test_save_rejects_foreign_row(self):         # Review Focus 1
         other = Characteristic.objects.create(spec=self.other_draft, name='남의 항목')
         draft, _ = open_or_new_revision(self.spec)
