@@ -1,9 +1,10 @@
 """admin·기존 뷰·API가 함께 쓰는 업무 규칙. 본문은 기존 admin·뷰 코드를 옮긴 것이다(docs/architecture-migration-plan.md 3.2)."""
 from django.core.exceptions import PermissionDenied, ValidationError
+from django.contrib.contenttypes.models import ContentType
 from django.db import transaction
 from django.utils import timezone
 
-from .models import Nonconformance, is_approver
+from .models import Nonconformance, RevisionLog, is_approver
 from .records import can_edit_locked, delete_record, edit_unlocked, is_locked
 
 LOCKED_MSG = '잠긴 기록입니다. 수정 요청 후 승인받아야 수정할 수 있습니다.'
@@ -123,3 +124,41 @@ def approve(obj, user, password):
     except ValidationError:  # 예: 고객 승인번호 없는 4M 변경
         obj.approved_by, obj.approved_at = prev
         raise
+
+
+def _new_log(obj, user, label, changes, reason, **extra):
+    changes, reason = (changes or '').strip(), (reason or '').strip()
+    if not changes:
+        raise ValidationError('변경 내용을 입력하세요.')
+    if not reason:
+        raise ValidationError('사유를 입력하세요.')
+    return RevisionLog.objects.create(
+        content_type=ContentType.objects.get_for_model(obj), object_id=obj.pk, object_repr=str(obj)[:200],
+        label=label, changes=changes, reason=reason, requested_by=user, **extra)
+
+
+def request_revision_log(obj, user, label, changes, reason):
+    """개정 이력 신청(대기). 변경 내용과 사유는 비워 둘 수 없다."""
+    return _new_log(obj, user, label, changes, reason)
+
+
+@transaction.atomic
+def confirm_revision_log(log, user, password):
+    """승인자가 비밀번호를 다시 입력해 개정 이력을 확정한다. 확정 뒤에는 모델이 수정을 막는다."""
+    if not is_approver(user):
+        raise PermissionDenied('품질팀장만 승인할 수 있습니다.')
+    if log.status == RevisionLog.CONFIRMED:
+        raise ValidationError('이미 확정된 개정 이력입니다.')
+    if not user.check_password(password):
+        raise ValidationError('비밀번호가 맞지 않습니다.')
+    log.status, log.approved_by, log.approved_at = RevisionLog.CONFIRMED, user, timezone.now()
+    log.save()
+    return log
+
+
+@transaction.atomic
+def approve_and_log(obj, user, password, label, changes, reason):
+    """승인 서명과 확정 개정 이력을 한 트랜잭션으로 처리한다. 어느 쪽이 실패해도 둘 다 취소된다."""
+    approve(obj, user, password)
+    return _new_log(obj, user, label, changes, reason, status=RevisionLog.CONFIRMED,
+                    approved_by=user, approved_at=obj.approved_at)

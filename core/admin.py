@@ -12,7 +12,7 @@ from django.utils.html import format_html, format_html_join
 from simple_history.admin import SimpleHistoryAdmin
 
 from .models import (BomLine, Hold, ImportProfile, Item, Lot, LotLink, Nonconformance, NonconformancePhoto, Process,
-                     RoutingStep, Shipment, WorkOrder, WorkResult)
+                     RevisionLog, RoutingStep, Shipment, WorkOrder, WorkResult)
 from .records import blockers, can_edit_locked, delete_record, is_locked
 from .rules import LOCKED_MSG, begin_edit, child_editable, finish_edit, missing_message, nc_locked_fields, sign_disposition
 
@@ -475,3 +475,16 @@ class ShipmentAdmin(ReportLinksMixin, BaseAdmin):
 
     def related(self, obj):
         return obj.lot, [('부적합', Nonconformance.objects.filter(lot_id=obj.lot_id), f'lot__id__exact={obj.lot_id}')]
+
+
+@admin.register(RevisionLog)
+class RevisionLogAdmin(BaseAdmin):
+    """개정 이력은 화면(API)에서 신청·확정한다. 관리 화면은 읽기 전용이다."""
+    list_display = ('object_repr', 'label', 'status', 'requested_by', 'requested_at', 'approved_by')
+    readonly_fields = [f.name for f in RevisionLog._meta.fields]
+
+    def has_add_permission(self, request):
+        return False
+
+    def get_model_perms(self, request):
+        return {}  # 전체 메뉴에는 올리지 않는다. 주소로만 연다

@@ -6,9 +6,11 @@ from django.core.exceptions import PermissionDenied, ValidationError
 from django.test import TestCase
 from django.utils import timezone
 
-from core.models import EditRequest, Item, Lot, Nonconformance, Process
-from core.rules import Locked, approve, child_editable, delete_as, dispose_nc, nc_locked_fields, save_with_lock
+from core.models import EditRequest, Item, Lot, Nonconformance, Process, RevisionLog
+from core.rules import (Locked, approve, approve_and_log, child_editable, confirm_revision_log, delete_as, dispose_nc,
+                        nc_locked_fields, request_revision_log, save_with_lock)
 from qms.models import Characteristic, ChangeRequest, InspectionSpec
+from qms.rules import save_spec
 
 
 class LockRulesTest(TestCase):
@@ -389,3 +391,53 @@ class AdminRulesEquivalenceTest(TestCase):
         self.assertEqual((v_hist, r_hist), (0, 0))
         self.assertIn('비밀번호가 맞지 않습니다.', v_text)
         self.assertIn('비밀번호가 맞지 않습니다.', r_text)
+
+
+class RevisionLogTest(TestCase):
+    def setUp(self):
+        self.lead = User.objects.create_user('lead', password='pw-lead-123', is_staff=True)
+        self.lead.groups.add(Group.objects.get(name='품질팀장'))
+        self.eng = User.objects.create_user('eng', password='pw-eng-123', is_staff=True)
+        self.eng.groups.add(Group.objects.get(name='품질엔지니어'))
+        item = Item.objects.create(code='R1', name='양극재', item_type=Item.RAW)
+        self.spec = InspectionSpec.objects.create(item=item, inspection_type=InspectionSpec.INCOMING)
+
+    def test_request_then_confirm_then_immutable(self):
+        log = request_revision_log(self.spec, self.eng, 'Rev.1', '최초 제정', '신규 품번')
+        self.assertEqual(log.status, RevisionLog.PENDING)
+        confirm_revision_log(log, self.lead, 'pw-lead-123')
+        log.refresh_from_db()
+        self.assertEqual((log.status, log.approved_by), (RevisionLog.CONFIRMED, self.lead))
+        log.reason = '바꿈'
+        with self.assertRaisesMessage(ValidationError, '확정된 개정 이력은 수정할 수 없습니다.'):
+            log.save()
+        with self.assertRaisesMessage(ValidationError, '확정된 개정 이력은 수정할 수 없습니다.'):
+            log.delete()
+
+    def test_reason_and_changes_required(self):
+        with self.assertRaisesMessage(ValidationError, '사유를 입력하세요.'):
+            request_revision_log(self.spec, self.eng, 'Rev.1', '내용', ' ')
+        with self.assertRaisesMessage(ValidationError, '변경 내용을 입력하세요.'):
+            request_revision_log(self.spec, self.eng, 'Rev.1', '', '사유')
+
+    def test_confirm_needs_approver_and_password(self):
+        log = request_revision_log(self.spec, self.eng, 'Rev.1', '최초 제정', '사유')
+        with self.assertRaisesMessage(PermissionDenied, '품질팀장만 승인할 수 있습니다.'):
+            confirm_revision_log(log, self.eng, 'pw-eng-123')
+        with self.assertRaisesMessage(ValidationError, '비밀번호가 맞지 않습니다.'):
+            confirm_revision_log(log, self.lead, 'wrong')
+
+    def test_approve_and_log_is_atomic(self):
+        with self.assertRaises(ValidationError):
+            approve_and_log(self.spec, self.lead, 'wrong', 'Rev.1', '최초 제정', '사유')
+        self.assertFalse(RevisionLog.objects.exists())
+        self.assertFalse(InspectionSpec.objects.get(pk=self.spec.pk).is_approved)
+        log = approve_and_log(self.spec, self.lead, 'pw-lead-123', 'Rev.1', '최초 제정', '사유')
+        self.assertEqual(log.status, RevisionLog.CONFIRMED)
+        self.assertTrue(InspectionSpec.objects.get(pk=self.spec.pk).is_approved)
+
+    def test_plain_save_leaves_no_revision_log_but_history(self):   # 스펙 9장 "개정 이력 표시"
+        n = self.spec.history.count()
+        save_spec(self.spec, self.eng, {'note': '메모'}, [], None)
+        self.assertEqual(RevisionLog.objects.count(), 0)
+        self.assertEqual(self.spec.history.count(), n + 1)

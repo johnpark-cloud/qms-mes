@@ -1,11 +1,12 @@
 """검사 판정·입고 업무 규칙. 본문은 기존 qms/views.py 코드를 옮긴 것이다(docs/architecture-migration-plan.md 3.2)."""
 from decimal import Decimal, InvalidOperation
 
+from django.contrib.contenttypes.models import ContentType
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import transaction
 from django.db.models import Max
 
-from core.models import Lot
+from core.models import Lot, RevisionLog
 from core.rules import LOCKED_MSG, Locked, child_editable, save_with_lock
 
 from .models import Characteristic, Inspection, InspectionSpec, Measurement
@@ -223,3 +224,11 @@ def diff_text(diff):
             cells = ', '.join(f"{_label(Characteristic, c)} {o} → {n}" for c, (o, n) in r['values'].items())
             lines.append(f"항목 변경: {r['name']} ({cells})")
     return '\n'.join(lines) or '변경 없음'
+
+
+def spec_logs(spec, confirmed_only):
+    """같은 품번·구분에서 현재 개정 이하인 모든 개정의 개정 이력. confirmed_only이면 확정만(문서용)."""
+    ids = InspectionSpec.objects.filter(item=spec.item, inspection_type=spec.inspection_type,
+                                        revision__lte=spec.revision).values_list('pk', flat=True)
+    logs = RevisionLog.objects.filter(content_type=ContentType.objects.get_for_model(InspectionSpec), object_id__in=ids)
+    return logs.filter(status=RevisionLog.CONFIRMED) if confirmed_only else logs

@@ -539,3 +539,43 @@ class EditRequest(models.Model):
         self.status = self.APPROVED if approve else self.REJECTED
         self.decided_by, self.decided_at, self.reject_reason = user, timezone.now(), reject_reason
         self.save()
+
+
+class RevisionLog(models.Model):
+    """사용자가 신청하고 승인자가 확정하는 개정 이력. 확정되면 수정·삭제할 수 없다."""
+    PENDING, CONFIRMED = 'PENDING', 'CONFIRMED'
+    STATUSES = [(PENDING, '대기'), (CONFIRMED, '확정')]
+    LOCKED_MSG = '확정된 개정 이력은 수정할 수 없습니다.'
+
+    content_type = models.ForeignKey(ContentType, on_delete=models.PROTECT, verbose_name='기록 종류')
+    object_id = models.PositiveBigIntegerField('기록 번호')
+    target = GenericForeignKey('content_type', 'object_id')
+    object_repr = models.CharField('대상 기록', max_length=200)
+    label = models.CharField('개정', max_length=20)
+    changes = models.TextField('변경 내용')
+    reason = models.TextField('사유')
+    requested_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name='+',
+                                     verbose_name='신청자')
+    requested_at = models.DateTimeField('신청 일시', auto_now_add=True)
+    status = models.CharField('상태', max_length=9, choices=STATUSES, default=PENDING)
+    approved_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, null=True, blank=True,
+                                    related_name='+', verbose_name='승인자')
+    approved_at = models.DateTimeField('승인 일시', null=True, blank=True)
+    history = HistoricalRecords()
+
+    class Meta:
+        verbose_name = verbose_name_plural = '개정 이력'
+        ordering = ['requested_at', 'pk']
+
+    def __str__(self):
+        return f'{self.object_repr} {self.label}'
+
+    def save(self, *args, **kwargs):
+        if self.pk and RevisionLog.objects.filter(pk=self.pk, status=self.CONFIRMED).exists():
+            raise ValidationError(self.LOCKED_MSG)
+        super().save(*args, **kwargs)
+
+    def delete(self, *args, **kwargs):
+        if self.status == self.CONFIRMED:
+            raise ValidationError(self.LOCKED_MSG)
+        return super().delete(*args, **kwargs)

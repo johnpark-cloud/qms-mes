@@ -7,11 +7,11 @@ from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
 
-from core.models import Item, Lot
-from core.rules import Locked
+from core.models import Item, Lot, RevisionLog
+from core.rules import Locked, request_revision_log
 from qms.models import Characteristic, ControlPlan, ControlPlanLine, Inspection, InspectionSpec, Qualification
 from qms.rules import (RECEIVE_MSG, Stale, compare_specs, diff_text, measurement, new_spec_revision, open_or_new_revision,
-                       receive_lot, save_spec, spec_version, submit_inspection)
+                       receive_lot, save_spec, spec_logs, spec_version, submit_inspection)
 
 
 class InspectionRulesTest(TestCase):
@@ -163,3 +163,13 @@ class SpecRulesTest(TestCase):
         for part in ('샘플링', '항목 추가: 길이', '항목 삭제: 폭', '두께'):
             self.assertIn(part, text)
         self.assertEqual(diff_text(compare_specs(None, self.spec)), '최초 제정')
+
+    def test_spec_logs_across_revisions(self):
+        # Rev.1 확정 1건 + Rev.2 대기 1건 → Rev.2 문서용은 1건, 탭용은 2건
+        old = request_revision_log(self.spec, self.eng, 'Rev.1', '최초 제정', '신규')
+        RevisionLog.objects.filter(pk=old.pk).update(status=RevisionLog.CONFIRMED, approved_by=self.lead)
+        draft, _ = open_or_new_revision(self.spec)
+        request_revision_log(draft, self.eng, 'Rev.2', '폭 변경', '고객 요청')
+        self.assertEqual(spec_logs(draft, confirmed_only=True).count(), 1)
+        self.assertEqual(spec_logs(draft, confirmed_only=False).count(), 2)
+        self.assertEqual(spec_logs(self.spec, confirmed_only=False).count(), 1)   # Rev.1에서는 Rev.2 이력이 안 보인다
