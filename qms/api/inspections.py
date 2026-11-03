@@ -19,12 +19,12 @@ QUEUE_COLUMNS = ['LOT', '품번', '품명', '협력사', '수량', '생성일', 
 
 
 def _int(v):
-    """JSON 정수 또는 숫자 글만 id로 받는다(True·'a'·None은 None)."""
-    if isinstance(v, bool):
+    """JSON 정수 또는 ASCII 숫자 글만 id로 받는다(True·'a'·'²'·None·DB 범위 밖은 None)."""
+    if isinstance(v, str) and v.isascii() and v.isdigit():
+        v = int(v)
+    if isinstance(v, bool) or not isinstance(v, int):
         return None
-    if isinstance(v, int):
-        return v
-    return int(v) if isinstance(v, str) and v.isdigit() else None
+    return v if 0 <= v < 2**63 else None  # 더 크면 SQLite가 OverflowError를 낸다
 
 
 def _str(v):
@@ -49,7 +49,7 @@ def _specs(lot):
 
 def _values(raw):
     """{"<id>": 글} → {int id: 글}. 숫자가 아닌 키와 글이 아닌 값은 버린다(그러면 판정이 '값을 입력하세요'로 거부한다)."""
-    return {int(k): v for k, v in raw.items() if isinstance(k, str) and k.isdigit() and isinstance(v, str)}
+    return {_int(k): v for k, v in raw.items() if isinstance(k, str) and _int(k) is not None and isinstance(v, str)}
 
 
 class QueueView(APIView):

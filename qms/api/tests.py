@@ -456,7 +456,8 @@ class InspectApiTest(TestCase):
         oc = Characteristic.objects.create(spec=other, name='남의 항목')
         r = self.c().post(url, {'spec': self.spec.pk, 'values': {str(oc.pk): 'OK', str(self.look.pk): 5}}, format='json')
         self.assertEqual(r.json()['results'], {str(self.look.pk): None})
-        for bad in ([], {'spec': self.spec.pk, 'values': []}, {'spec': 'a', 'values': {}}):
+        for bad in ([], {'spec': self.spec.pk, 'values': []}, {'spec': 'a', 'values': {}}, {'spec': '²', 'values': {}},
+                    {'spec': 10**30, 'values': {}}):
             self.assertEqual(self.c().post(url, bad, format='json').status_code, 400, bad)
         before = self.counts()
         r = self.submit(values={str(self.thk.pk): '10,0', str(self.look.pk): 'OK'})
@@ -498,7 +499,9 @@ class InspectApiTest(TestCase):
         before = self.counts()
         self.assertEqual(self.c().post('/api/qms/inspect/submit/', [], format='json').status_code, 400)
         for kw in ({'values': []}, {'values': {'x': '1'}}, {'values': {str(self.thk.pk): 10.0, str(self.look.pk): 'OK'}},
-                   {'lot': 'a'}, {'spec': None}, {'gauge': 'a'}, {'gauge': True}):
+                   {'lot': 'a'}, {'spec': None}, {'gauge': 'a'}, {'gauge': True},
+                   {'lot': '²'}, {'values': {'²': '1'}}, {'gauge': '²'}, {'lot': 10**30}, {'spec': '1' + '0' * 30},
+                   {'gauge': 10**30}, {'values': {'1' + '0' * 30: '1'}}):
             self.assertEqual(self.submit(**kw).status_code, 400, kw)
         r = self.submit(gauge=99999)
         self.assertEqual((r.status_code, r.json()['detail']), (400, '계측기를 찾을 수 없습니다.'))
