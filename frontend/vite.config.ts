@@ -9,5 +9,5 @@ export default defineConfig(({ command }) => ({
   base: command === 'build' ? '/static/app/' : '/app/',
   plugins: [react()],
   build: { outDir: 'dist' },
-  server: { proxy: { '/api': django, '/admin': django, '/static': django } },
+  server: { proxy: { '/api': django, '/admin': django, '/static': django, '/brand': django } },
 }))

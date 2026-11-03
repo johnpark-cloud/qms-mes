@@ -1,6 +1,7 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Alert, Button, Layout, Menu, Spin } from 'antd'
-import { Navigate, Outlet, useLocation, useNavigate } from 'react-router-dom'
+import { useState } from 'react'
+import { Link, Navigate, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { fetchMe, logout } from '../api/auth'
 import { ApiError } from '../api/client'
 
@@ -13,6 +14,8 @@ export default function AppLayout() {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const me = useQuery({ queryKey: ['me'], queryFn: fetchMe })
+  // data/brand/logo.* 가 없으면 /brand/logo 가 404 라 글자로 보인다 (admin 상단 바와 같다).
+  const [logo, setLogo] = useState(true)
 
   if (me.isPending) return <Spin fullscreen />
   // 로그인하지 않은 상태(세션 만료 포함)에서 /api/auth/me/ 는 403 이다.
@@ -33,7 +36,10 @@ export default function AppLayout() {
   return (
     <Layout style={{ minHeight: '100vh' }}>
       <Layout.Header style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '0 16px' }}>
-        <strong style={{ fontSize: 18 }}>QMS+MES</strong>
+        <Link to="/todo" style={{ display: 'flex', color: 'inherit' }}>
+          {logo ? <img className="shell-brand" src="/brand/logo" alt="QMS+MES" onError={() => setLogo(false)} />
+            : <strong style={{ fontSize: 18 }}>QMS+MES</strong>}
+        </Link>
         <span style={{ flex: 1 }} />
         <span>{user.name}</span>
         <a href="/todo/">기존 화면</a>

@@ -4,6 +4,11 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>QMS+MES</title>
+    <style>
+      /* 로고(흰 바탕 JPG도)를 상단 바 색에 녹인다. core/static/qms/fiori.css 의 .shell-brand 와 같다. */
+      .shell-brand { height: 32px; mix-blend-mode: multiply; }
+      @media (prefers-color-scheme: dark) { .shell-brand { mix-blend-mode: normal; background: #fff; border-radius: 4px; } }
+    </style>
   </head>
   <body>
     <div id="root"></div>

@@ -10,7 +10,7 @@
 | 앱 하나만 | `.\.venv\Scripts\python manage.py test qms` | 작업 중 빠른 확인용. 완료 판단에는 전체 실행이 필요하다 |
 | 테스트 하나만 | `.\.venv\Scripts\python manage.py test core.tests.ShellTest.test_logged_in_pages_not_stored` | |
 | 화면 흐름(e2e) | `.\.venv\Scripts\python scripts\e2e_check.py` | 임시 폴더에 새 DB를 만들고 포트 8765에 서버를 띄워 실제 HTTP로 인터록·화면을 점검한다. 2026-10-28 기준 76개 |
-| 브라우저 흐름(React `/app/`) | `python scripts\e2e_browser.py` | **시스템 Python**(`.venv` 아님)의 Playwright가 필요하다(`python -m playwright`). 임시 폴더에 새 DB를 만들고 포트 8766에 서버를 띄워 실제 브라우저로 로그인, 종합현황 카드 수(API와 같은지), 내 할 일 위젯 추가 후 새로고침, 390px 폭 가로 스크롤, 다크 모드 배경색, 세션 끊김 시 로그인 이동을 점검한다. 2026-11-02 기준 7개. Playwright는 `requirements.txt`에 넣지 않는다 |
+| 브라우저 흐름(React `/app/`) | `python scripts\e2e_browser.py` | **시스템 Python**(`.venv` 아님)의 Playwright가 필요하다(`python -m playwright`). 임시 폴더에 새 DB를 만들고 포트 8766에 서버를 띄워 실제 브라우저로 로그인, 종합현황 카드 수(API와 같은지), 내 할 일 위젯 추가 후 새로고침, 390px 폭 가로 스크롤, 로고(없으면 글자·넣으면 왼쪽 위 그림), 다크 모드 배경색, 세션 끊김 시 로그인 이동을 점검한다. 2026-11-03 기준 8개. Playwright는 `requirements.txt`에 넣지 않는다 |
 | 설정 점검 | `.\.venv\Scripts\python manage.py check` | |
 | 마이그레이션 누락 확인 | `.\.venv\Scripts\python manage.py makemigrations --check --dry-run` | 모델을 바꿨는데 마이그레이션이 없으면 실패한다 |
 
@@ -25,7 +25,7 @@ e2e를 Git Bash에서 실행할 때 한글이 깨지면 `PYTHONIOENCODING=utf-8`
 | `personal/tests.py` | `LeaveTests`(연차 계산), `PayTests`(급여), `OwnerOnlyTests`(본인만 열람) |
 | `core/tests_rules.py`, `qms/tests_rules.py` | 공통 업무 규칙(`rules.py`): 잠금·처분·승인, 검사 판정·입고 |
 | `core/api/tests.py`, `qms/api/tests.py` | API: 로그인·권한·오류 형식·SPA 서빙, 공장 종합현황·내 할 일·배치 저장 |
-| `scripts/e2e_browser.py` | React 화면을 브라우저로: 로그인, 카드 수, 위젯 추가 유지, 휴대폰 폭, 다크 모드, 세션 끊김 |
+| `scripts/e2e_browser.py` | React 화면을 브라우저로: 로그인, 카드 수, 위젯 추가 유지, 휴대폰 폭, 로고, 다크 모드, 세션 끊김 |
 | `scripts/e2e_check.py` | 로그인부터 화면별 HTTP 흐름, 정적 파일·디자인 토큰 제공 |
 
 ## 변경 종류별 검증

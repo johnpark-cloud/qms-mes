@@ -92,6 +92,26 @@ try:
             check(f'390px 폭 가로 스크롤 없음 {path}', w <= 390, f'scrollWidth {w}')
         page.set_viewport_size({'width': 1280, 'height': 800})
 
+        # 로고: data/brand 에 없으면 글자, 넣으면 새로고침만으로 왼쪽 위에 그림이 보인다
+        page.goto('/app/todo')
+        try:  # 그림 요청이 404 로 끝나야 글자로 바뀐다
+            page.locator('header strong', has_text='QMS+MES').wait_for(); text_ok = True
+        except Exception:
+            text_ok = False
+        os.makedirs(os.path.join(env['QMS_DATA_DIR'], 'brand'), exist_ok=True)
+        with open(os.path.join(env['QMS_DATA_DIR'], 'brand', 'logo.svg'), 'w') as f:
+            f.write('<svg xmlns="http://www.w3.org/2000/svg" width="120" height="32"><rect width="120" height="32" fill="#0057d2"/></svg>')
+        page.reload()
+        img = page.locator('header img.shell-brand')
+        try:
+            img.wait_for()
+            page.wait_for_function('() => document.querySelector("header img.shell-brand")?.naturalWidth > 0')
+            box = img.bounding_box()
+            img_ok = box['x'] < 40 and box['y'] < 40
+        except Exception:
+            img_ok, box = False, None
+        check('로고: 없으면 글자, 넣으면 왼쪽 위 그림', text_ok and img_ok, f'글자 {text_ok}, 그림 {box}')
+
         bg = lambda: page.evaluate('getComputedStyle(document.body).backgroundColor')
         page.emulate_media(color_scheme='light')
         page.wait_for_timeout(300)
