@@ -32,6 +32,8 @@ export default function MeasurePage() {
   const busy = useRef(false)
   const dirty = useRef<Set<string>>(new Set())
   const seq = useRef(0)
+  const last = useRef<Record<string, number>>({}) // 칸별로 가장 최근에 보낸 요청 번호
+  const judge = useRef<HTMLButtonElement>(null)
   const inputs = useRef<Record<number, HTMLElement | null>>({})
 
   // 입력이 300ms 멈추면 바뀐 칸만 모아 한 번 확인한다. 판정은 서버 응답만 쓴다.
@@ -46,11 +48,12 @@ export default function MeasurePage() {
       })
       if (!Object.keys(send).length) return
       const mine = ++seq.current
+      Object.keys(send).forEach((k) => (last.current[k] = mine))
       try {
         const r = await checkValues(spec, send)
-        // 더 새 요청이 있어도 칸별로 합치므로 오래된 응답은 그 사이 다시 바뀐 칸만 건너뛴다.
-        if (mine !== seq.current && ids.some((k) => dirty.current.has(k))) return
-        setResults((p) => ({ ...p, ...r.results }))
+        // 칸마다 가장 최근에 보낸 요청의 응답만 쓴다.
+        const fresh = Object.fromEntries(Object.entries(r.results).filter(([k]) => last.current[k] === mine))
+        setResults((p) => ({ ...p, ...fresh }))
       } catch {
         /* 즉시 색은 참고용이다. 판정 때 서버가 다시 검사한다. */
       }
@@ -80,9 +83,15 @@ export default function MeasurePage() {
   const set = (id: number, v: string) => {
     dirty.current.add(String(id))
     setValues((p) => ({ ...p, [id]: v }))
-    if (!v.trim()) setResults((p) => { const n = { ...p }; delete n[id]; return n })
+    if (!v.trim()) {
+      last.current[String(id)] = ++seq.current // 날아가는 응답이 빈 칸에 판정을 되살리지 못하게 한다
+      setResults((p) => { const n = { ...p }; delete n[id]; return n })
+    }
   }
-  const next = (i: number) => inputs.current[f.characteristics[i + 1]?.id]?.focus()
+  const next = (i: number) => {
+    const n = f.characteristics.slice(i + 1).find((c) => c.is_variable)
+    ;(n ? inputs.current[n.id] : judge.current)?.focus()
+  }
   const hasVariable = f.characteristics.some((c) => c.is_variable)
   const failed = Object.values(results).some((v) => v === false)
 
@@ -98,7 +107,8 @@ export default function MeasurePage() {
           spec,
           gauge,
           values,
-          ...(failed ? { defect_type: defectType, defect_qty: defectQty.trim() } : {}),
+          defect_type: defectType,
+          defect_qty: defectQty.trim(),
         }),
       )
     } catch (e) {
@@ -181,7 +191,7 @@ export default function MeasurePage() {
       )}
       {err && <Alert style={{ marginTop: 16 }} type="error" message={err} role="alert" />}
       <div style={{ marginTop: 16 }}>
-        <Button type="primary" loading={saving} onClick={() => void submit()}>
+        <Button ref={judge} type="primary" loading={saving} onClick={() => void submit()}>
           판정
         </Button>
       </div>
