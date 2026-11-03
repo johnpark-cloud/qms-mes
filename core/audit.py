@@ -24,8 +24,11 @@ def row_payload(h):
     model = h.instance_type
     pk = model._meta.pk.attname
     changes = []
-    if h.history_type == '~' and h.prev_record:
-        for c in h.diff_against(h.prev_record).changes:
+    # prev_record는 history_date가 엄격히 이전인 행만 찾아 같은 시각의 연속 저장을 놓친다 → history_id로 찾는다
+    prev = h.history_type == '~' and type(h).objects.filter(
+        **{pk: getattr(h, pk)}, history_id__lt=h.history_id).order_by('-history_id').first()
+    if prev:
+        for c in h.diff_against(prev).changes:
             if c.field in SECRET_FIELDS:
                 continue
             changes.append({'field': str(model._meta.get_field(c.field).verbose_name),

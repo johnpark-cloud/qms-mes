@@ -225,6 +225,13 @@ class CommonApiTest(TestCase):
         self.assertEqual(r['results'][-1]['type'], '생성')
         self.assertIn({'field': '비고', 'old': '', 'new': '바꿈'}, r['results'][0]['changes'])
 
+    def test_audit_log_changes_when_same_timestamp(self):
+        self.spec.note = '바꿈'
+        self.spec.save()
+        self.spec.history.update(history_date=self.spec.history.first().history_date)  # 같은 시각에 저장된 경우
+        r = self.c(self.lead).get(f'/api/audit-log/?model=qms.inspectionspec&id={self.spec.pk}').json()
+        self.assertIn({'field': '비고', 'old': '', 'new': '바꿈'}, r['results'][0]['changes'])
+
     def test_confirm_revision_log_endpoint(self):
         r = self.c(self.lead).post(f'/api/revision-log/{self.log.pk}/approve/', {'password': 'pw-lead-123'}, format='json')
         self.assertEqual(r.json()['status'], 'CONFIRMED')
