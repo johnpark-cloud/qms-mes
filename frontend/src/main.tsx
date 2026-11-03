@@ -10,6 +10,7 @@ import './app.css'
 import AppLayout from './layout/AppLayout'
 import AuditLog from './pages/AuditLog'
 import InspectPage from './pages/inspect/InspectPage'
+import MeasurePage from './pages/inspect/MeasurePage'
 import Login from './pages/Login'
 import Overview from './pages/Overview'
 import SpecList from './pages/specs/SpecList'
@@ -38,6 +39,7 @@ function App() {
               <Route path="specs" element={<SpecList />} />
               <Route path="specs/:id" element={<SpecPage />} />
               <Route path="inspect" element={<InspectPage />} />
+              <Route path="inspect/:lotId/:specId" element={<MeasurePage />} />
               <Route path="audit" element={<AuditLog />} />
             </Route>
             <Route path="*" element={<Navigate to="/todo" replace />} />
