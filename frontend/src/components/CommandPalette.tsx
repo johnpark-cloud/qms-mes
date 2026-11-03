@@ -50,6 +50,8 @@ export default function CommandPalette({ open, onClose }: { open: boolean; onClo
         value={text}
         onChange={(e) => setText(e.target.value)}
         onKeyDown={(e) => {
+          // 한글 조합을 확정하는 Enter·방향키는 이동으로 쓰지 않는다(229 는 옛 브라우저의 조합 키 코드).
+          if (e.nativeEvent.isComposing || e.keyCode === 229) return
           if (e.key === 'ArrowDown') { e.preventDefault(); setIdx((i) => Math.min(i + 1, hits.length - 1)) }
           else if (e.key === 'ArrowUp') { e.preventDefault(); setIdx((i) => Math.max(i - 1, 0)) }
           else if (e.key === 'Enter' && hits[idx]) go(hits[idx])
