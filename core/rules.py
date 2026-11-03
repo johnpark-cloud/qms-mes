@@ -28,8 +28,7 @@ def finish_edit(unlock):
 
 @transaction.atomic
 def save_with_lock(obj, user, children=()):
-    """잠금 규칙을 지키며 저장한다(승인 후 잠금·수정 승인 소모). 부적합은 모델 잠금 가드가 없다.
-    부르는 쪽이 `nc_locked_fields(nc, user)`에 든 칸을 바꾸지 않았는지 먼저 확인해야 한다(2단계 API 필수)."""
+    """잠금 규칙을 지키며 저장한다(승인 후 잠금·수정 승인 소모). 종결된 부적합도 모델 save 가드가 막는다."""
     locked = bool(obj.pk) and is_locked(obj)
     unlock = begin_edit(obj, user)
     try:  # 승인 후에도 어떤 칸이 열려 있는지는 모델의 save 가드가 정한다

@@ -178,8 +178,67 @@ class ApproveRulesTest(TestCase):
             approve(self.spec, self.boss, 'pw')
 
 
+class NcModelLockTest(TestCase):
+    """종결된 부적합은 모델 save가 막는다. 인터록 칸은 누구도, 나머지는 수정 승인·관리자만 바꾼다(AFTER_APPROVAL 칸 제외)."""
+
+    def setUp(self):
+        item = Item.objects.create(code='R1', name='양극재', item_type=Item.RAW)
+        self.lot = Lot.objects.create(number='RAW-1', item=item)
+        self.other = Lot.objects.create(number='RAW-2', item=item)
+        mrb = User.objects.create_user('mrb', password='pw')
+        mrb.groups.add(Group.objects.get(name='품질팀장'))
+        self.eng = User.objects.create_user('eng', password='pw-eng-123', is_staff=True)
+        self.root = User.objects.create_superuser('root', password='pw-root-123')
+        self.nc = Nonconformance.objects.create(lot=self.lot, description='이물', origin='INCOMING', defect_type='이물',
+                                                sorting_result='전수 선별', contained_qty=Decimal('5'))
+        dispose_nc(self.nc, mrb, 'pw', {'disposition': Nonconformance.SCRAP})
+        self.nc.refresh_from_db()
+
+    def test_open_nc_is_editable(self):
+        nc = Nonconformance.objects.create(lot=self.other, description='긁힘')
+        nc.description = '긁힘 2'
+        nc.save()
+
+    def test_plain_save_of_closed_nc_is_blocked(self):
+        self.nc.description = '바꿈'
+        with self.assertRaisesMessage(ValidationError, '종결된 부적합은 수정할 수 없습니다.'):
+            self.nc.save()
+
+    def test_save_with_lock_without_unlock_is_locked(self):
+        self.nc.description = '바꿈'
+        with self.assertRaises(Locked):
+            save_with_lock(self.nc, self.eng)
+        self.nc.refresh_from_db()
+        self.assertEqual(self.nc.description, '이물')
+
+    def test_after_approval_fields_stay_open(self):
+        self.nc.cost, self.nc.capa_required = Decimal('1000'), True
+        save_with_lock(self.nc, self.eng)
+        self.nc.refresh_from_db()
+        self.assertEqual(self.nc.cost, Decimal('1000'))
+
+    def test_superuser_edits_non_interlock_fields(self):
+        self.nc.description = '관리자 수정'
+        save_with_lock(self.nc, self.root)
+        self.nc.refresh_from_db()
+        self.assertEqual(self.nc.description, '관리자 수정')
+
+    def test_interlock_fields_blocked_even_for_superuser_and_edit_request(self):
+        EditRequest.objects.create(kind=EditRequest.EDIT, status=EditRequest.APPROVED, requested_by=self.eng,
+                                   target=self.nc, reason='오기')
+        for user in (self.root, self.eng):
+            for name, value in [('lot', self.other), ('disposition', Nonconformance.CONCESSION),
+                                ('customer_approval_ref', 'C-1'), ('detected_at', timezone.now())]:
+                with self.subTest(user=user.username, field=name):
+                    nc = Nonconformance.objects.get(pk=self.nc.pk)
+                    setattr(nc, name, value)
+                    with self.assertRaisesMessage(ValidationError, '보류 인터록 칸'):
+                        save_with_lock(nc, user)
+        self.assertEqual(Nonconformance.objects.get(pk=self.nc.pk).lot, self.lot)
+
+
 class NcLockedFieldsAdminTest(TestCase):
-    """부적합은 모델 잠금 가드가 없다. 종결 뒤 읽기 전용 칸은 nc_locked_fields가 정하고 admin이 그대로 쓴다."""
+    """종결 뒤 읽기 전용 칸은 nc_locked_fields가 정하고 admin이 그대로 쓴다. 모델 save 가드와 같은 칸이다."""
 
     def test_locked_fields_match_admin_readonly_fields(self):
         from django.contrib import admin

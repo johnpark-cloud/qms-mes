@@ -366,8 +366,20 @@ class Nonconformance(models.Model):
         if self.disposition == self.CONCESSION and not self.customer_approval_ref:
             raise ValidationError('특채는 고객 승인 문서번호가 필요합니다.')
 
+    def _check_closed_lock(self):
+        """종결 뒤 잠금. admin은 core.rules.nc_locked_fields로 같은 칸을 읽기 전용으로 보인다."""
+        old = type(self).objects.filter(pk=self.pk, closed_at__isnull=False).first() if self.pk else None
+        if old is None:
+            return
+        changed = {f.name for f in self._meta.concrete_fields if getattr(old, f.attname) != getattr(self, f.attname)}
+        if changed & set(self.INTERLOCK):  # 관리자·수정 승인으로도 못 바꾼다 (새 MRB 서명 없이 보류가 풀리거나 남는다)
+            raise ValidationError('종결된 부적합의 보류 인터록 칸(LOT·발견 일시·처분·특채 승인번호)은 바꿀 수 없습니다.')
+        if changed - self.AFTER_APPROVAL and not getattr(self, '_edit_unlocked', False):  # core.rules.begin_edit
+            raise ValidationError('종결된 부적합은 수정할 수 없습니다. 수정 요청 후 승인받아야 합니다.')
+
     @transaction.atomic
     def save(self, *args, **kwargs):
+        self._check_closed_lock()
         self.clean()
         is_new = self._state.adding
         if self.disposition and not self.closed_at:

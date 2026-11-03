@@ -27,7 +27,8 @@
 | 재작업·수리는 부적합 발견 이후 그 LOT의 재검사 합격 기록이 있어야 한다. | `Nonconformance.clean` |
 | 특채는 고객 승인 문서번호가 필요하다. | `Nonconformance.clean` |
 | 재작업·수리·특채(`RELEASING`)만 보류를 해제한다. 폐기·반품은 보류를 유지한다. | `Nonconformance.RELEASING`, `save` |
-| 처분하면 종결 일시가 기록되고, 종결된 부적합은 잠긴다(수정 요청 승인 또는 시스템 관리자만 수정). | `Nonconformance.save`, `core/admin.py` `_open` |
+| 처분하면 종결 일시가 기록되고, 종결된 부적합은 잠긴다(수정 요청 승인 또는 시스템 관리자만 수정). 실패비용·고객 통보일·시정조치 필요·메일 발송 일시(`AFTER_APPROVAL`)는 종결 뒤에도 기록한다. | `Nonconformance._check_closed_lock`(모델 save), 화면은 `core/rules.py` `nc_locked_fields`·`core/admin.py` `_open` |
+| 종결된 부적합의 보류 인터록 칸(LOT·발견 일시·처분·특채 승인번호, `INTERLOCK`)은 시스템 관리자·수정 승인으로도 바꿀 수 없다. | `Nonconformance._check_closed_lock` |
 
 ## 3. 승인 서명과 잠금
 

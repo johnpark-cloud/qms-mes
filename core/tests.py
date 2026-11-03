@@ -559,8 +559,11 @@ class NcMailTest(TestCase):
 
     def test_migration_marks_legacy_closed_as_mailed(self):
         import importlib
-        from django.apps import apps
+        from django.db import connection
+        from django.db.migrations.loader import MigrationLoader
         from django.utils import timezone
+        # migrate 처럼 그 시점의 모델 상태로 부른다 (현재 모델의 종결 잠금 save 가드는 마이그레이션에 없다)
+        apps = MigrationLoader(connection).project_state(('core', '0007_nc_number_unique')).apps
         closed = timezone.now()
         Nonconformance.objects.filter(pk=self.nc.pk).update(
             approved_by=User.objects.first(), closed_at=closed, approved_at=None, mailed_at=None)
