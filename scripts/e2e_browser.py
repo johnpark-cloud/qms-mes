@@ -224,6 +224,31 @@ try:
             ok = False
         check('승인본 → 새 개정 → Rev.2 초안, 항목 복사', ok, page.url)
 
+        # 인쇄 화면(PDF)·감사 기록
+        try:
+            page.goto(f'/app/specs/{spec_id}/print')
+            page.locator('.doc-page').wait_for(timeout=5000)
+            page.emulate_media(media='print')
+            pdf = page.pdf(format='A4', print_background=True)
+            pages = pdf.count(b'/Type /Page') - pdf.count(b'/Type /Pages')
+            check('승인본 인쇄 화면 → PDF A4 1쪽', pages == 1, f'{pages}쪽')
+        except Exception as e:
+            check('승인본 인쇄 화면 → PDF A4 1쪽', False, str(e)[:80])
+        page.emulate_media(media='screen')
+        try:
+            page.goto(f'/app/specs/{draft_id}/print')
+            page.locator('.doc-page').wait_for(timeout=5000)
+            check('초안 인쇄 화면에 "초안 — 승인 전"', page.get_by_text('초안 — 승인 전').count() >= 1)
+        except Exception as e:
+            check('초안 인쇄 화면에 "초안 — 승인 전"', False, str(e)[:80])
+        try:
+            page.goto(f'/app/audit?model=qms.inspectionspec&id={spec_id}')
+            page.locator('[data-audit-row]').first.wait_for(timeout=5000)
+            n = page.locator('[data-audit-row]').count()
+            check('감사 기록: 저장 이력이 보임', n >= 2, f'{n}줄')
+        except Exception as e:
+            check('감사 기록: 저장 이력이 보임', False, str(e)[:80])
+
         # 세션이 끊기면 API를 부르는 화면이 로그인으로 보내야 한다 (client.ts 의 403 처리)
         page.context.clear_cookies()
         page.goto('/app/overview')

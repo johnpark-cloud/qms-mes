@@ -8,10 +8,12 @@ import { createRoot } from 'react-dom/client'
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 import './app.css'
 import AppLayout from './layout/AppLayout'
+import AuditLog from './pages/AuditLog'
 import Login from './pages/Login'
 import Overview from './pages/Overview'
 import SpecList from './pages/specs/SpecList'
 import SpecPage from './pages/specs/SpecPage'
+import SpecPrint from './pages/specs/SpecPrint'
 import Todo from './pages/Todo'
 import { useAppTheme } from './theme'
 
@@ -28,11 +30,13 @@ function App() {
         <BrowserRouter basename="/app">
           <Routes>
             <Route path="login" element={<Login />} />
+            <Route path="specs/:id/print" element={<SpecPrint />} />
             <Route element={<AppLayout />}>
               <Route path="overview" element={<Overview />} />
               <Route path="todo" element={<Todo />} />
               <Route path="specs" element={<SpecList />} />
               <Route path="specs/:id" element={<SpecPage />} />
+              <Route path="audit" element={<AuditLog />} />
             </Route>
             <Route path="*" element={<Navigate to="/todo" replace />} />
           </Routes>
