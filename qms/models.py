@@ -823,6 +823,11 @@ def _cell_value(value):
     return '' if value is None else value
 
 
+def _as_text(cell):
+    if isinstance(cell.value, str) and cell.value.startswith('='):
+        cell.data_type = 's'  # 사용자가 쓴 글이 수식으로 실행되지 않게 한다(core/export.py _put과 같은 방식)
+
+
 class ExcelTemplate(models.Model):
     """고객사 엑셀 양식에 값을 채운다. 양식이 바뀌면 매핑만 고친다."""
     name = models.CharField('양식 이름', max_length=100)
@@ -855,7 +860,7 @@ class ExcelTemplate(models.Model):
                 for i, row in enumerate(rows):
                     for col, col_path in path['cols'].items():
                         v = _resolve(row, col_path)
-                        ws.cell(row=top.row + i, column=column_index_from_string(col), value=_cell_value(v))
+                        _as_text(ws.cell(row=top.row + i, column=column_index_from_string(col), value=_cell_value(v)))
                 continue
             value = _resolve(obj, path)
             ws = wb[sheet] if sheet else wb.active
@@ -866,6 +871,7 @@ class ExcelTemplate(models.Model):
                         ws.cell(row=top.row + i, column=top.column + j, value=v)
                 continue
             ws[ref] = _cell_value(value)
+            _as_text(ws[ref])
         out = BytesIO()
         wb.save(out)
         return out.getvalue()

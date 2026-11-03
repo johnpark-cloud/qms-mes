@@ -1,4 +1,5 @@
 from django.contrib.contenttypes.models import ContentType
+from django.db import IntegrityError, transaction
 from django.db.models import Count, Exists, OuterRef, Q
 from django.shortcuts import get_object_or_404
 from django.urls import reverse
@@ -15,6 +16,9 @@ from qms.rules import (Stale, compare_specs, diff_text, open_or_new_revision, pr
                        spec_version)
 
 PAGE_SIZE = 50
+
+
+BAD_BODY = '요청 형식이 잘못되었습니다.'
 
 
 def _bad(msg, field=None):
@@ -109,7 +113,7 @@ class SpecListView(APIView):
                     for s in qs]
             return xlsx_response(table_xlsx('검사기준', LIST_COLUMNS, rows), '검사기준.xlsx')
         try:
-            page = max(int(request.query_params.get('page', 1)), 1)
+            page = min(max(int(request.query_params.get('page', 1)), 1), 10**6)
         except ValueError:
             page = 1
         count = qs.count()
@@ -125,10 +129,15 @@ class SpecListView(APIView):
         item = Item.objects.filter(pk=request.data.get('item')).first() if str(request.data.get('item') or '').isdigit() else None
         if item is None or not isinstance(kind, str) or kind not in dict(InspectionSpec.TYPES):
             return Response({'detail': '품번과 검사 구분을 고르세요.'}, status=400)
-        top = InspectionSpec.objects.filter(item=item, inspection_type=kind).order_by('-revision').first()
+        try:
+            with transaction.atomic():
+                top = InspectionSpec.objects.filter(item=item, inspection_type=kind).order_by('-revision').first()
+                if not top:
+                    spec = InspectionSpec.objects.create(item=item, inspection_type=kind)
+        except IntegrityError:  # 동시에 같은 기준서를 만든 경우(uniq_spec_rev)
+            top = InspectionSpec.objects.filter(item=item, inspection_type=kind).order_by('-revision').first()
         if top:
             return Response({'detail': '이미 있는 검사기준입니다. 새 개정으로 만드세요.', 'existing': top.pk}, status=409)
-        spec = InspectionSpec.objects.create(item=item, inspection_type=kind)
         return Response(_detail(spec, request.user), status=201)
 
 
@@ -171,13 +180,19 @@ class SpecApproveView(APIView):
 
     def post(self, request, pk):
         spec = get_object_or_404(InspectionSpec, pk=pk)
+        if not isinstance(request.data, dict):
+            return _bad(BAD_BODY)
         password, log = request.data.get('password') or '', request.data.get('log')
         if log and not isinstance(log, dict):
             return _bad('log 형식이 올바르지 않습니다.', 'log')
-        if log:
-            approve_and_log(spec, request.user, password, f'Rev.{spec.revision}', log.get('changes'), log.get('reason'))
-        else:
-            approve(spec, request.user, password)
+        with transaction.atomic():
+            # 승인자가 본 개정 번호와 다르면 낡은 화면의 서명이므로 거부한다
+            if 'version' in request.data and request.data['version'] != spec_version(spec):
+                return Response({'detail': str(Stale())}, status=409)
+            if log:
+                approve_and_log(spec, request.user, password, f'Rev.{spec.revision}', log.get('changes'), log.get('reason'))
+            else:
+                approve(spec, request.user, password)
         return Response(_detail(spec, request.user))
 
 
@@ -194,6 +209,8 @@ class SpecRevisionLogView(APIView):
     def post(self, request, pk):
         require_perm(request.user, 'qms.change_inspectionspec')
         spec = get_object_or_404(InspectionSpec, pk=pk)
+        if not isinstance(request.data, dict):
+            return _bad(BAD_BODY)
         g = request_revision_log(spec, request.user, f'Rev.{spec.revision}', request.data.get('changes'), request.data.get('reason'))
         return Response(_log(g), status=201)
 

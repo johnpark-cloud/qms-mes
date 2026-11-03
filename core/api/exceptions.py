@@ -1,6 +1,7 @@
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.db.models import ProtectedError
-from rest_framework.exceptions import PermissionDenied as DrfPermissionDenied
+from django.http import Http404
+from rest_framework.exceptions import NotFound, PermissionDenied as DrfPermissionDenied
 from rest_framework.response import Response
 from rest_framework.views import exception_handler
 
@@ -23,4 +24,6 @@ def handler(exc, context):
         return Response({'detail': '먼저 지워야 할 기록: ' + ', '.join(blockers), 'blockers': blockers}, status=409)
     if isinstance(exc, DrfPermissionDenied) and str(exc.detail).startswith('CSRF Failed'):
         return Response({'detail': CSRF_MSG}, status=403)
+    if isinstance(exc, (Http404, NotFound)):
+        return Response({'detail': '찾을 수 없습니다.'}, status=404)
     return exception_handler(exc, context)

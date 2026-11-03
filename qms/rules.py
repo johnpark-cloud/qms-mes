@@ -126,7 +126,7 @@ def save_spec(spec, user, data, rows, version):
         for i, row in enumerate(rows):
             key = f'characteristics.{i}'
             cid = row.get('id')
-            if cid is not None and cid not in own:  # 남의 항목을 고치지 못하게 한다
+            if cid is not None and (not isinstance(cid, int) or isinstance(cid, bool) or cid not in own):  # 남의 항목을 고치지 못하게 한다
                 errors[f'{key}.id'] = ['다른 검사기준의 항목입니다.']
                 continue
             if row.get('delete'):
@@ -162,7 +162,15 @@ def save_spec(spec, user, data, rows, version):
 
         for f in ('sampling', 'note'):
             if f in data:
-                setattr(spec, f, data[f] or '')
+                v = '' if data[f] is None else data[f]
+                limit = InspectionSpec._meta.get_field(f).max_length
+                if not isinstance(v, str):
+                    errors[f] = ['글이어야 합니다.']
+                elif limit and len(v) > limit:
+                    errors[f] = [f'{limit}자 이하로 입력하세요.']
+                setattr(spec, f, v)
+        if errors:
+            raise ValidationError(errors)
         save_with_lock(spec, user, children=changed + new_rows)
         for c in deleted:
             c.delete()
@@ -184,6 +192,10 @@ def _fmt(v):
     return format(v.normalize(), 'f') if hasattr(v, 'normalize') else str(v)
 
 
+def _cell(c, f):
+    return getattr(c, 'plan_line') if f == 'plan_line_id' else getattr(c, f)  # 관리계획서 항목은 번호가 아니라 이름으로
+
+
 def compare_specs(prev, cur):
     """이전 개정과 비교. 항목은 이름으로 짝짓는다(SPC도 이름으로 이어진다). prev가 None이면 None.
     rows 한 줄의 values는 {칸: [이전, 현재]}(글자)로, diff_text가 쓴다."""
@@ -202,7 +214,7 @@ def compare_specs(prev, cur):
         cells = [f for f in _CELLS if getattr(o, f) != getattr(n, f)]
         if cells:
             rows.append({'id': n.pk, 'name': name, 'status': 'changed', 'cells': [c.removesuffix('_id') for c in cells],
-                         'values': {c.removesuffix('_id'): [_fmt(getattr(o, c)), _fmt(getattr(n, c))] for c in cells}})
+                         'values': {c.removesuffix('_id'): [_fmt(_cell(o, c)), _fmt(_cell(n, c))] for c in cells}})
     return {'fields': fields, 'rows': rows}
 
 

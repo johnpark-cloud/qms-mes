@@ -104,6 +104,7 @@ export default function SpecPage() {
     onSuccess: (x) => {
       message.success('저장했습니다')
       qc.setQueryData(['spec', id], x)
+      qc.invalidateQueries({ queryKey: ['spec-log', id] })
       reset(x)
     },
     onError: (e) => {
@@ -115,6 +116,7 @@ export default function SpecPage() {
   const reload = async () => {
     const x = await api<SpecDetail>(`/api/qms/specs/${id}/`)
     qc.setQueryData(['spec', id], x)
+    qc.invalidateQueries({ queryKey: ['spec-log', id] })
     reset(x)
   }
 
@@ -125,7 +127,7 @@ export default function SpecPage() {
   })
 
   const approve = async (password: string, log?: { changes: string; reason: string }) => {
-    const x = await api<SpecDetail>(`/api/qms/specs/${id}/approve/`, { method: 'POST', body: JSON.stringify({ password, log }) })
+    const x = await api<SpecDetail>(`/api/qms/specs/${id}/approve/`, { method: 'POST', body: JSON.stringify({ password, log, version: d?.version }) })
     qc.setQueryData(['spec', id], x)
     qc.invalidateQueries({ queryKey: ['spec-log', id] })
   }

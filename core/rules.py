@@ -127,6 +127,8 @@ def approve(obj, user, password):
 
 
 def _clean_texts(changes, reason):
+    if not all(isinstance(v, str) or v is None for v in (changes, reason)):
+        raise ValidationError('변경 내용과 사유는 글이어야 합니다.')
     changes, reason = (changes or '').strip(), (reason or '').strip()
     if not changes:
         raise ValidationError('변경 내용을 입력하세요.')

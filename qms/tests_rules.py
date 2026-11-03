@@ -96,6 +96,29 @@ class SpecRulesTest(TestCase):
         again, created2 = open_or_new_revision(self.spec)
         self.assertEqual((created, created2, again.pk), (True, False, draft.pk))
 
+    def test_save_bad_row_id_and_properties(self):
+        draft, _ = open_or_new_revision(self.spec)
+        for bad in ([1], {}, 'x', True):
+            with self.assertRaises(ValidationError) as cm:
+                save_spec(draft, self.eng, {}, [{'id': bad, 'name': 'a'}], None)
+            self.assertIn('characteristics.0.id', cm.exception.message_dict, bad)
+        for data, key in (({'sampling': 'x' * 300}, 'sampling'), ({'sampling': {}}, 'sampling'), ({'note': 5}, 'note')):
+            with self.assertRaises(ValidationError) as cm:
+                save_spec(draft, self.eng, data, [], None)
+            self.assertIn(key, cm.exception.message_dict)
+
+    def test_diff_text_shows_plan_line_as_text(self):
+        draft, _ = open_or_new_revision(self.spec)
+        c = draft.characteristics.get(name='폭')
+        c.plan_line = None
+        c._edit_unlocked = True
+        c.save()
+        self.assertIn(f'{c.name}', diff_text(compare_specs(self.spec, draft)))
+        text = diff_text(compare_specs(self.spec, draft))
+        old = str(self.spec.characteristics.get(name='폭').plan_line)
+        self.assertIn(f"{old} → ", text)
+        self.assertNotRegex(text, r'\d+ → ')
+
     def test_save_adds_changes_deletes_in_one_go(self):
         draft, _ = open_or_new_revision(self.spec)
         keep, drop = draft.characteristics.order_by('name')   # 두께, 폭

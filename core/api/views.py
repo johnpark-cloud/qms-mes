@@ -108,7 +108,7 @@ class AuditLogView(APIView):
             raise Http404
         try:
             object_id = int(request.query_params['id']) if request.query_params.get('id') else None
-            page = max(int(request.query_params.get('page', 1)), 1)
+            page = min(max(int(request.query_params.get('page', 1)), 1), 10**6)
         except ValueError:
             return Response({'detail': 'id와 page는 숫자여야 합니다.', 'fields': {}}, status=400)
         qs = audit.rows(models[key], object_id)

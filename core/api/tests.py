@@ -209,6 +209,10 @@ class CommonApiTest(TestCase):
         self.assertEqual(self.c(self.lead).get('/api/audit-log/?model=nonsense').status_code, 404)
         self.assertEqual(self.c(self.eng).get('/api/audit-log/?model=qms.inspectionspec').status_code, 403)
 
+    def test_audit_log_huge_page_ok(self):
+        r = self.c(self.lead).get('/api/audit-log/?model=qms.inspectionspec&page=' + '9' * 30)
+        self.assertEqual(r.status_code, 200)
+
     def test_audit_log_bad_params_400(self):
         for q in ('id=abc', 'page=x'):
             self.assertEqual(self.c(self.lead).get(f'/api/audit-log/?model=qms.inspectionspec&{q}').status_code, 400)

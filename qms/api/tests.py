@@ -257,6 +257,42 @@ class SpecApiTest(TestCase):
         logs = self.c(self.eng).get(f'/api/qms/specs/{new_id}/revision-log/').json()['results']
         self.assertEqual([(l['label'], l['status']) for l in logs][-1], ('Rev.2', 'CONFIRMED'))
 
+    def test_approve_stale_version_409(self):
+        draft = self.new_draft()
+        v = self.c(self.eng).get(f'/api/qms/specs/{draft.pk}/').json()['version']
+        Characteristic.objects.create(spec=draft, name='새').save()
+        r = self.c(self.lead).post(f'/api/qms/specs/{draft.pk}/approve/', {'password': 'pw-lead-123', 'version': v}, format='json')
+        self.assertEqual((r.status_code, r.json()['detail']), (409, '다른 사람이 먼저 고쳤습니다. 다시 불러오세요.'))
+        draft.refresh_from_db()
+        self.assertIsNone(draft.approved_at)
+
+    def test_crafted_bodies_400_not_500(self):
+        draft = self.new_draft()
+        for url in (f'/api/qms/specs/{draft.pk}/approve/', f'/api/qms/specs/{draft.pk}/revision-log/'):
+            r = self.c(self.lead).post(url, [1], format='json')
+            self.assertEqual((r.status_code, r.json()['detail']), (400, '요청 형식이 잘못되었습니다.'), url)
+        r = self.c(self.eng).post(f'/api/qms/specs/{draft.pk}/revision-log/', {'changes': 1, 'reason': {}}, format='json')
+        self.assertEqual(r.status_code, 400)
+
+    def test_huge_page_is_ok(self):
+        self.assertEqual(self.c(self.eng).get('/api/qms/specs/?page=' + '9' * 30).status_code, 200)
+
+    def test_spec_404_is_korean(self):
+        r = self.c(self.eng).get('/api/qms/specs/99999/')
+        self.assertEqual((r.status_code, r.json()['detail']), (404, '찾을 수 없습니다.'))
+
+    def test_create_race_returns_409(self):
+        # 확인 단계는 "없다"고 보고, 만들 때 uniq_spec_rev에 걸리는 경쟁 상황
+        calls = []
+        real = InspectionSpec.objects.filter
+
+        def racing(*a, **kw):
+            calls.append(1)
+            return real(*a, **kw) if len(calls) > 1 else InspectionSpec.objects.none()
+        with mock.patch.object(InspectionSpec.objects, 'filter', side_effect=racing):
+            r = self.c(self.eng).post('/api/qms/specs/', {'item': self.item.pk, 'inspection_type': 'INCOMING'}, format='json')
+        self.assertEqual((r.status_code, r.json()['existing']), (409, self.spec.pk))
+
     def test_document_xlsx_endpoint(self):
         r = self.c(self.insp).get(f'/api/qms/specs/{self.spec.pk}/document/?export=xlsx')
         self.assertEqual((r.status_code, r['Content-Type']), (200, XLSX))

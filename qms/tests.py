@@ -1281,6 +1281,15 @@ class SpecDocumentTest(TestCase):
         return ExcelTemplate.objects.create(name='스펙', target=ContentType.objects.get_for_model(InspectionSpec),
                                             file=SimpleUploadedFile('s.xlsx', buf.getvalue()), mapping=mapping)
 
+    def test_template_leading_equals_is_text(self):
+        c = Characteristic(spec=self.spec, name='=1+1')
+        c._edit_unlocked = True
+        c.save()
+        tpl = self._tpl({'A5:rows': {'path': 'characteristics', 'cols': {'A': 'name'}}})
+        ws = load_workbook(BytesIO(tpl.fill(self.spec))).active
+        cell = next(x for x in (ws['A5'], ws['A6'], ws['A7']) if x.value == '=1+1')
+        self.assertNotEqual(cell.data_type, 'f')
+
     def test_template_rows_scalar_path_writes_nothing(self):
         for path in ('revision', 'sampling', 'approved_at', 'approved_by', 'nope'):
             ws = load_workbook(BytesIO(self._tpl({'A5:rows': {'path': path, 'cols': {'A': 'name'}}}).fill(self.spec))).active

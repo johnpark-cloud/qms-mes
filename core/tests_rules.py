@@ -403,6 +403,13 @@ class RevisionLogTest(TestCase):
         item = Item.objects.create(code='R1', name='양극재', item_type=Item.RAW)
         self.spec = InspectionSpec.objects.create(item=item, inspection_type=InspectionSpec.INCOMING)
 
+    def test_non_text_changes_is_validation_error(self):
+        for bad in (1, {}, ['x']):
+            with self.assertRaises(ValidationError):
+                request_revision_log(self.spec, self.eng, 'Rev.1', bad, '사유')
+            with self.assertRaises(ValidationError):
+                request_revision_log(self.spec, self.eng, 'Rev.1', '내용', bad)
+
     def test_request_then_confirm_then_immutable(self):
         log = request_revision_log(self.spec, self.eng, 'Rev.1', '최초 제정', '신규 품번')
         self.assertEqual(log.status, RevisionLog.PENDING)
