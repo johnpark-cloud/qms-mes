@@ -535,3 +535,69 @@ class InspectApiTest(TestCase):
                     (nc.defect_type, nc.defect_qty, nc.inspected_qty, nc.detected_by_id, nc.origin))
         self.assertEqual(snap(self.q1), snap(q3))
         self.assertEqual(snap(q3)[0], Inspection.FAIL)
+
+
+class InspectionApiTest(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user('insp', password='x', is_staff=True)
+        self.user.groups.add(Group.objects.get(name='검사원'))
+        self.lead = User.objects.create_user('lead', password='x', is_staff=True)
+        self.item = Item.objects.create(code='D-1', name='강판', item_type=Item.RAW)
+        self.specs = {}
+        for t in (InspectionSpec.INCOMING, InspectionSpec.OUTGOING):
+            s = InspectionSpec.objects.create(item=self.item, inspection_type=t)
+            Characteristic.objects.create(spec=s, name='두께', lsl=Decimal('9.9'), usl=Decimal('10.1'), unit='mm')
+            s.approved_by, s.approved_at = self.lead, timezone.now()
+            s.save()
+            self.specs[t] = s
+        self.gauge = Gauge.objects.create(number='G-01', name='마이크로미터', last_calibrated=timezone.localdate())
+        self.lots = [Lot.objects.create(number=f'L-{i}', item=self.item, supplier='성일철강' if i < 3 else '한빛', qty=10) for i in (1, 2, 3, 4)]
+
+    def make(self, lot, t, value):
+        c = self.specs[t].characteristics.get()
+        return submit_inspection(lot, self.specs[t], self.user, self.gauge, {c.pk: value})
+
+    def c(self, user=None):
+        c = APIClient()
+        c.force_login(user or self.user)
+        return c
+
+    def test_list_tabs_and_search(self):
+        self.make(self.lots[0], 'INCOMING', '10.0')
+        self.make(self.lots[3], 'INCOMING', '10.0')
+        self.make(self.lots[1], 'OUTGOING', '10.0')
+        r = self.c().get('/api/qms/inspections/?tab=INCOMING').json()
+        self.assertEqual([x['lot_number'] for x in r['results']], ['L-4', 'L-1'])
+        self.assertEqual(r['results'][0]['result_display'], '합격')
+        self.assertEqual(self.c().get('/api/qms/inspections/?tab=OUTGOING').json()['count'], 1)
+        self.assertEqual(self.c().get('/api/qms/inspections/?tab=PROCESS').json()['count'], 0)
+        self.assertEqual(self.c().get('/api/qms/inspections/?tab=INCOMING&q=성일').json()['count'], 1)
+        r = self.c().get('/api/qms/inspections/?tab=INCOMING&export=xlsx')
+        self.assertEqual(r.status_code, 200)
+        ws = load_workbook(BytesIO(r.content)).active
+        self.assertEqual([c.value for c in ws[1]], ['검사 일시', 'LOT', '품번', '품명', '협력사', '검사기준', '검사자', '판정', '부적합'])
+
+    def test_detail_and_document(self):
+        ok = self.make(self.lots[0], 'INCOMING', '10.0')
+        bad = self.make(self.lots[1], 'INCOMING', '11.0')
+        d = self.c().get(f'/api/qms/inspections/{ok.pk}/').json()
+        self.assertEqual((d['status'], d['nonconformance'], d['lot']['trace_url']), ('합격', None, '/trace/?lot=L-1'))
+        d = self.c().get(f'/api/qms/inspections/{bad.pk}/').json()
+        self.assertEqual(d['status'], '불합격')
+        self.assertEqual(d['nonconformance']['number'], bad.nonconformance.number)
+        self.assertEqual(d['measurements'][0]['passed'], False)
+        self.assertEqual(d['measurements'][0]['spec_text'], '9.9 ~ 10.1 mm')
+        r = self.c().get(f'/api/qms/inspections/{bad.pk}/document/')
+        self.assertEqual(r.json()['title'], '수입검사 성적서')
+        r = self.c().get(f'/api/qms/inspections/{bad.pk}/document/?export=xlsx')
+        self.assertEqual(r.status_code, 200)
+        self.assertIn('.xlsx', r['Content-Disposition'])
+
+    def test_permission(self):
+        i = self.make(self.lots[0], 'INCOMING', '10.0')
+        nobody = User.objects.create_user('nobody', password='x', is_staff=True)
+        for url in ('/api/qms/inspections/', f'/api/qms/inspections/{i.pk}/', f'/api/qms/inspections/{i.pk}/document/'):
+            self.assertEqual(self.c(nobody).get(url).status_code, 403, url)
+        r = self.c().get('/api/qms/inspections/999999/')
+        self.assertEqual((r.status_code, r.json()['detail']), (404, '찾을 수 없습니다.'))
+        self.assertEqual(self.c().get('/api/qms/inspections/999999/document/').status_code, 404)

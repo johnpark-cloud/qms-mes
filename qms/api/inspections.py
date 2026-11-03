@@ -1,15 +1,17 @@
 """검사 입력 API. 옛 htmx 화면(qms/views.py inspect_*)과 같은 qms.rules 함수를 쓴다."""
+from django.contrib.contenttypes.models import ContentType
 from django.core.exceptions import ValidationError
 from django.db.models import Exists, OuterRef, Q, Subquery
 from django.shortcuts import get_object_or_404
+from django.urls import reverse
 from django.utils import timezone
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from core.api.permissions import require_perm
-from core.export import table_xlsx, xlsx_response
+from core.export import document_xlsx, table_xlsx, xlsx_response
 from core.models import Hold, Item, Lot
-from qms.models import Gauge, Inspection, InspectionSpec
+from qms.models import ExcelTemplate, Gauge, Inspection, InspectionSpec
 from qms.rules import RECEIVE_MSG, measurement, receive_lot, submit_inspection
 
 from .specs import BAD_BODY, PAGE_SIZE, _bad
@@ -196,3 +198,86 @@ class SubmitView(APIView):
         nc = insp.nonconformance
         return Response({'id': insp.pk, 'result': insp.result, 'result_display': insp.get_result_display(),
                          'nonconformance': {'id': nc.pk, 'number': nc.number} if nc else None}, status=201)
+
+
+LIST_COLUMNS = ['검사 일시', 'LOT', '품번', '품명', '협력사', '검사기준', '검사자', '판정', '부적합']
+VIEW_PERM = 'qms.view_inspection'
+
+
+def _who(u):
+    return (u.get_full_name() or u.username) if u else ''
+
+
+def _day(x):
+    return timezone.localtime(x).strftime('%Y-%m-%d %H:%M')
+
+
+class InspectionListView(APIView):
+    schema = None
+
+    def get(self, request):
+        require_perm(request.user, VIEW_PERM)
+        tab = request.query_params.get('tab')
+        tab = tab if tab in dict(InspectionSpec.TYPES) else InspectionSpec.INCOMING
+        q = request.query_params.get('q', '').strip()
+        qs = (Inspection.objects.filter(spec__inspection_type=tab)
+              .select_related('lot__item', 'spec', 'inspector', 'nonconformance').order_by('-inspected_at', '-pk'))
+        if q:
+            qs = qs.filter(Q(lot__number__icontains=q) | Q(lot__item__code__icontains=q) | Q(lot__supplier__icontains=q))
+        if request.query_params.get('export') == 'xlsx':
+            rows = [[_day(x.inspected_at), x.lot.number, x.lot.item.code, x.lot.item.name, x.lot.supplier, str(x.spec),
+                     _who(x.inspector), x.get_result_display() or '미판정', x.nonconformance.number if x.nonconformance else '']
+                    for x in qs]
+            return xlsx_response(table_xlsx('검사 기록', LIST_COLUMNS, rows), '검사 기록.xlsx')
+        try:
+            page = min(max(int(request.query_params.get('page', 1)), 1), 10**6)
+        except ValueError:
+            page = 1
+        count = qs.count()
+        start = (page - 1) * PAGE_SIZE
+        return Response({'count': count, 'page': page, 'has_more': start + PAGE_SIZE < count, 'results': [
+            {'id': x.pk, 'inspected_at': x.inspected_at.isoformat(), 'lot_number': x.lot.number, 'item_code': x.lot.item.code,
+             'item_name': x.lot.item.name, 'supplier': x.lot.supplier, 'spec_title': str(x.spec), 'inspector': _who(x.inspector),
+             'result': x.result, 'result_display': x.get_result_display() or '미판정',
+             'nc_number': x.nonconformance.number if x.nonconformance else ''} for x in qs[start:start + PAGE_SIZE]]})
+
+
+def _inspection(pk):
+    return get_object_or_404(Inspection.objects.select_related('lot__item', 'spec', 'inspector', 'nonconformance'), pk=pk)
+
+
+class InspectionDetailView(APIView):
+    schema = None
+
+    def get(self, request, pk):
+        require_perm(request.user, VIEW_PERM)
+        x = _inspection(pk)
+        ct = ContentType.objects.get_for_model(Inspection)
+        nc = x.nonconformance
+        return Response({
+            'id': x.pk, 'title': str(x), 'status': x.get_result_display() or '미판정',
+            'lot': {'id': x.lot.pk, 'number': x.lot.number, 'trace_url': reverse('trace') + '?lot=' + x.lot.number},
+            'item': {'code': x.lot.item.code, 'name': x.lot.item.name}, 'spec': {'id': x.spec.pk, 'title': str(x.spec)},
+            'inspector': _who(x.inspector), 'inspected_at': x.inspected_at.isoformat(),
+            'nonconformance': {'id': nc.pk, 'number': nc.number,
+                               'url': reverse('admin:core_nonconformance_change', args=[nc.pk])} if nc else None,
+            'measurements': [{'name': m.characteristic.name, 'spec_text': m.characteristic.spec_text(),
+                              'value': (format(m.value.normalize(), 'f') if m.value is not None else None)
+                              if m.characteristic.is_variable else {True: 'OK', False: 'NG'}.get(m.ok),
+                              'gauge': m.gauge.number if m.gauge else '', 'passed': m.passed}
+                             for m in x.measurements.select_related('characteristic', 'gauge').order_by('pk')],
+            'templates': [{'id': t.pk, 'name': t.name, 'url': reverse('excel_report', args=[t.pk, x.pk])}
+                          for t in ExcelTemplate.objects.filter(target=ct)],
+        })
+
+
+class InspectionDocumentView(APIView):
+    schema = None
+
+    def get(self, request, pk):
+        require_perm(request.user, VIEW_PERM)
+        x = _inspection(pk)
+        doc = x.document()
+        if request.query_params.get('export') == 'xlsx':
+            return xlsx_response(document_xlsx(doc), f'{x.lot.number}_{x.spec.get_inspection_type_display()}성적서.xlsx')
+        return Response(doc)
