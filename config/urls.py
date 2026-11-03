@@ -14,6 +14,7 @@ urlpatterns = [
     path('admin/', admin.site.urls),
     path('api/', include('core.api.urls')),
     path('app/', core_views.spa),
+    path('app/audit', core_views.spa, name='app_audit'),
     re_path(r'^app/(?P<rest>.*)$', core_views.spa),
     path('me/', personal_views.me, name='me'),
     path('me/payslip/<int:pk>/file/', personal_views.payslip_file, name='payslip_file'),

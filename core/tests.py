@@ -88,6 +88,15 @@ class InterlockTest(TestCase):
 
 
 class ShellTest(TestCase):
+    def test_audit_menu_only_for_approver(self):
+        from core.nav import visible_nav
+        lead, eng = User.objects.create_user('lead', is_staff=True), User.objects.create_user('eng', is_staff=True)
+        lead.groups.add(Group.objects.get(name='품질팀장'))
+        eng.groups.add(Group.objects.get(name='품질엔지니어'))
+        labels = lambda u: [l for _, items in visible_nav(u) for l, _ in items]
+        self.assertIn('감사 기록', labels(lead))
+        self.assertNotIn('감사 기록', labels(eng))
+
     def test_logo_served_from_data_dir(self):
         import tempfile
         from pathlib import Path

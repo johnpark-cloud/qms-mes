@@ -1,4 +1,8 @@
 from django.contrib.auth import authenticate, login, logout
+from django.core.exceptions import PermissionDenied
+from django.db.models import Q
+from django.http import Http404
+from django.shortcuts import get_object_or_404
 from django.utils.decorators import method_decorator
 from django.views.decorators.csrf import ensure_csrf_cookie
 from rest_framework.authentication import SessionAuthentication
@@ -6,8 +10,12 @@ from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from core.models import is_approver
+from core import audit
+from core.api.permissions import require_perm
+from core.models import Item, RevisionLog, is_approver
 from core.nav import visible_nav
+from core.rules import confirm_revision_log
+from core.search import search
 
 
 def me_payload(user):
@@ -56,3 +64,55 @@ class MeView(APIView):
 
     def get(self, request):
         return Response(me_payload(request.user))
+
+
+class SearchView(APIView):
+    schema = None
+
+    def get(self, request):
+        return Response({'results': search(request.user, request.query_params.get('q', ''))})
+
+
+class ItemLookupView(APIView):
+    schema = None
+
+    def get(self, request):
+        require_perm(request.user, 'core.view_item')
+        q = request.query_params.get('q', '').strip()
+        qs = Item.objects.filter(Q(code__icontains=q) | Q(name__icontains=q)).order_by('code')[:20]
+        return Response([{'id': i.pk, 'code': i.code, 'name': i.name} for i in qs])
+
+
+class RevisionLogApproveView(APIView):
+    schema = None
+
+    def post(self, request, pk):
+        from qms.api.specs import _log  # 같은 줄 모양을 쓴다. core → qms는 함수 안에서만 가져온다
+        log = get_object_or_404(RevisionLog, pk=pk)
+        data = request.data if isinstance(request.data, dict) else {}
+        return Response(_log(confirm_revision_log(log, request.user, data.get('password'))))
+
+
+class AuditLogView(APIView):
+    schema = None
+    PAGE_SIZE = 50
+
+    def get(self, request):
+        if not is_approver(request.user):
+            raise PermissionDenied('품질팀장만 볼 수 있습니다.')
+        models = audit.audited_models()
+        key = request.query_params.get('model')
+        if not key:
+            return Response({'models': [{'key': k, 'label': str(m._meta.verbose_name)} for k, m in models.items()]})
+        if key not in models:
+            raise Http404
+        try:
+            object_id = int(request.query_params['id']) if request.query_params.get('id') else None
+            page = max(int(request.query_params.get('page', 1)), 1)
+        except ValueError:
+            return Response({'detail': 'id와 page는 숫자여야 합니다.', 'fields': {}}, status=400)
+        qs = audit.rows(models[key], object_id)
+        start = (page - 1) * self.PAGE_SIZE
+        chunk = list(qs[start:start + self.PAGE_SIZE + 1])
+        return Response({'count': qs.count(), 'page': page, 'has_more': len(chunk) > self.PAGE_SIZE,
+                         'results': [audit.row_payload(h) for h in chunk[:self.PAGE_SIZE]]})

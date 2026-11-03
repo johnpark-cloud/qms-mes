@@ -6,7 +6,7 @@ from rest_framework.test import APIClient, APIRequestFactory
 
 from core.api.exceptions import CSRF_MSG, handler
 from core.api.permissions import ModelPerms
-from core.models import Item
+from core.models import Item, Lot
 from core.rules import LOCKED_MSG, Locked
 
 
@@ -166,3 +166,69 @@ class SpaTest(SimpleTestCase):
         self.assertEqual(r.status_code, 200)
         self.assertContains(r, '<div id="root">')
         self.assertContains(r, '/static/app/assets/')
+
+
+class CommonApiTest(TestCase):
+    def setUp(self):
+        from qms.models import InspectionSpec
+        from core.rules import request_revision_log
+
+        def mk(name, group, pw='x'):
+            u = User.objects.create_user(name, password=pw, is_staff=True)
+            u.groups.add(Group.objects.get(name=group))
+            return u
+        self.eng, self.lead = mk('eng', '품질엔지니어'), mk('lead', '품질팀장', 'pw-lead-123')
+        self.item = Item.objects.create(code='R1', name='양극재', item_type=Item.RAW)
+        Lot.objects.create(number='RAW-2611-001', item=self.item, supplier='가협력')
+        self.spec = InspectionSpec.objects.create(item=self.item, inspection_type='INCOMING')
+        self.log = request_revision_log(self.spec, self.eng, 'Rev.1', '최초 제정', '신규')
+
+    def c(self, user):
+        c = APIClient()
+        c.force_login(user)
+        return c
+
+    def test_search_partial_lot(self):
+        r = self.c(self.eng).get('/api/search/?q=2611')
+        self.assertTrue(any(x['label'] == 'RAW-2611-001' and '/trace/?lot=' in x['url'] for x in r.json()['results']))
+
+    def test_items_lookup(self):
+        self.assertEqual(self.c(self.eng).get('/api/items/?q=양극').json()[0]['code'], 'R1')
+
+    def test_items_needs_view_perm(self):
+        plain = User.objects.create_user('plain', password='x', is_staff=True)
+        self.assertEqual(self.c(plain).get('/api/items/?q=양극').status_code, 403)
+
+    def test_audit_log_approver_only_and_no_private(self):
+        r = self.c(self.eng).get('/api/audit-log/')
+        self.assertEqual((r.status_code, r.json()['detail']), (403, '품질팀장만 볼 수 있습니다.'))
+        keys = {m['key'] for m in self.c(self.lead).get('/api/audit-log/').json()['models']}
+        self.assertIn('qms.inspectionspec', keys)
+        self.assertFalse(any(k.startswith(('personal.', 'auth.')) for k in keys))
+        self.assertEqual(self.c(self.lead).get('/api/audit-log/?model=personal.leaveprofile').status_code, 404)
+        self.assertEqual(self.c(self.lead).get('/api/audit-log/?model=nonsense').status_code, 404)
+        self.assertEqual(self.c(self.eng).get('/api/audit-log/?model=qms.inspectionspec').status_code, 403)
+
+    def test_audit_log_bad_params_400(self):
+        for q in ('id=abc', 'page=x'):
+            self.assertEqual(self.c(self.lead).get(f'/api/audit-log/?model=qms.inspectionspec&{q}').status_code, 400)
+
+    def test_audit_log_rows_show_changes(self):
+        self.spec.note = '바꿈'
+        self.spec.save()
+        r = self.c(self.lead).get(f'/api/audit-log/?model=qms.inspectionspec&id={self.spec.pk}').json()
+        self.assertEqual(r['results'][0]['type'], '변경')
+        self.assertEqual(r['results'][-1]['type'], '생성')
+        self.assertIn({'field': '비고', 'old': '', 'new': '바꿈'}, r['results'][0]['changes'])
+
+    def test_confirm_revision_log_endpoint(self):
+        r = self.c(self.lead).post(f'/api/revision-log/{self.log.pk}/approve/', {'password': 'pw-lead-123'}, format='json')
+        self.assertEqual(r.json()['status'], 'CONFIRMED')
+        r = self.c(self.lead).post(f'/api/revision-log/{self.log.pk}/approve/', {'password': 'pw-lead-123'}, format='json')
+        self.assertEqual(r.status_code, 400)
+
+    def test_confirm_revision_log_denied_and_wrong_password(self):
+        url = f'/api/revision-log/{self.log.pk}/approve/'
+        self.assertEqual(self.c(self.eng).post(url, {'password': 'x'}, format='json').status_code, 403)
+        self.assertEqual(self.c(self.lead).post(url, {'password': 'bad'}, format='json').status_code, 400)
+        self.assertEqual(self.c(self.lead).post('/api/revision-log/99999/approve/', {}, format='json').status_code, 404)

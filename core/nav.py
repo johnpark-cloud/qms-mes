@@ -4,6 +4,8 @@
 url 이름 뒤에 '?조건'을 붙이면 관리 목록을 그 조건으로 걸러 연다. 전체 메뉴(관리 첫 화면)도 이 묶음대로 보인다(core/admin.py)."""
 from django.urls import reverse
 
+from core.models import is_approver
+
 
 def nav_url(name):
     """'url 이름?조건' → 실제 주소."""
@@ -15,7 +17,7 @@ def visible_nav(user):
     """사이드바와 me API가 함께 쓴다: 권한이 있는 항목만 남기고 빈 묶음은 뺀다. → [(묶음명, [(라벨, 주소)])]"""
     groups = []
     for name, items in NAV:
-        links = [(label, nav_url(url)) for label, url, perm in items if perm is None or user.has_perm(perm)]
+        links = [(label, nav_url(url)) for label, url, perm in items if perm is None or (perm(user) if callable(perm) else user.has_perm(perm))]
         if links:
             groups.append((name, links))
     return groups
@@ -65,5 +67,6 @@ NAV = [
                        ('고객사별 8D 기한', 'admin:qms_customerrule_changelist', 'qms.view_customerrule'),
                        ('엑셀 일괄 등록', 'import', 'core.view_importprofile'),
                        ('사용자', 'admin:auth_user_changelist', 'auth.view_user'),
+                       ('감사 기록', 'app_audit', is_approver),
                        ('전체 메뉴', 'admin:index', None)]),
 ]
