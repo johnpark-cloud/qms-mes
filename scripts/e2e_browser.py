@@ -150,6 +150,41 @@ try:
         check('localStorage 차단에도 화면 정상', ok)
         ctx2.close()
 
+        page.goto('/app/specs')
+        try:
+            page.get_by_role('button', name='새 기준서').click()
+            page.get_by_label('품번').fill('E2E-R1')
+            page.locator('.ant-select-item-option', has_text='E2E-R1').click()
+            page.get_by_label('검사 구분').click()
+            page.locator('.ant-select-item-option', has_text='수입검사').click()
+            page.get_by_role('button', name='만들기').click()
+        except Exception:
+            pass
+        try:
+            page.wait_for_url('**/app/specs/*')
+        except Exception:
+            pass
+        spec_id = page.url.rstrip('/').split('/')[-1]
+        try:
+            ok = api_get(page, f'/api/qms/specs/{spec_id}/')['revision'] == 1
+        except Exception:
+            ok = False
+        check('새 기준서 → Rev.1 초안 페이지', ok, page.url)
+
+        page.goto('/app/specs')
+        try:
+            page.locator('[data-row]').first.wait_for(timeout=5000)
+        except Exception:
+            pass
+        want = api_get(page, '/api/qms/specs/?tab=all')['count']
+        check('검사기준 목록 줄 수가 API와 같음', want > 0 and page.locator('[data-row]').count() == want, f'API {want}')
+        try:
+            with page.expect_download(timeout=5000) as dl:
+                page.get_by_role('link', name='엑셀로').click()
+            check('목록 엑셀로 받기', open(dl.value.path(), 'rb').read(2) == b'PK', dl.value.suggested_filename)
+        except Exception as e:
+            check('목록 엑셀로 받기', False, str(e)[:80])
+
         # 세션이 끊기면 API를 부르는 화면이 로그인으로 보내야 한다 (client.ts 의 403 처리)
         page.context.clear_cookies()
         page.goto('/app/overview')

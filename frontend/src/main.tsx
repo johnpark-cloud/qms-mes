@@ -10,6 +10,8 @@ import './app.css'
 import AppLayout from './layout/AppLayout'
 import Login from './pages/Login'
 import Overview from './pages/Overview'
+import SpecList from './pages/specs/SpecList'
+import SpecPage from './pages/specs/SpecPage'
 import Todo from './pages/Todo'
 import { useAppTheme } from './theme'
 
@@ -29,6 +31,8 @@ function App() {
             <Route element={<AppLayout />}>
               <Route path="overview" element={<Overview />} />
               <Route path="todo" element={<Todo />} />
+              <Route path="specs" element={<SpecList />} />
+              <Route path="specs/:id" element={<SpecPage />} />
             </Route>
             <Route path="*" element={<Navigate to="/todo" replace />} />
           </Routes>
