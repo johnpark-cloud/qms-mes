@@ -126,12 +126,17 @@ def approve(obj, user, password):
         raise
 
 
-def _new_log(obj, user, label, changes, reason, **extra):
+def _clean_texts(changes, reason):
     changes, reason = (changes or '').strip(), (reason or '').strip()
     if not changes:
         raise ValidationError('변경 내용을 입력하세요.')
     if not reason:
         raise ValidationError('사유를 입력하세요.')
+    return changes, reason
+
+
+def _new_log(obj, user, label, changes, reason, **extra):
+    changes, reason = _clean_texts(changes, reason)
     return RevisionLog.objects.create(
         content_type=ContentType.objects.get_for_model(obj), object_id=obj.pk, object_repr=str(obj)[:200],
         label=label, changes=changes, reason=reason, requested_by=user, **extra)
@@ -159,6 +164,7 @@ def confirm_revision_log(log, user, password):
 @transaction.atomic
 def approve_and_log(obj, user, password, label, changes, reason):
     """승인 서명과 확정 개정 이력을 한 트랜잭션으로 처리한다. 어느 쪽이 실패해도 둘 다 취소된다."""
+    changes, reason = _clean_texts(changes, reason)  # 서명(승인)보다 먼저 검사해 obj를 건드리지 않는다
     approve(obj, user, password)
     return _new_log(obj, user, label, changes, reason, status=RevisionLog.CONFIRMED,
                     approved_by=user, approved_at=obj.approved_at)

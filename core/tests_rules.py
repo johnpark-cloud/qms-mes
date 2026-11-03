@@ -4,6 +4,7 @@ from unittest import mock
 from django.contrib.auth.models import Group, User
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.test import TestCase
+from django.urls import reverse
 from django.utils import timezone
 
 from core.models import EditRequest, Item, Lot, Nonconformance, Process, RevisionLog
@@ -435,6 +436,31 @@ class RevisionLogTest(TestCase):
         log = approve_and_log(self.spec, self.lead, 'pw-lead-123', 'Rev.1', '최초 제정', '사유')
         self.assertEqual(log.status, RevisionLog.CONFIRMED)
         self.assertTrue(InspectionSpec.objects.get(pk=self.spec.pk).is_approved)
+
+    def test_approve_and_log_rejects_empty_reason_before_signing(self):
+        with self.assertRaisesMessage(ValidationError, '사유를 입력하세요.'):
+            approve_and_log(self.spec, self.lead, 'pw-lead-123', 'Rev.1', '최초 제정', ' ')
+        self.assertIsNone(self.spec.approved_by)
+        self.assertFalse(InspectionSpec.objects.get(pk=self.spec.pk).is_approved)
+        self.assertFalse(RevisionLog.objects.exists())
+
+    def test_stale_pending_instance_cannot_delete_confirmed(self):
+        log = request_revision_log(self.spec, self.eng, 'Rev.1', '최초 제정', '사유')
+        stale = RevisionLog.objects.get(pk=log.pk)
+        confirm_revision_log(log, self.lead, 'pw-lead-123')
+        with self.assertRaisesMessage(ValidationError, '확정된 개정 이력은 수정할 수 없습니다.'):
+            stale.delete()
+        self.assertTrue(RevisionLog.objects.filter(pk=log.pk).exists())
+
+    def test_admin_refuses_delete_of_confirmed(self):
+        root = User.objects.create_superuser('root', password='pw-root-123')
+        log = approve_and_log(self.spec, self.lead, 'pw-lead-123', 'Rev.1', '최초 제정', '사유')
+        self.client.force_login(root)
+        r = self.client.post(reverse('admin:core_revisionlog_delete', args=[log.pk]), {'post': 'yes'})
+        self.assertEqual(r.status_code, 403)
+        r = self.client.post(reverse('admin:core_revisionlog_changelist'),
+                             {'action': 'delete_selected', '_selected_action': [log.pk], 'post': 'yes'})
+        self.assertTrue(RevisionLog.objects.filter(pk=log.pk).exists())
 
     def test_plain_save_leaves_no_revision_log_but_history(self):   # 스펙 9장 "개정 이력 표시"
         n = self.spec.history.count()

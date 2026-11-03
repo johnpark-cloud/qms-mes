@@ -576,6 +576,6 @@ class RevisionLog(models.Model):
         super().save(*args, **kwargs)
 
     def delete(self, *args, **kwargs):
-        if self.status == self.CONFIRMED:
+        if self.status == self.CONFIRMED or (self.pk and RevisionLog.objects.filter(pk=self.pk, status=self.CONFIRMED).exists()):
             raise ValidationError(self.LOCKED_MSG)
         return super().delete(*args, **kwargs)

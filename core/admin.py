@@ -486,5 +486,8 @@ class RevisionLogAdmin(BaseAdmin):
     def has_add_permission(self, request):
         return False
 
+    def has_delete_permission(self, request, obj=None):
+        return False  # 확정 이력은 지울 수 없다. 일괄 삭제 동작도 함께 빠진다
+
     def get_model_perms(self, request):
         return {}  # 전체 메뉴에는 올리지 않는다. 주소로만 연다
