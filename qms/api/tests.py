@@ -1,10 +1,11 @@
 import datetime
+from decimal import Decimal
 from io import BytesIO
 from dataclasses import replace
 from types import SimpleNamespace
 from unittest import mock
 
-from django.contrib.auth.models import Group, User
+from django.contrib.auth.models import Group, Permission, User
 from django.contrib.contenttypes.models import ContentType
 from django.test import TestCase
 from django.utils import timezone
@@ -13,10 +14,10 @@ from rest_framework.test import APIClient
 
 from core.export import XLSX
 from core.models import EditRequest, Hold, Item, Lot, Nonconformance, WorkOrder
-from qms.models import (AuditFinding, Capa, ChangeRequest, Characteristic, CustomerClaim, Gauge, InspectionSpec,
-                        InternalAudit, PpapSubmission, Scar)
+from qms.models import (AuditFinding, Capa, ChangeRequest, Characteristic, CustomerClaim, Gauge, Inspection, InspectionSpec,
+                        InternalAudit, Measurement, PpapSubmission, Scar)
 from qms.overview import sections
-from qms.rules import new_spec_revision
+from qms.rules import RECEIVE_MSG, new_spec_revision, submit_inspection
 from qms.widgets import WIDGETS, layout_for
 
 
@@ -342,3 +343,192 @@ class SpecApiTest(TestCase):
     def test_special_options_shape(self):
         d = self.c(self.eng).get(f'/api/qms/specs/{self.spec.pk}/').json()
         self.assertEqual(d['special_options'][0], {'value': '', 'label': '없음'})
+
+
+class InspectApiTest(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user('insp', password='x', is_staff=True)
+        self.user.groups.add(Group.objects.get(name='검사원'))
+        self.lead = User.objects.create_user('lead', password='x', is_staff=True)
+        self.item = Item.objects.create(code='D-1', name='강판', item_type=Item.RAW)
+        self.spec = InspectionSpec.objects.create(item=self.item, inspection_type=InspectionSpec.INCOMING, sampling='n=5')
+        self.thk = Characteristic.objects.create(spec=self.spec, name='두께', lsl=Decimal('9.9'), usl=Decimal('10.1'), unit='mm')
+        self.look = Characteristic.objects.create(spec=self.spec, name='외관')
+        self.spec.approved_by, self.spec.approved_at = self.lead, timezone.now()
+        self.spec.save()
+        self.gauge = Gauge.objects.create(number='G-01', name='마이크로미터', last_calibrated=timezone.localdate())
+        self.q1 = Lot.objects.create(number='Q-1', item=self.item, supplier='성일철강', qty=Decimal('50'))
+        self.q2 = Lot.objects.create(number='Q-2', item=self.item, supplier='성일철강', qty=Decimal('20'))
+        submit_inspection(self.q2, self.spec, self.user, self.gauge, {self.thk.pk: '10.0', self.look.pk: 'OK'})
+        self.only_inspect = User.objects.create_user('only', password='x', is_staff=True)
+        self.only_inspect.user_permissions.add(Permission.objects.get(codename='add_inspection', content_type__app_label='qms'))
+
+    def c(self, user=None):
+        c = APIClient()
+        c.force_login(user or self.user)
+        return c
+
+    def submit(self, lot=None, values=None, **kw):
+        body = {'lot': getattr(lot, 'pk', lot) if lot is not None else self.q1.pk, 'spec': self.spec.pk, 'gauge': self.gauge.pk,
+                'values': values if values is not None else {str(self.thk.pk): '10.0', str(self.look.pk): 'OK'},
+                'defect_type': '', 'defect_qty': None, **kw}
+        return self.c().post('/api/qms/inspect/submit/', body, format='json')
+
+    def counts(self):
+        return Inspection.objects.count(), Measurement.objects.count()
+
+    def test_queue_lists_uninspected_oldest_first(self):
+        q0 = Lot.objects.create(number='Q-0', item=self.item, qty=1, created_at=timezone.now() - datetime.timedelta(days=3))
+        r = self.c().get('/api/qms/inspect/queue/?tab=INCOMING').json()
+        self.assertEqual([x['number'] for x in r['results']], ['Q-0', 'Q-1'])
+        row = r['results'][1]
+        self.assertEqual((row['item_code'], row['qty'], row['spec_id'], row['on_hold']), ('D-1', '50', self.spec.pk, False))
+        q0.delete()
+        Nonconformance.objects.create(lot=self.q1, description='찍힘')
+        r = self.c().get('/api/qms/inspect/queue/?tab=bad').json()
+        self.assertEqual([x['number'] for x in r['results']], ['Q-1'])
+        self.assertTrue(r['results'][0]['on_hold'])
+        self.assertEqual(self.c().get('/api/qms/inspect/queue/?tab=PROCESS').json()['count'], 0)
+        self.assertEqual(self.c().get('/api/qms/inspect/queue/?q=nope').json()['count'], 0)
+        self.assertEqual(self.c().get('/api/qms/inspect/queue/?q=성일').json()['count'], 1)
+        r = self.c().get('/api/qms/inspect/queue/?export=xlsx')
+        self.assertEqual(r.status_code, 200)
+        self.assertIn('spreadsheetml', r['Content-Type'])
+        ws = load_workbook(BytesIO(r.content)).active
+        self.assertEqual([c.value for c in ws[1]][:7], ['LOT', '품번', '품명', '협력사', '수량', '생성일', '보류'])
+
+    def test_lot_lookup(self):
+        d = self.c().get('/api/qms/inspect/lot/?number=Q-2').json()
+        self.assertEqual(d['lot']['number'], 'Q-2')
+        self.assertEqual([(s['id'], s['inspection_type'], s['done']) for s in d['specs']], [(self.spec.pk, 'INCOMING', True)])
+        self.assertFalse(self.c().get('/api/qms/inspect/lot/?number=Q-1').json()['specs'][0]['done'])
+        self.assertEqual(self.c().get('/api/qms/inspect/lot/?number=+').status_code, 400)
+        r = self.c().get('/api/qms/inspect/lot/?number=NEW')
+        self.assertEqual(r.status_code, 404)
+        self.assertEqual((r.json()['detail'], r.json()['can_receive']), ('등록되지 않은 LOT입니다.', True))
+        self.assertEqual(r.json()['items'], [{'value': self.item.pk, 'label': 'D-1 강판'}])
+        self.assertEqual(r.json()['suppliers'], ['성일철강'])
+
+    def test_unknown_lot_without_add_lot(self):
+        r = self.c(self.only_inspect).get('/api/qms/inspect/lot/?number=NEW')
+        self.assertEqual(r.status_code, 404)
+        self.assertFalse(r.json()['can_receive'])
+        self.assertNotIn('items', r.json())
+        r = self.c(self.only_inspect).post('/api/qms/inspect/receive/', {'number': 'NEW', 'item': self.item.pk, 'qty': '5'}, format='json')
+        self.assertEqual(r.status_code, 403)
+        self.assertFalse(Lot.objects.filter(number='NEW').exists())
+
+    def test_receive_creates_or_reuses(self):
+        url, body = '/api/qms/inspect/receive/', {'number': 'NEW-1', 'item': self.item.pk, 'qty': '50', 'supplier': '대한'}
+        r = self.c().post(url, body, format='json')
+        self.assertEqual((r.status_code, r.json()['created'], r.json()['lot']['supplier']), (201, True, '대한'))
+        self.assertEqual(r.json()['specs'][0]['id'], self.spec.pk)
+        r = self.c().post(url, body, format='json')
+        self.assertEqual((r.status_code, r.json()['created']), (200, False))
+        r = self.c().post(url, {**body, 'number': 'NEW-2', 'qty': '0'}, format='json')
+        self.assertEqual((r.status_code, r.json()['detail']), (400, RECEIVE_MSG))
+        for bad in ([], {**body, 'number': 'NEW-3', 'item': 'x'}, {**body, 'number': ['a']}, {**body, 'number': 'NEW-4', 'qty': [1]}):
+            self.assertEqual(self.c().post(url, bad, format='json').status_code, 400, bad)
+        self.assertFalse(Lot.objects.filter(number__in=['NEW-2', 'NEW-3', 'NEW-4']).exists())
+
+    def test_form_only_usable_gauges(self):
+        Gauge.objects.create(number='G-OLD', name='낡은', last_calibrated=timezone.localdate() - datetime.timedelta(days=400))
+        Gauge.objects.create(number='G-OFF', name='중지', last_calibrated=timezone.localdate(), active=False)
+        d = self.c().get(f'/api/qms/inspect/form/{self.q1.pk}/{self.spec.pk}/').json()
+        self.assertEqual(d['gauges'], [{'value': self.gauge.pk, 'label': 'G-01 마이크로미터'}])
+        self.assertEqual(d['spec'], {'id': self.spec.pk, 'title': str(self.spec), 'sampling': 'n=5'})
+        self.assertEqual(d['lot']['number'], 'Q-1')
+        self.assertEqual(d['characteristics'][0], {'id': self.thk.pk, 'name': '두께', 'spec_text': '9.9 ~ 10.1 mm', 'unit': 'mm',
+                                                   'is_variable': True, 'special': ''})
+        self.assertEqual(d['characteristics'][1]['spec_text'], 'OK/NG')
+        self.assertIn('치수', d['defect_types'])
+        draft = new_spec_revision(self.spec)
+        self.assertEqual(self.c().get(f'/api/qms/inspect/form/{self.q1.pk}/{draft.pk}/').status_code, 404)
+
+    def test_check_and_submit_value_forms(self):
+        url = '/api/qms/inspect/check/'
+        for char, cases in ((self.thk, {' 10.0 ': True, '10,0': None, 'abc': None, 'NaN': None, '11': False}),
+                            (self.look, {'OK': True, 'NG': False, 'ok': None})):
+            for raw, want in cases.items():
+                r = self.c().post(url, {'spec': self.spec.pk, 'values': {str(char.pk): raw}}, format='json')
+                self.assertEqual(r.json()['results'], {str(char.pk): want}, raw)
+        other = InspectionSpec.objects.create(item=Item.objects.create(code='X', name='x', item_type=Item.RAW), inspection_type='INCOMING')
+        oc = Characteristic.objects.create(spec=other, name='남의 항목')
+        r = self.c().post(url, {'spec': self.spec.pk, 'values': {str(oc.pk): 'OK', str(self.look.pk): 5}}, format='json')
+        self.assertEqual(r.json()['results'], {str(self.look.pk): None})
+        for bad in ([], {'spec': self.spec.pk, 'values': []}, {'spec': 'a', 'values': {}}):
+            self.assertEqual(self.c().post(url, bad, format='json').status_code, 400, bad)
+        before = self.counts()
+        r = self.submit(values={str(self.thk.pk): '10,0', str(self.look.pk): 'OK'})
+        self.assertEqual(r.status_code, 400)
+        self.assertIn('값을 입력하세요', r.json()['detail'])
+        self.assertEqual(self.counts(), before)
+
+    def test_submit_pass_and_fail(self):
+        r = self.submit()
+        self.assertEqual(r.status_code, 201)
+        self.assertEqual((r.json()['result'], r.json()['result_display'], r.json()['nonconformance']), ('PASS', '합격', None))
+        q3 = Lot.objects.create(number='Q-3', item=self.item, qty=10)
+        r = self.submit(q3, {str(self.thk.pk): '11', str(self.look.pk): 'OK'}, defect_type='치수', defect_qty=3)
+        self.assertEqual(r.status_code, 201)
+        nc = Nonconformance.objects.get(pk=r.json()['nonconformance']['id'])
+        self.assertEqual(r.json()['nonconformance']['number'], nc.number)
+        self.assertEqual((nc.defect_type, nc.defect_qty, nc.detected_by), ('치수', 3, self.user))
+        self.assertTrue(self.c().get('/api/qms/inspect/lot/?number=Q-3').json()['lot']['on_hold'])
+
+    def test_submit_rejects_stale_spec_and_expired_gauge(self):
+        self.assertEqual(self.c().get(f'/api/qms/inspect/form/{self.q1.pk}/{self.spec.pk}/').status_code, 200)
+        r2 = new_spec_revision(self.spec)
+        r2.approved_by, r2.approved_at = self.lead, timezone.now()
+        r2.save()
+        before = self.counts()
+        r = self.submit()
+        self.assertEqual(r.status_code, 400)
+        self.assertIn('유효본이 아닙니다', r.json()['detail'])
+        self.assertEqual(self.counts(), before)
+        self.gauge.last_calibrated = timezone.localdate() - datetime.timedelta(days=self.gauge.interval_days + 1)
+        self.gauge.save()
+        chars = {c.name: c.pk for c in r2.characteristics.all()}
+        r = self.submit(spec=r2.pk, values={str(chars['두께']): '10.0', str(chars['외관']): 'OK'})
+        self.assertEqual(r.status_code, 400)
+        self.assertIn('교정 기한', r.json()['detail'])
+        self.assertEqual(self.counts(), before)
+
+    def test_submit_bad_body_400(self):
+        before = self.counts()
+        self.assertEqual(self.c().post('/api/qms/inspect/submit/', [], format='json').status_code, 400)
+        for kw in ({'values': []}, {'values': {'x': '1'}}, {'values': {str(self.thk.pk): 10.0, str(self.look.pk): 'OK'}},
+                   {'lot': 'a'}, {'spec': None}, {'gauge': 'a'}, {'gauge': True}):
+            self.assertEqual(self.submit(**kw).status_code, 400, kw)
+        r = self.submit(gauge=99999)
+        self.assertEqual((r.status_code, r.json()['detail']), (400, '계측기를 찾을 수 없습니다.'))
+        self.assertIn('값을 입력하세요', self.submit(values={'x': '1'}).json()['detail'])
+        self.assertEqual(self.counts(), before)
+        self.assertEqual(self.submit(lot=99999).status_code, 404)
+        self.assertEqual(self.submit(spec=99999).status_code, 404)
+        self.assertEqual(self.submit(defect_type=['x'], defect_qty=[1]).status_code, 201)  # 형식이 틀린 불량 정보는 빈 값으로
+
+    def test_permission(self):
+        nobody = self.c(User.objects.create_user('nobody', password='x', is_staff=True))
+        base = '/api/qms/inspect/'
+        for path in ('queue/', 'lot/?number=Q-1', f'form/{self.q1.pk}/{self.spec.pk}/'):
+            self.assertEqual(nobody.get(base + path).status_code, 403, path)
+        for path in ('check/', 'submit/', 'receive/'):
+            self.assertEqual(nobody.post(base + path, {}, format='json').status_code, 403, path)
+        self.assertEqual(APIClient().get(base + 'queue/').status_code, 403)
+
+    def test_api_matches_old_view(self):
+        q3 = Lot.objects.create(number='Q-3', item=self.item, supplier='성일철강', qty=50)
+        self.c().post(f'/inspect/{self.q1.pk}/{self.spec.pk}/submit/', {
+            f'c{self.thk.pk}': '11.0', f'c{self.look.pk}': 'OK', 'gauge': self.gauge.pk, 'defect_type': '치수', 'defect_qty': '3'})
+        self.assertEqual(self.submit(q3, {str(self.thk.pk): '11.0', str(self.look.pk): 'OK'},
+                                     defect_type='치수', defect_qty='3').status_code, 201)
+
+        def snap(lot):
+            i = Inspection.objects.get(lot=lot)
+            nc = i.nonconformance
+            return (i.result, list(i.measurements.order_by('characteristic_id')
+                                   .values_list('characteristic_id', 'value', 'ok', 'gauge_id')),
+                    (nc.defect_type, nc.defect_qty, nc.inspected_qty, nc.detected_by_id, nc.origin))
+        self.assertEqual(snap(self.q1), snap(q3))
+        self.assertEqual(snap(q3)[0], Inspection.FAIL)
