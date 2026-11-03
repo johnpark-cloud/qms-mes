@@ -185,6 +185,37 @@ try:
         except Exception as e:
             check('목록 엑셀로 받기', False, str(e)[:80])
 
+        # 기록 페이지: 엑셀 붙여넣기 → 저장 → 승인 → 새 개정
+        tsv = '\n'.join(f'항목{i}\t{i},000.5\t{i + 1}\tmm' if i != 3 else f'항목{i}\t\t\t' for i in range(1, 11))
+        try:
+            page.goto(f'/app/specs/{spec_id}')
+            first = page.locator('[data-grid] [data-grid-row] input').first
+            first.click()
+            page.evaluate("t => { const dt = new DataTransfer(); dt.setData('text/plain', t);"
+                          " document.activeElement.dispatchEvent(new ClipboardEvent('paste', {clipboardData: dt, bubbles: true})) }", tsv)
+            page.get_by_text('변경 10건').wait_for(timeout=5000)
+            page.keyboard.press('Control+s')
+            page.get_by_text('저장했습니다').wait_for(timeout=5000)
+            chars = api_get(page, f'/api/qms/specs/{spec_id}/')['characteristics']
+            check('검사항목 10줄 붙여넣기 → 저장 → 서버 10개', len(chars) == 10 and chars[0]['lsl'] == '1000.5', f'{len(chars)}개')
+        except Exception as e:
+            check('검사항목 10줄 붙여넣기 → 저장 → 서버 10개', False, str(e)[:80])
+
+        draft_id = ''
+        try:
+            page.get_by_role('button', name='승인 서명').click()
+            page.get_by_label('비밀번호').fill('e2e-pass-123')
+            page.get_by_role('button', name='서명', exact=True).click()
+            page.get_by_text('승인됨').first.wait_for(timeout=5000)
+            page.get_by_role('button', name='새 개정').click()
+            page.wait_for_function(f"() => !location.pathname.endsWith('/{spec_id}')", timeout=5000)
+            draft_id = page.url.rstrip('/').split('/')[-1]  # 감사 기록·문서 점검이 쓴다
+            new = api_get(page, f'/api/qms/specs/{draft_id}/')
+            ok = new['revision'] == 2 and len(new['characteristics']) == 10
+        except Exception:
+            ok = False
+        check('승인본 → 새 개정 → Rev.2 초안, 항목 복사', ok, page.url)
+
         # 세션이 끊기면 API를 부르는 화면이 로그인으로 보내야 한다 (client.ts 의 403 처리)
         page.context.clear_cookies()
         page.goto('/app/overview')
