@@ -9,9 +9,16 @@ from django.test import TestCase
 from django.utils import timezone
 from rest_framework.test import APIClient
 
+from io import BytesIO
+
+from openpyxl import load_workbook
+
+from core.export import XLSX
 from core.models import EditRequest, Hold, Item, Lot, Nonconformance, WorkOrder
-from qms.models import AuditFinding, Capa, ChangeRequest, CustomerClaim, Gauge, InternalAudit, PpapSubmission, Scar
+from qms.models import (AuditFinding, Capa, ChangeRequest, Characteristic, CustomerClaim, Gauge, InspectionSpec,
+                        InternalAudit, PpapSubmission, Scar)
 from qms.overview import sections
+from qms.rules import new_spec_revision
 from qms.widgets import WIDGETS, layout_for
 
 
@@ -172,3 +179,96 @@ class TodoApiTest(TestCase):
         self.assertEqual(t['first_articles'][0]['label'], str(fa))
         self.assertEqual((t['ppaps'][0]['label'], t['ppaps'][0]['overdue']), (str(ppap), True))
         self.assertEqual(sorted((a['kind'], a['label']) for a in t['approvals']), sorted([('4M 변경', str(cr)), ('PSW', str(ppap))]))
+
+
+
+class SpecApiTest(TestCase):
+    def setUp(self):
+        def mk(name, group, pw='x'):
+            u = User.objects.create_user(name, password=pw, is_staff=True)
+            u.groups.add(Group.objects.get(name=group))
+            return u
+        self.eng, self.lead, self.insp = mk('eng', '품질엔지니어'), mk('lead', '품질팀장', 'pw-lead-123'), mk('insp', '검사원')
+        self.item = Item.objects.create(code='R1', name='양극재', item_type=Item.RAW)
+        self.spec = InspectionSpec.objects.create(item=self.item, inspection_type='INCOMING')
+        for n in ('두께', '폭'):
+            Characteristic.objects.create(spec=self.spec, name=n)
+        self.spec.approved_by, self.spec.approved_at = self.lead, timezone.now()
+        self.spec.save()
+        item2 = Item.objects.create(code='R2', name='음극재', item_type=Item.RAW)
+        InspectionSpec.objects.create(item=item2, inspection_type='INCOMING')
+
+    def c(self, user):
+        c = APIClient()
+        c.force_login(user)
+        return c
+
+    def new_draft(self):
+        return new_spec_revision(self.spec)
+
+    def test_list_tabs_and_current(self):
+        r = self.c(self.eng).get('/api/qms/specs/?tab=current')
+        self.assertEqual([x['id'] for x in r.json()['results']], [self.spec.pk])
+        self.assertEqual(self.c(self.eng).get('/api/qms/specs/?tab=draft').json()['count'], 1)
+
+    def test_list_export_xlsx(self):
+        r = self.c(self.eng).get('/api/qms/specs/?tab=all&export=xlsx')
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r['Content-Type'], XLSX)
+        ws = load_workbook(BytesIO(r.content)).active
+        self.assertEqual(ws['A1'].value, '품번')
+        self.assertEqual(ws.max_row, 3)
+
+    def test_create_conflict_points_to_existing(self):
+        r = self.c(self.eng).post('/api/qms/specs/', {'item': self.item.pk, 'inspection_type': 'INCOMING'}, format='json')
+        self.assertEqual((r.status_code, r.json()['existing']), (409, self.spec.pk))
+
+    def test_put_on_approved_rejected(self):  # 스펙 9장
+        c = self.spec.characteristics.first()
+        body = {'characteristics': [{'id': c.pk, 'name': '바꿈', 'lsl': '1', 'usl': '2'}], 'version': None}
+        r = self.c(self.eng).put(f'/api/qms/specs/{self.spec.pk}/', body, format='json')
+        self.assertEqual(r.status_code, 409)
+        self.assertEqual(Characteristic.objects.get(pk=c.pk).name, c.name)
+
+    def test_put_field_errors_by_row(self):
+        draft = self.new_draft()
+        body = {'characteristics': [{'id': None, 'name': '가', 'lsl': 'abc'}], 'version': None}
+        r = self.c(self.eng).put(f'/api/qms/specs/{draft.pk}/', body, format='json')
+        self.assertEqual(r.status_code, 400)
+        self.assertIn('characteristics.0.lsl', r.json()['fields'])
+
+    def test_put_stale_409(self):
+        draft = self.new_draft()
+        old = self.c(self.eng).get(f'/api/qms/specs/{draft.pk}/').json()['version']
+        self.c(self.lead).put(f'/api/qms/specs/{draft.pk}/', {'note': 'a', 'characteristics': [], 'version': old}, format='json')
+        r = self.c(self.eng).put(f'/api/qms/specs/{draft.pk}/', {'note': 'b', 'characteristics': [], 'version': old}, format='json')
+        self.assertEqual((r.status_code, r.json()['detail']), (409, '다른 사람이 먼저 고쳤습니다. 다시 불러오세요.'))
+
+    def test_inspector_cannot_edit(self):
+        draft = self.new_draft()
+        r = self.c(self.insp).put(f'/api/qms/specs/{draft.pk}/', {'characteristics': [], 'version': None}, format='json')
+        self.assertEqual(r.status_code, 403)
+
+    def test_new_revision_then_approve_with_log(self):
+        r = self.c(self.eng).post(f'/api/qms/specs/{self.spec.pk}/new-revision/')
+        new_id = r.json()['id']
+        self.assertEqual(InspectionSpec.objects.get(pk=new_id).revision, 2)
+        self.assertEqual(self.c(self.eng).post(f'/api/qms/specs/{new_id}/approve/', {'password': 'x'}, format='json').status_code, 403)
+        r = self.c(self.lead).post(f'/api/qms/specs/{new_id}/approve/',
+                                   {'password': 'pw-lead-123', 'log': {'changes': '두께 상한 변경', 'reason': '고객 요청'}}, format='json')
+        self.assertEqual(r.json()['status'], '승인됨')
+        logs = self.c(self.eng).get(f'/api/qms/specs/{new_id}/revision-log/').json()['results']
+        self.assertEqual([(l['label'], l['status']) for l in logs][-1], ('Rev.2', 'CONFIRMED'))
+
+    def test_document_xlsx_endpoint(self):
+        r = self.c(self.insp).get(f'/api/qms/specs/{self.spec.pk}/document/?export=xlsx')
+        self.assertEqual((r.status_code, r['Content-Type']), (200, XLSX))
+
+    def test_detail_fields_and_revision_log_post(self):
+        d = self.c(self.eng).get(f'/api/qms/specs/{self.spec.pk}/').json()
+        self.assertEqual((d['status'], d['editable'], d['can_approve'], d['can_delete_rows']), ('승인됨', False, False, False))
+        draft = self.new_draft()
+        r = self.c(self.eng).post(f'/api/qms/specs/{draft.pk}/revision-log/', {'label': 'X', 'changes': '가', 'reason': '나'}, format='json')
+        self.assertEqual((r.status_code, r.json()['label'], r.json()['status']), (201, 'Rev.2', 'PENDING'))
+        r = self.c(self.insp).post(f'/api/qms/specs/{draft.pk}/revision-log/', {'changes': '가', 'reason': '나'}, format='json')
+        self.assertEqual(r.status_code, 403)
