@@ -22,6 +22,7 @@ export default function AuditLog() {
     const n = new URLSearchParams(sp)
     if (v) n.set(k, v)
     else n.delete(k)
+    if (k === 'model') n.delete('id') // 다른 기록 종류의 id가 남아 걸러내지 않게
     setSp(n, { replace: true })
   }
   const models = useQuery({ queryKey: ['audit-models'], queryFn: () => api<{ models: { key: string; label: string }[] }>('/api/audit-log/') })
@@ -34,7 +35,8 @@ export default function AuditLog() {
     getNextPageParam: (last) => (last.has_more ? last.page + 1 : undefined),
   })
   const err = models.error ?? rows.error
-  const list = rows.data?.pages.flatMap((p) => p.results) ?? []
+  // 쪽 번호로 받으므로 그 사이 새 기록이 생기면 같은 줄이 또 올 수 있다: history_id로 한 번만 둔다.
+  const list = [...new Map((rows.data?.pages.flatMap((p) => p.results) ?? []).map((r) => [r.history_id, r])).values()]
   return (
     <>
       <h1 className="page-title">감사 기록</h1>
@@ -53,6 +55,7 @@ export default function AuditLog() {
           defaultValue={id}
           key={id}
           allowClear
+          onChange={(e) => { if (!e.target.value) set('id', '') }}
           onPressEnter={(e) => set('id', e.currentTarget.value.trim())}
           onBlur={(e) => set('id', e.target.value.trim())}
         />

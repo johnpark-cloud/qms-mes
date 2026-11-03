@@ -5,6 +5,9 @@ import os, subprocess, sys, tempfile, time, urllib.request
 
 from playwright.sync_api import sync_playwright
 
+sys.stdout.reconfigure(encoding='utf-8')
+sys.stderr.reconfigure(encoding='utf-8')
+
 PROJ = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 PY = os.path.join(PROJ, '.venv', 'Scripts', 'python.exe')
 BASE = 'http://127.0.0.1:8766'
@@ -231,7 +234,8 @@ try:
             page.emulate_media(media='print')
             pdf = page.pdf(format='A4', print_background=True)
             pages = pdf.count(b'/Type /Page') - pdf.count(b'/Type /Pages')
-            check('승인본 인쇄 화면 → PDF A4 1쪽', pages == 1, f'{pages}쪽')
+            bar = page.locator('.print-bar').is_visible()
+            check('승인본 인쇄 화면 → PDF A4 1쪽', pages == 1 and not bar, f'{pages}쪽, 인쇄 막대 보임={bar}')
         except Exception as e:
             check('승인본 인쇄 화면 → PDF A4 1쪽', False, str(e)[:80])
         page.emulate_media(media='screen')
