@@ -62,21 +62,23 @@ def _work_order(row):
           planned_qty=row['planned_qty'], due_date=_date(row.get('due_date')))
 
 
+READ_ERROR = '파일을 읽을 수 없습니다. 엑셀(.xlsx) 또는 CSV 형식과 제목 행 번호를 확인하세요.'
 HANDLERS = {'item': _item, 'work_order': _work_order}
 TARGET_MODELS = {'item': Item, 'work_order': WorkOrder}  # 가져오기 권한 확인용 (core.views.import_view)
 
 
-def run_import(profile, uploaded):
-    """한 행이라도 틀리면 전체를 되돌린다. (처리 건수, 오류 목록)을 돌려준다."""
-    handler, errors, count = HANDLERS[profile.target], [], 0
+def _process(profile, uploaded, dry_run):
+    """run_import·preview_import 공용. (처리 건수, 오류 목록, 미리보기 행)을 돌려준다. dry_run이면 늘 되돌린다."""
+    handler, errors, count, preview = HANDLERS[profile.target], [], 0, []
     try:
         rows = list(read_rows(uploaded, profile.header_row))
     except Exception:  # 빈 파일, 제목 행이 파일보다 아래, 확장자만 .xlsx, 글자 인코딩을 알 수 없는 CSV 등
-        return 0, ['파일을 읽을 수 없습니다. 엑셀(.xlsx) 또는 CSV 형식과 제목 행 번호를 확인하세요.']
+        return 0, [READ_ERROR], []
     with transaction.atomic():
         for line, raw in rows:
             try:
                 row = {field: raw[col] for field, col in profile.mapping.items()}
+                preview.append({'line': line, 'values': {k: '' if v is None else str(v) for k, v in row.items()}})
                 with transaction.atomic():
                     handler(row)
                 count += 1
@@ -86,6 +88,18 @@ def run_import(profile, uploaded):
                 errors.append(f'{line}행: {" ".join(e.messages)}')
             except Exception as e:
                 errors.append(f'{line}행: {e}')
-        if errors:
+        if errors or dry_run:
             transaction.set_rollback(True)
+    return count, errors, preview
+
+
+def run_import(profile, uploaded):
+    """한 행이라도 틀리면 전체를 되돌린다. (처리 건수, 오류 목록)을 돌려준다."""
+    count, errors, _ = _process(profile, uploaded, False)
     return count, errors
+
+
+def preview_import(profile, uploaded):
+    """아무것도 저장하지 않고 run_import 결과를 미리 보여준다."""
+    count, errors, rows = _process(profile, uploaded, True)
+    return {'count': count, 'errors': errors, 'rows': rows}

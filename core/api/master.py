@@ -1,11 +1,13 @@
 from django.db.models import Count, Q
 from django.shortcuts import get_object_or_404
+from rest_framework.parsers import MultiPartParser
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from core.api.permissions import require_perm
 from core.export import table_xlsx, xlsx_response
-from core.models import Item, Process
+from core.importer import TARGET_MODELS, preview_import, run_import
+from core.models import ImportProfile, Item, Process
 from core.grid import table_version
 from core.rules import Stale, item_version, save_item, save_table
 
@@ -149,3 +151,34 @@ class ProcessTableView(TableView):
     model, unique, sheet, filename = Process, ('code',), '공정', '공정.xlsx'
     fields = {'code': 'text', 'name': 'text'}
     columns = ['공정 코드', '공정명']
+
+
+class ImportProfileListView(APIView):
+    schema = None
+
+    def get(self, request):
+        require_perm(request.user, 'core.view_importprofile')
+        return Response([{'id': p.pk, 'name': p.name, 'target': p.target, 'target_display': p.get_target_display(),
+                          'header_row': p.header_row, 'mapping': p.mapping} for p in ImportProfile.objects.order_by('name')])
+
+
+class ImportView(APIView):
+    schema = None
+    parser_classes = [MultiPartParser]
+
+    def post(self, request):
+        d = request.data
+        profile = ImportProfile.objects.filter(pk=d.get('profile')).first() if str(d.get('profile', '')).isdigit() else None
+        if profile is None:
+            return _bad('가져오기 설정을 선택하세요.', 'profile')
+        if not d.get('file'):
+            return _bad('파일을 선택하세요.', 'file')
+        if d.get('commit') not in ('0', '1'):
+            return _bad('commit 값이 올바르지 않습니다.', 'commit')
+        opts = TARGET_MODELS[profile.target]._meta  # import_view와 같다: 기존 행을 덮어쓰므로 추가·변경 권한이 모두 필요하다
+        for a in ('add', 'change'):
+            require_perm(request.user, f'{opts.app_label}.{a}_{opts.model_name}')
+        if d['commit'] == '0':
+            return Response(preview_import(profile, d['file']))
+        count, errors = run_import(profile, d['file'])
+        return Response({'count': count, 'errors': errors})

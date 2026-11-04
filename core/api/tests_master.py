@@ -1,11 +1,12 @@
 import io
 
 from django.contrib.auth.models import Permission, User
+from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase
 from openpyxl import load_workbook
 from rest_framework.test import APIClient
 
-from core.models import BomLine, Item, Process, RoutingStep
+from core.models import BomLine, ImportProfile, Item, Process, RoutingStep
 
 
 def grant(user, *codes):
@@ -156,3 +157,58 @@ class ProcessApiTest(TestCase):
         r = self.client.get(self.URL + '?export=xlsx')
         ws = load_workbook(io.BytesIO(r.content)).active
         self.assertEqual([c.value for c in ws[1]], ['공정 코드', '공정명'])
+
+
+class ImportApiTest(TestCase):
+    CSV = '코드,이름,구분\nA1,가,원자재\nA2,나,완제품\n'
+
+    def setUp(self):
+        self.client = APIClient()
+        self.boss = User.objects.create_superuser('boss', password='x')
+        self.client.force_login(self.boss)
+        self.profile = ImportProfile.objects.create(
+            name='품번', target='item', mapping={'code': '코드', 'name': '이름', 'item_type': '구분'})
+
+    def file(self, text=None):
+        return SimpleUploadedFile('i.csv', (self.CSV if text is None else text).encode())
+
+    def post(self, commit, text=None):
+        return self.client.post('/api/core/import/', {'profile': self.profile.pk, 'file': self.file(text), 'commit': commit},
+                                format='multipart')
+
+    def test_preview_writes_nothing(self):
+        r = self.post('0')
+        self.assertEqual(r.status_code, 200)
+        d = r.json()
+        self.assertEqual((d['count'], d['errors'], len(d['rows'])), (2, [], 2))
+        self.assertEqual(d['rows'][0], {'line': 2, 'values': {'code': 'A1', 'name': '가', 'item_type': '원자재'}})
+        self.assertEqual(Item.objects.count(), 0)
+
+    def test_commit_same_as_old_view(self):
+        got = lambda: sorted(Item.objects.values_list('code', 'name', 'item_type'))
+        self.client.post('/import/', {'profile': self.profile.pk, 'file': self.file()})
+        old = got()
+        Item.objects.all().delete()
+        self.assertEqual(self.post('1').json(), {'count': 2, 'errors': []})
+        self.assertEqual(got(), old)
+        self.assertEqual(len(old), 2)
+
+    def test_error_rolls_back(self):
+        d = self.post('1', '코드,이름,구분\nA1,가,원자재\nA2,나,없는구분\n').json()
+        self.assertTrue(d['errors'][0].startswith('3행:'))
+        self.assertEqual(Item.objects.count(), 0)
+
+    def test_permission(self):
+        u = User.objects.create_user('u', password='x', is_staff=True)
+        grant(u, 'add_item')
+        self.client.force_login(u)
+        self.assertEqual(self.post('1').status_code, 403)
+
+    def test_bad_input(self):
+        self.assertEqual(self.post('2').status_code, 400)
+        r = self.client.post('/api/core/import/', {'commit': '0'}, format='multipart')
+        self.assertEqual(r.status_code, 400)
+
+    def test_profiles(self):
+        d = self.client.get('/api/core/import/profiles/').json()
+        self.assertEqual(d[0]['target'], 'item')
