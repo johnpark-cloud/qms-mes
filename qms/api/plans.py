@@ -96,7 +96,7 @@ class PlanListView(APIView):
         stage = request.data.get('stage')
         item = Item.objects.filter(pk=request.data.get('item')).first() if str(request.data.get('item') or '').isdigit() else None
         if item is None or not isinstance(stage, str) or stage not in dict(ControlPlan.STAGES):
-            return Response({'detail': '품번과 단계를 고르세요.'}, status=400)
+            return _bad('품번과 단계를 고르세요.')
         try:
             with transaction.atomic():
                 top = ControlPlan.objects.filter(item=item, stage=stage).order_by('-revision').first()

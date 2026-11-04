@@ -194,6 +194,22 @@ def _cell(c, f):
     return getattr(c, 'plan_line') if f == 'plan_line_id' else getattr(c, f)  # 관리계획서 항목은 번호가 아니라 이름으로
 
 
+def _pair_rows(old, new, cells, cell=getattr):
+    """이름으로 짝지은 두 항목 묶음의 비교 줄(추가·삭제·변경). compare_specs·compare_plans가 함께 쓴다."""
+    rows = []
+    for name in list(old) + [n for n in new if n not in old]:
+        o, n = old.get(name), new.get(name)
+        if o is None or n is None:
+            rows.append({'id': (n or o).pk, 'name': name, 'status': 'added' if o is None else 'removed',
+                         'cells': [], 'values': {}})
+            continue
+        diff = [f for f in cells if getattr(o, f) != getattr(n, f)]
+        if diff:
+            rows.append({'id': n.pk, 'name': name, 'status': 'changed', 'cells': [c.removesuffix('_id') for c in diff],
+                         'values': {c.removesuffix('_id'): [_fmt(cell(o, c)), _fmt(cell(n, c))] for c in diff}})
+    return rows
+
+
 def compare_specs(prev, cur):
     """이전 개정과 비교. 항목은 이름으로 짝짓는다(SPC도 이름으로 이어진다). prev가 None이면 None.
     rows 한 줄의 values는 {칸: [이전, 현재]}(글자)로, diff_text가 쓴다."""
@@ -202,17 +218,7 @@ def compare_specs(prev, cur):
     fields = {f: [getattr(prev, f), getattr(cur, f)] for f in ('sampling', 'note') if getattr(prev, f) != getattr(cur, f)}
     old = {c.name: c for c in prev.characteristics.all()}
     new = {c.name: c for c in cur.characteristics.all()}
-    rows = []
-    for name in list(old) + [n for n in new if n not in old]:
-        o, n = old.get(name), new.get(name)
-        if o is None or n is None:
-            rows.append({'id': (n or o).pk, 'name': name, 'status': 'added' if o is None else 'removed',
-                         'cells': [], 'values': {}})
-            continue
-        cells = [f for f in _CELLS if getattr(o, f) != getattr(n, f)]
-        if cells:
-            rows.append({'id': n.pk, 'name': name, 'status': 'changed', 'cells': [c.removesuffix('_id') for c in cells],
-                         'values': {c.removesuffix('_id'): [_fmt(_cell(o, c)), _fmt(_cell(n, c))] for c in cells}})
+    rows = _pair_rows(old, new, _CELLS, _cell)
     return {'fields': fields, 'rows': rows}
 
 
@@ -250,6 +256,10 @@ def spec_logs(spec, confirmed_only):
 PLAN_FIELDS = {'process': 'fk', 'characteristic': 'text', 'special': 'text', 'lsl': 'number', 'usl': 'number', 'unit': 'text',
                'method': 'text', 'sampling': 'text', 'inspection_type': 'text', 'reaction': 'text', 'failure_mode': 'text',
                'severity': 'int', 'occurrence': 'int', 'detection': 'int'}
+
+
+class NotApproved(ValidationError):
+    """승인 전 관리계획서로 검사기준을 만들려 할 때. 아무것도 쓰기 전에 낸다."""
 
 
 def plan_version(plan):
@@ -325,17 +335,7 @@ def compare_plans(prev, cur):
         return None
     old = {_plan_key(ln): ln for ln in prev.lines.select_related('process')}
     new = {_plan_key(ln): ln for ln in cur.lines.select_related('process')}
-    rows = []
-    for name in list(old) + [n for n in new if n not in old]:
-        o, n = old.get(name), new.get(name)
-        if o is None or n is None:
-            rows.append({'id': (n or o).pk, 'name': name, 'status': 'added' if o is None else 'removed',
-                         'cells': [], 'values': {}})
-            continue
-        cells = [f for f in _PLAN_CELLS if getattr(o, f) != getattr(n, f)]
-        if cells:
-            rows.append({'id': n.pk, 'name': name, 'status': 'changed', 'cells': cells,
-                         'values': {c: [_fmt(getattr(o, c)), _fmt(getattr(n, c))] for c in cells}})
+    rows = _pair_rows(old, new, _PLAN_CELLS)
     return {'fields': {}, 'rows': rows}
 
 
@@ -352,7 +352,7 @@ def plan_logs(plan, confirmed_only):
 def make_specs_from_plan(plan):
     """승인된 관리계획서에서 검사 구분별 검사기준 초안을 만든다. 호출하는 쪽이 트랜잭션 안에서 부른다."""
     if not plan.is_approved:
-        raise ValidationError(f'{plan}: 승인 후에 만들 수 있습니다.')
+        raise NotApproved(f'{plan}: 승인 후에 만들 수 있습니다.')
     made = []
     for itype, _ in InspectionSpec.TYPES:
         lines = plan.lines.filter(inspection_type=itype)

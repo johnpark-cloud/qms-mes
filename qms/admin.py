@@ -19,7 +19,7 @@ from core.rules import child_editable
 from .models import (AuditChecklist, AuditFinding, AuditItem, Capa, ChangeRequest, Characteristic, ControlPlan,
                      ControlPlanLine, CustomerClaim, CustomerRule, Document, DocumentRevision, Evidence, ExcelTemplate, Gauge,
                      Inspection, InspectionSpec, InternalAudit, Measurement, Memo, MemoPhoto, PpapElement, PpapSubmission, Qualification, Scar)
-from .rules import make_specs_from_plan, new_spec_revision
+from .rules import NotApproved, make_specs_from_plan, new_spec_revision
 from .similar import similar_html
 
 
@@ -191,7 +191,7 @@ class ControlPlanAdmin(ApprovalAdminMixin, BaseAdmin):
             for plan in queryset:
                 try:
                     made += [str(spec) for spec in make_specs_from_plan(plan)]
-                except ValidationError as e:
+                except NotApproved as e:  # 쓰기 전에 나는 오류만 건너뛴다. 중간 실패는 그대로 올려 전부 되돌린다
                     self.message_user(request, ' '.join(e.messages), messages.ERROR)
         if made:
             self.message_user(request, f'검사기준 초안: {", ".join(made)}. 확인 후 승인 서명하세요.')

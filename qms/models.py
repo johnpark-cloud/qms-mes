@@ -17,6 +17,28 @@ PRIVATE_APPS = ['personal', 'auth', 'admin', 'sessions', 'contenttypes']  # 증�
 
 # ---------- 검사 ----------
 
+def _num_text(d):
+    return '' if d is None else format(d.normalize(), 'f')
+
+
+def _doc_tail(obj, logs):
+    """승인 문서(검사기준서·관리계획서)의 개정 이력과 서명란."""
+    def who(u):
+        return (u.get_full_name() or u.username) if u else ''
+
+    def day(dt):
+        return timezone.localtime(dt).strftime('%Y-%m-%d') if dt else ''
+
+    first = obj.history.order_by('history_date', 'history_id').first()
+    logs = logs.select_related('requested_by', 'approved_by')
+    return {
+        'revisions': [{'label': g.label, 'changes': g.changes, 'reason': g.reason, 'requested_by': who(g.requested_by),
+                       'approved_by': who(g.approved_by), 'approved_at': day(g.approved_at)} for g in logs],
+        'signoff': {'written_by': who(first and first.history_user), 'written_at': day(first and first.history_date),
+                    'approved_by': who(obj.approved_by), 'approved_at': day(obj.approved_at)},
+    }
+
+
 class InspectionSpec(Approvable):
     INCOMING, PROCESS, OUTGOING = 'INCOMING', 'PROCESS', 'OUTGOING'
     TYPES = [(INCOMING, '수입검사'), (PROCESS, '공정검사'), (OUTGOING, '출하검사')]
@@ -45,28 +67,15 @@ class InspectionSpec(Approvable):
         """검사기준서 문서 구조. 값은 모두 JSON 글이다(React 인쇄·PDF와 엑셀이 함께 쓴다)."""
         from .rules import spec_logs  # rules가 models를 가져오므로 안에서 불러온다
 
-        def who(u):
-            return (u.get_full_name() or u.username) if u else ''
-
-        def day(dt):
-            return timezone.localtime(dt).strftime('%Y-%m-%d') if dt else ''
-
-        def num(d):
-            return '' if d is None else format(d.normalize(), 'f')
-
-        first = self.history.order_by('history_date', 'history_id').first()
+        num = _num_text
         rows = [[c.name, num(c.lsl), num(c.usl), c.unit, c.special, str(c.plan_line or '')]
                 for c in self.characteristics.select_related('plan_line').order_by('pk')]
-        logs = spec_logs(self, confirmed_only=True).select_related('requested_by', 'approved_by')
         return {
             'title': str(self), 'number': None, 'revision': f'Rev.{self.revision}', 'draft': self.approved_by_id is None,
             'head': [['품번', self.item.code], ['품명', self.item.name], ['검사 구분', self.get_inspection_type_display()],
                      ['개정', f'Rev.{self.revision}'], ['샘플링', self.sampling], ['비고', self.note]],
             'tables': [{'title': '검사항목', 'columns': ['항목명', '하한', '상한', '단위', '특별특성', '관리계획서 항목'], 'rows': rows}],
-            'revisions': [{'label': g.label, 'changes': g.changes, 'reason': g.reason, 'requested_by': who(g.requested_by),
-                           'approved_by': who(g.approved_by), 'approved_at': day(g.approved_at)} for g in logs],
-            'signoff': {'written_by': who(first and first.history_user), 'written_at': day(first and first.history_date),
-                        'approved_by': who(self.approved_by), 'approved_at': day(self.approved_at)},
+            **_doc_tail(self, spec_logs(self, confirmed_only=True)),
         }
 
 
@@ -349,23 +358,14 @@ class ControlPlan(Approvable):
         """관리계획서 문서 구조. 키는 InspectionSpec.document()와 같고 열이 많아 가로(landscape)로 찍는다."""
         from .rules import plan_logs
 
-        def who(u):
-            return (u.get_full_name() or u.username) if u else ''
-
-        def day(dt):
-            return timezone.localtime(dt).strftime('%Y-%m-%d') if dt else ''
-
-        def num(d):
-            return '' if d is None else format(d.normalize(), 'f')
+        num = _num_text
 
         def n(v):
             return '' if v is None else v
 
-        first = self.history.order_by('history_date', 'history_id').first()
         rows = [[str(ln.process or ''), ln.characteristic, ln.special, num(ln.lsl), num(ln.usl), ln.unit, ln.method, ln.sampling,
                  ln.get_inspection_type_display(), ln.reaction, ln.failure_mode, n(ln.severity), n(ln.occurrence), n(ln.detection),
                  ln.action_priority] for ln in self.lines.select_related('process').order_by('pk')]
-        logs = plan_logs(self, confirmed_only=True).select_related('requested_by', 'approved_by')
         return {
             'title': str(self), 'number': None, 'revision': f'Rev.{self.revision}', 'draft': self.approved_by_id is None,
             'landscape': True,
@@ -373,10 +373,7 @@ class ControlPlan(Approvable):
                      ['개정', f'Rev.{self.revision}']],
             'tables': [{'title': '관리 항목', 'columns': ['공정', '특성', '특별특성', '하한', '상한', '단위', '측정방법', '샘플링', '검사 구분',
                                                        '이상 시 조치', '잠재 고장모드', 'S', 'O', 'D', 'AP'], 'rows': rows}],
-            'revisions': [{'label': g.label, 'changes': g.changes, 'reason': g.reason, 'requested_by': who(g.requested_by),
-                           'approved_by': who(g.approved_by), 'approved_at': day(g.approved_at)} for g in logs],
-            'signoff': {'written_by': who(first and first.history_user), 'written_at': day(first and first.history_date),
-                        'approved_by': who(self.approved_by), 'approved_at': day(self.approved_at)},
+            **_doc_tail(self, plan_logs(self, confirmed_only=True)),
         }
 
 

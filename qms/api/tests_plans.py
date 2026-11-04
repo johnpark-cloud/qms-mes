@@ -1,6 +1,8 @@
 from io import BytesIO
+from unittest import mock
 
 from django.contrib.auth.models import Group, User
+from django.core.exceptions import ValidationError
 from django.test import TestCase
 from openpyxl import load_workbook
 from rest_framework.test import APIClient
@@ -132,3 +134,11 @@ class PlanApiTest(TestCase):
         self.assertEqual(by['두께']['status'], 'added')
         self.assertIn('항목 추가:', plan_diff_text(diff))
         self.assertEqual(plan_diff_text(None), '최초 제정')
+
+    def test_admin_make_specs_midway_failure_rolls_back(self):
+        a = self.mkplan(approved=True)
+        client = self.c(self.lead)
+        client.raise_request_exception = False
+        with mock.patch('qms.rules.Characteristic.objects.create', side_effect=ValidationError('중간 실패')):
+            client.post('/admin/qms/controlplan/', {'action': 'make_specs', '_selected_action': [a.pk]})
+        self.assertFalse(InspectionSpec.objects.filter(item=self.item).exists())
