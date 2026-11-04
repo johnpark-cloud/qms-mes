@@ -44,6 +44,7 @@ docs/        구조·업무 규칙·테스트 문서, superpowers/ 설계·계�
 | `audit.py` | simple-history 이력을 감사 기록 화면용으로 읽는다(`audited_models`는 `PRIVATE_APPS` 제외, `row_payload`는 `password` 변경 제외) |
 | `rules.py` | admin·기존 뷰·API가 함께 쓰는 업무 규칙(잠금·삭제·승인 등). 규칙 본문은 한 곳에만 둔다 |
 | `api/` | DRF 기반 JSON API: 로그인·`/api/auth/me/`, 오류 응답 형식(`exceptions.py`), 모델 권한(`permissions.py`). 업무 규칙은 `core/rules.py`·모델 `save()`를 그대로 쓴다 |
+| `api/master.py` | 품번·BOM·라우팅 `/api/core/items/`(목록·`?export=xlsx`·생성·`<id>/` 조회·저장), 공정 `/api/core/processes/` 표 조회·저장, 엑셀 일괄 등록 `/api/core/import/profiles/`·`/api/core/import/`(`commit=0` 미리보기, `1` 확정). 저장 규칙은 `core/rules.py`(`save_item`·`save_table`)를 쓴다 |
 | `management/commands/` | `backup`, `restore` |
 | `static/qms/` | `fiori.css`(디자인 토큰, `DESIGN.md`), `shell.js`, `dashboard.js`, `nc_form.js`, `copy_mail.js` |
 
@@ -58,6 +59,7 @@ docs/        구조·업무 규칙·테스트 문서, superpowers/ 설계·계�
 | `api/` | 공장 종합현황 `GET /api/qms/overview/`, 내 할 일 `GET /api/qms/todo/`, 위젯 배치 저장 `POST /api/qms/dashboard/` |
 | `api/inspections.py` | 검사 입력·검사 목록 API. `/api/qms/inspect/`의 `queue/`(검사 대기, `?export=xlsx`)·`lot/`(LOT 조회)·`receive/`(입고 등록)·`form/<lot>/<spec>/`(측정 양식)·`check/`(입력 즉시 판정)·`submit/`(판정 저장), `/api/qms/inspections/`(목록·`?export=xlsx`)·`<id>/`(조회)·`<id>/document/`(성적서, `?export=xlsx`). 판정 규칙은 기존 `/inspect/` 화면과 같은 공용 함수를 쓰고, 성적서 내용은 `Inspection.document()`가 만든다 |
 | `api/specs.py` | 검사기준서 API `/api/qms/specs/`(목록·`?export=xlsx`·생성), `<id>/`(조회·저장), `new-revision/`, `approve/`, `revision-log/`, `document/`(`?export=xlsx`). 규칙은 `qms/rules.py`(`save_spec`·`spec_version`·`compare_specs`)를 쓴다. 다운로드 형식은 DRF가 `?format=`을 가로채므로 `?export=`로 고른다 |
+| `api/plans.py` | 관리계획서 API `/api/qms/plans/`(목록·`?export=xlsx`·생성), `<id>/`(조회·저장), `new-revision/`, `approve/`, `revision-log/`, `make-specs/`(검사기준 초안), `document/`. 고객사별 8D 기한 표는 `qms/api/views.py`의 `/api/qms/customer-rules/` |
 | `overview.py` | 공장 종합현황 카드 계산 (`/overview/` 화면과 API가 공유) |
 | `due.py` | 기한·대기 항목 계산 (내 할 일과 `notify`가 공유) |
 | `widgets.py` | 대시보드 위젯 목록·역할별 기본 배치·격자 자리 잡기(`place`) |
@@ -66,7 +68,7 @@ docs/        구조·업무 규칙·테스트 문서, superpowers/ 설계·계�
 
 ### frontend (`frontend/`)
 
-React 19·TypeScript·Vite·Ant Design 새 화면. 개발 PC에서 `npm run build`로 `frontend/dist/`를 만들고 그 결과를 저장소에 함께 넣는다. Django는 `/app/` 아래 모든 주소에 `dist/index.html`을 내려 주고(`core/views.py` `spa`), JS·CSS는 whitenoise가 `/static/app/`에서 제공하므로 운영 PC에는 Node가 필요 없다. 지금은 `/app/overview`·`/app/todo`·`/app/specs`(목록·`:id` 기록 페이지·`:id/print` 인쇄)·`/app/inspect`(스캔·`:lot/:spec` 측정)·`/app/inspections`(목록·`:id` 기록 페이지·`:id/print` 성적서 인쇄)·`/app/audit`가 있고 데이터는 API로만 받는다. `core/api/views.py`에는 통합 검색(`/api/search/`)·품번 조회(`/api/items/`)·감사 기록(`/api/audit-log/`, 승인자만)·개정 이력 확정(`/api/revision-log/<id>/approve/`)이 있다.
+React 19·TypeScript·Vite·Ant Design 새 화면. 개발 PC에서 `npm run build`로 `frontend/dist/`를 만들고 그 결과를 저장소에 함께 넣는다. Django는 `/app/` 아래 모든 주소에 `dist/index.html`을 내려 주고(`core/views.py` `spa`), JS·CSS는 whitenoise가 `/static/app/`에서 제공하므로 운영 PC에는 Node가 필요 없다. 지금은 `/app/overview`·`/app/todo`·`/app/specs`(목록·`:id` 기록 페이지·`:id/print` 인쇄)·`/app/inspect`(스캔·`:lot/:spec` 측정)·`/app/inspections`(목록·`:id` 기록 페이지·`:id/print` 성적서 인쇄)·`/app/items`(목록·`:id` 속성·BOM·라우팅)·`/app/processes`·`/app/customer-rules`(표 편집)·`/app/plans`(목록·`:id` 기록 페이지·`:id/print` 가로 인쇄)·`/app/import`(엑셀 일괄 등록 미리보기·확정)·`/app/audit`가 있고 데이터는 API로만 받는다. `core/api/views.py`에는 통합 검색(`/api/search/`)·품번 조회(`/api/items/`)·감사 기록(`/api/audit-log/`, 승인자만)·개정 이력 확정(`/api/revision-log/<id>/approve/`)이 있다.
 
 | 위치 | 역할 |
 | --- | --- |

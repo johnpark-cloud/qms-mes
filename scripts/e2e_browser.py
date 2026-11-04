@@ -398,6 +398,114 @@ try:
             ok, n = False, str(e)[:80]
         check('바로 판정 → 불량유형 먼저', ok, f'{n}')
 
+        # 기준정보 새 화면: 품번·BOM, 공정 표, 관리계획서, 엑셀 일괄 등록, 메뉴
+        manage('shell', '-c', (
+            "from django.contrib.auth import get_user_model; from django.utils import timezone;"
+            "from core.models import ImportProfile, Item; from qms.models import ControlPlan, ControlPlanLine;"
+            "Item.objects.create(code='E2E-C1', name='E2E 자품1', item_type='RAW');"
+            "Item.objects.create(code='E2E-C2', name='E2E 자품2', item_type='RAW');"
+            "i=Item.objects.create(code='E2E-CP', name='E2E 계획 품번', item_type='FIN');"
+            "p=ControlPlan.objects.create(item=i, stage='PRODUCTION', revision=1);"
+            "ControlPlanLine.objects.create(plan=p, characteristic='외경', lsl='9.9', usl='10.1', unit='mm', inspection_type='INCOMING');"
+            "ControlPlan.objects.filter(pk=p.pk).update(approved_at=timezone.now(), approved_by=get_user_model().objects.get(username='boss'));"
+            "ImportProfile.objects.create(name='E2E 품번', target='item', mapping={'code': '품번', 'name': '품명', 'item_type': '구분'})"))
+        paste = ("t => { const dt = new DataTransfer(); dt.setData('text/plain', t);"
+                 " document.activeElement.dispatchEvent(new ClipboardEvent('paste', {clipboardData: dt, bubbles: true})) }")
+
+        try:
+            page.goto('/app/items')
+            page.get_by_role('button', name='새 품번').click()
+            page.get_by_role('dialog').get_by_label('품번').fill('E2E-B1')
+            page.get_by_role('dialog').get_by_label('품명').fill('E2E 새 품번')
+            page.get_by_role('dialog').get_by_label('구분').click()
+            page.locator('.ant-select-item-option', has_text='완제품').click()
+            page.get_by_role('button', name='만들기').click()
+            page.wait_for_url('**/app/items/*')
+            item_id = page.url.rstrip('/').split('/')[-1]
+            page.locator('[data-grid]').first.locator('[data-grid-row] input').first.wait_for(timeout=5000)
+            page.locator('[data-grid]').first.locator('[data-grid-row] input').first.click()
+            page.evaluate(paste, 'E2E-C1 E2E 자품1\t2\nE2E-C2 E2E 자품2\t3')  # 선택 칸은 화면에 보이는 이름 그대로 붙여 넣는다
+            page.get_by_text('변경 2건').wait_for(timeout=5000)
+            page.keyboard.press('Control+s')
+            page.get_by_text('저장했습니다').wait_for(timeout=5000)
+            bom = api_get(page, f'/api/core/items/{item_id}/')['bom']
+            check('품번 BOM 붙여넣기 저장', len(bom) == 2, f'{len(bom)}줄')
+        except Exception as e:
+            check('품번 BOM 붙여넣기 저장', False, str(e)[:80])
+
+        try:
+            page.goto('/app/processes')
+            page.locator('[data-grid] [data-grid-row]').first.wait_for(timeout=5000)
+            rows = page.locator('[data-grid] [data-grid-row]')
+            inputs = rows.nth(rows.count() - 1).locator('input')  # 입력하면 빈 줄이 또 생기므로 줄을 먼저 고정한다
+            inputs.nth(0).fill('E2E-P9')
+            inputs.nth(1).fill('E2E 공정')
+            page.get_by_role('button', name='저장 (Ctrl+S)').click()
+            page.get_by_text('저장했습니다').wait_for(timeout=5000)
+            page.reload()
+            page.locator('[data-grid] [data-grid-row] input[value="E2E-P9"]').wait_for(timeout=5000)
+            ok = any(r['code'] == 'E2E-P9' for r in api_get(page, '/api/core/processes/')['rows'])
+        except Exception as e:
+            ok = False
+        check('공정 표 줄 추가', ok)
+
+        plan_id = ''
+        try:
+            page.goto('/app/plans')
+            page.locator('[data-row]', has_text='E2E-CP').click()
+            page.get_by_role('button', name='전체 화면으로').click()
+            page.wait_for_url('**/app/plans/*')
+            plan_id = page.url.rstrip('/').split('/')[-1]
+            page.get_by_role('button', name='검사기준 초안 만들기').click()
+            page.locator('.ant-alert a[href*="/app/specs/"]').first.wait_for(timeout=5000)
+            links = page.locator('.ant-alert a[href*="/app/specs/"]').count()
+            page.get_by_role('button', name='새 개정').click()
+            page.wait_for_function(f"() => !location.pathname.endsWith('/{plan_id}')", timeout=5000)
+            rev = api_get(page, f'/api/qms/plans/{page.url.rstrip("/").split("/")[-1]}/')['revision']
+            ok = links >= 1 and rev == 2
+            detail = f'링크 {links}개, Rev.{rev}'
+        except Exception as e:
+            ok, detail = False, str(e)[:80]
+        check('관리계획서 새 개정·검사기준 초안', ok, detail)
+
+        try:
+            page.goto(f'/app/plans/{plan_id}/print')
+            page.locator('.doc-page').wait_for(timeout=5000)
+            page.emulate_media(media='print')
+            pdf = page.pdf(format='A4', landscape=True, print_background=True)
+            pages = pdf.count(b'/Type /Page') - pdf.count(b'/Type /Pages')
+            check('관리계획서 PDF A4 가로 1쪽', pages == 1, f'{pages}쪽')
+        except Exception as e:
+            check('관리계획서 PDF A4 가로 1쪽', False, str(e)[:80])
+        page.emulate_media(media='screen')
+
+        try:
+            page.goto('/app/import')
+            page.get_by_label('가져오기 설정').click()
+            page.locator('.ant-select-item-option', has_text='E2E 품번').click()
+            csv_path = os.path.join(env['QMS_DATA_DIR'], 'import.csv')
+            with open(csv_path, 'w', encoding='utf-8-sig') as f:
+                f.write('품번,품명,구분\nE2E-IM1,가져온1,원자재\nE2E-IM2,가져온2,완제품\n')
+            page.get_by_label('파일 선택').set_input_files(csv_path)
+            page.get_by_role('button', name='미리보기').click()
+            page.locator('.ant-table-tbody tr[data-row-key]').first.wait_for(timeout=5000)
+            n = page.locator('.ant-table-tbody tr[data-row-key]').count()
+            page.get_by_role('button', name='확정').click()
+            page.get_by_text('2건 등록했습니다.').wait_for(timeout=5000)
+            check('엑셀 일괄 등록 미리보기→확정', n == 2, f'미리보기 {n}줄')
+        except Exception as e:
+            check('엑셀 일괄 등록 미리보기→확정', False, str(e)[:80])
+
+        try:
+            page.goto('/app/todo')
+            page.locator('.ant-menu-submenu-title', has_text='기준정보').click()
+            page.get_by_role('menuitem', name='품번·BOM·라우팅', exact=True).click()
+            page.wait_for_url('**/app/items')
+            ok = page.url.endswith('/app/items')
+        except Exception:
+            ok = False
+        check('메뉴 → 기준정보 새 화면', ok, page.url)
+
         # 세션이 끊기면 API를 부르는 화면이 로그인으로 보내야 한다 (client.ts 의 403 처리)
         page.context.clear_cookies()
         page.goto('/app/overview')
