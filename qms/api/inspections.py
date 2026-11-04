@@ -82,7 +82,7 @@ class QueueView(APIView):
         count = qs.count()
         start = (page - 1) * PAGE_SIZE
         return Response({'count': count, 'page': page, 'has_more': start + PAGE_SIZE < count,
-                         'results': [{**_lot(x, x.held), 'created_at': x.created_at.isoformat(), 'spec_id': x.spec_id}
+                         'results': [{**_lot(x, x.held), 'created_at': timezone.localtime(x.created_at).isoformat(), 'spec_id': x.spec_id}
                                      for x in qs[start:start + PAGE_SIZE]]})
 
 
@@ -236,7 +236,7 @@ class InspectionListView(APIView):
         count = qs.count()
         start = (page - 1) * PAGE_SIZE
         return Response({'count': count, 'page': page, 'has_more': start + PAGE_SIZE < count, 'results': [
-            {'id': x.pk, 'inspected_at': x.inspected_at.isoformat(), 'lot_number': x.lot.number, 'item_code': x.lot.item.code,
+            {'id': x.pk, 'inspected_at': timezone.localtime(x.inspected_at).isoformat(), 'lot_number': x.lot.number, 'item_code': x.lot.item.code,
              'item_name': x.lot.item.name, 'supplier': x.lot.supplier, 'spec_title': str(x.spec), 'inspector': _who(x.inspector),
              'result': x.result, 'result_display': x.get_result_display() or '미판정',
              'nc_number': x.nonconformance.number if x.nonconformance else ''} for x in qs[start:start + PAGE_SIZE]]})
@@ -258,7 +258,7 @@ class InspectionDetailView(APIView):
             'id': x.pk, 'title': str(x), 'status': x.get_result_display() or '미판정',
             'lot': {'id': x.lot.pk, 'number': x.lot.number, 'trace_url': reverse('trace') + '?lot=' + x.lot.number},
             'item': {'code': x.lot.item.code, 'name': x.lot.item.name}, 'spec': {'id': x.spec.pk, 'title': str(x.spec)},
-            'inspector': _who(x.inspector), 'inspected_at': x.inspected_at.isoformat(),
+            'inspector': _who(x.inspector), 'inspected_at': timezone.localtime(x.inspected_at).isoformat(),
             'nonconformance': {'id': nc.pk, 'number': nc.number,
                                'url': reverse('admin:core_nonconformance_change', args=[nc.pk])} if nc else None,
             'measurements': [{'name': m.characteristic.name, 'spec_text': m.characteristic.spec_text(),
