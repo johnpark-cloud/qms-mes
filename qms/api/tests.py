@@ -442,8 +442,21 @@ class InspectApiTest(TestCase):
                                                    'is_variable': True, 'special': ''})
         self.assertEqual(d['characteristics'][1]['spec_text'], 'OK/NG')
         self.assertIn('치수', d['defect_types'])
+        self.assertFalse(d['done'])
+        self.assertTrue(self.c().get(f'/api/qms/inspect/form/{self.q2.pk}/{self.spec.pk}/').json()['done'])
         draft = new_spec_revision(self.spec)
         self.assertEqual(self.c().get(f'/api/qms/inspect/form/{self.q1.pk}/{draft.pk}/').status_code, 404)
+
+    def test_form_rejects_old_revision_and_other_item(self):
+        rev2 = new_spec_revision(self.spec)
+        InspectionSpec.objects.filter(pk=rev2.pk).update(approved_by=self.lead, approved_at=timezone.now())
+        r = self.c().get(f'/api/qms/inspect/form/{self.q1.pk}/{self.spec.pk}/')
+        self.assertEqual(r.status_code, 400)
+        self.assertIn('유효본이 아닙니다', r.json()['detail'])
+        self.assertEqual(self.c().get(f'/api/qms/inspect/form/{self.q1.pk}/{rev2.pk}/').status_code, 200)
+        other = Lot.objects.create(number='Q-X', item=Item.objects.create(code='X-1', name='다른', item_type=Item.RAW))
+        r = self.c().get(f'/api/qms/inspect/form/{other.pk}/{rev2.pk}/')
+        self.assertEqual((r.status_code, r.json()['detail']), (400, '검사기준의 품번과 LOT의 품번이 다릅니다.'))
 
     def test_check_and_submit_value_forms(self):
         url = '/api/qms/inspect/check/'
@@ -576,6 +589,30 @@ class InspectionApiTest(TestCase):
         self.assertEqual(r.status_code, 200)
         ws = load_workbook(BytesIO(r.content)).active
         self.assertEqual([c.value for c in ws[1]], ['검사 일시', 'LOT', '품번', '품명', '협력사', '검사기준', '검사자', '판정', '부적합'])
+
+    def test_list_summary_follows_tab_and_search(self):
+        self.make(self.lots[0], 'INCOMING', '10.0')
+        self.make(self.lots[1], 'INCOMING', '11.0')
+        Inspection.objects.create(lot=self.lots[2], spec=self.specs['INCOMING'])  # 미판정
+        self.make(self.lots[3], 'OUTGOING', '11.0')
+        r = self.c().get('/api/qms/inspections/?tab=INCOMING').json()
+        self.assertEqual(r['summary'], {'total': 3, 'passed': 1, 'failed': 1, 'pending': 1})
+        self.assertEqual(r['count'], 3)
+        r = self.c().get('/api/qms/inspections/?tab=INCOMING&q=L-1').json()
+        self.assertEqual(r['summary'], {'total': 1, 'passed': 1, 'failed': 0, 'pending': 0})
+        r = self.c().get('/api/qms/inspections/?tab=OUTGOING').json()
+        self.assertEqual(r['summary'], {'total': 1, 'passed': 0, 'failed': 1, 'pending': 0})
+
+    def test_list_paging(self):
+        for lot in self.lots[:3]:
+            self.make(lot, 'INCOMING', '10.0')
+        with mock.patch('qms.api.inspections.PAGE_SIZE', 2):
+            a = self.c().get('/api/qms/inspections/?tab=INCOMING&page=1').json()
+            b = self.c().get('/api/qms/inspections/?tab=INCOMING&page=2').json()
+            z = self.c().get('/api/qms/inspections/?tab=INCOMING&page=x').json()
+        self.assertEqual(([x['lot_number'] for x in a['results']], a['has_more']), (['L-3', 'L-2'], True))
+        self.assertEqual(([x['lot_number'] for x in b['results']], b['has_more'], b['summary']['total']), (['L-1'], False, 3))
+        self.assertEqual(z['page'], 1)
 
     def test_detail_and_document(self):
         ok = self.make(self.lots[0], 'INCOMING', '10.0')

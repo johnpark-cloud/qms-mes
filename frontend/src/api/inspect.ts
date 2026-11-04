@@ -42,6 +42,7 @@ export interface FormData {
   characteristics: { id: number; name: string; spec_text: string; unit: string; is_variable: boolean; special: string }[]
   gauges: Opt[]
   defect_types: string[]
+  done: boolean // 이 LOT을 같은 검사 구분으로 이미 검사했다(판정하면 재검사로 1건 더 생긴다)
 }
 
 export interface SubmitResult {
@@ -87,6 +88,13 @@ export interface InspectionRow {
   result: string
   result_display: '합격' | '불합격' | '미판정'
   nc_number: string
+}
+
+export interface InspectionSummary {
+  total: number
+  passed: number
+  failed: number
+  pending: number
 }
 
 export interface InspectionDetail {

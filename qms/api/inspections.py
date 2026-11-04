@@ -1,7 +1,7 @@
 """검사 입력 API. 옛 htmx 화면(qms/views.py inspect_*)과 같은 qms.rules 함수를 쓴다."""
 from django.contrib.contenttypes.models import ContentType
 from django.core.exceptions import ValidationError
-from django.db.models import Exists, OuterRef, Q, Subquery
+from django.db.models import Count, Exists, OuterRef, Q, Subquery
 from django.shortcuts import get_object_or_404
 from django.urls import reverse
 from django.utils import timezone
@@ -134,6 +134,10 @@ class FormView(APIView):
         require_perm(request.user, PERM)
         lot = get_object_or_404(Lot.objects.select_related('item'), pk=lot_id)
         spec = get_object_or_404(InspectionSpec, pk=spec_id, approved_at__isnull=False)
+        try:  # 품번·유효본을 판정 때와 같은 규칙으로 미리 확인한다 (값을 다 넣은 뒤에 거부되지 않게)
+            Inspection(lot=lot, spec=spec).clean()
+        except ValidationError as e:
+            return _bad(e.messages[0])
         today = timezone.localdate()
         return Response({
             'lot': _lot(lot), 'spec': {'id': spec.pk, 'title': str(spec), 'sampling': spec.sampling},
@@ -143,6 +147,7 @@ class FormView(APIView):
             'gauges': [{'value': g.pk, 'label': str(g)} for g in Gauge.objects.filter(active=True).order_by('number')
                        if g.usable_on(today)],
             'defect_types': DEFECT_TYPES,
+            'done': Inspection.objects.filter(lot=lot, spec__inspection_type=spec.inspection_type).exists(),  # 재검사 확인용
         })
 
 
@@ -233,9 +238,11 @@ class InspectionListView(APIView):
             page = min(max(int(request.query_params.get('page', 1)), 1), 10**6)
         except ValueError:
             page = 1
-        count = qs.count()
+        summary = qs.aggregate(total=Count('pk'), passed=Count('pk', filter=Q(result=Inspection.PASS)),
+                               failed=Count('pk', filter=Q(result=Inspection.FAIL)), pending=Count('pk', filter=Q(result='')))
+        count = summary['total']
         start = (page - 1) * PAGE_SIZE
-        return Response({'count': count, 'page': page, 'has_more': start + PAGE_SIZE < count, 'results': [
+        return Response({'count': count, 'page': page, 'has_more': start + PAGE_SIZE < count, 'summary': summary, 'results': [
             {'id': x.pk, 'inspected_at': timezone.localtime(x.inspected_at).isoformat(), 'lot_number': x.lot.number, 'item_code': x.lot.item.code,
              'item_name': x.lot.item.name, 'supplier': x.lot.supplier, 'spec_title': str(x.spec), 'inspector': _who(x.inspector),
              'result': x.result, 'result_display': x.get_result_display() or '미판정',

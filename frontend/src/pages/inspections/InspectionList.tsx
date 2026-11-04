@@ -1,11 +1,13 @@
 import { useQuery } from '@tanstack/react-query'
 import { Tag } from 'antd'
 import type { ColumnsType } from 'antd/es/table'
+import { useCallback, useRef, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { api } from '../../api/client'
-import type { InspectionDetail, InspectionRow } from '../../api/inspect'
+import type { InspectionDetail, InspectionRow, InspectionSummary } from '../../api/inspect'
 import { INSPECTION_TYPES, type Page } from '../../api/specs'
 import DataList from '../../components/DataList'
+import Tile from '../../components/Tile'
 import { addRecent } from '../../lib/recent'
 
 const COLOR = { 합격: 'green', 불합격: 'red', 미판정: 'orange' } as const
@@ -21,10 +23,23 @@ const COLUMNS: ColumnsType<InspectionRow> = [
   { title: '부적합', dataIndex: 'nc_number' },
 ]
 
-const fetchPage = (tab: string, q: string, page: number) =>
-  api<Page<InspectionRow>>(`/api/qms/inspections/?tab=${tab}&q=${encodeURIComponent(q)}&page=${page}`)
-
 const exportHref = (tab: string, q: string) => `/api/qms/inspections/?tab=${tab}&q=${encodeURIComponent(q)}&export=xlsx`
+
+// 합격률은 판정된 것만 분모로 센다(미판정 제외).
+function Summary({ s }: { s: InspectionSummary }) {
+  const judged = s.passed + s.failed
+  const tiles = [
+    { title: '전체', tile: { value: s.total, sub: s.pending ? `미판정 ${s.pending}건` : '' } },
+    { title: '합격', tile: { value: s.passed, tone: s.passed ? 'positive' : '' } },
+    { title: '불합격', tile: { value: s.failed, tone: s.failed ? 'negative' : '' } },
+    { title: '합격률', tile: { value: judged ? `${((s.passed / judged) * 100).toFixed(1)}%` : '—', sub: '판정된 검사 기준' } },
+  ]
+  return (
+    <div data-summary style={{ display: 'grid', gap: 12, marginBottom: 16, gridTemplateColumns: 'repeat(auto-fill, minmax(min(160px, 100%), 1fr))' }}>
+      {tiles.map((t) => <Tile key={t.title} title={t.title} tile={t.tile} />)}
+    </div>
+  )
+}
 
 function Peek({ row }: { row: InspectionRow }) {
   const { data } = useQuery({ queryKey: ['inspection', row.id], queryFn: () => api<InspectionDetail>(`/api/qms/inspections/${row.id}/`) })
@@ -55,9 +70,19 @@ export default function InspectionList() {
   const [sp, setSp] = useSearchParams()
   const t = sp.get('tab')
   const tab = INSPECTION_TYPES.some((x) => x.value === t) ? (t as string) : INSPECTION_TYPES[0].value
+  const [summary, setSummary] = useState<InspectionSummary | null>(null)
+  const first = useRef(0) // 늦게 온 이전 탭·검색의 요약이 새 요약을 덮지 않게 한다
+  // 요약은 첫 쪽 응답에 함께 온다(탭·검색 반영).
+  const fetchPage = useCallback(async (tab: string, q: string, page: number) => {
+    const my = page === 1 ? ++first.current : 0
+    const r = await api<Page<InspectionRow> & { summary: InspectionSummary }>(`/api/qms/inspections/?tab=${tab}&q=${encodeURIComponent(q)}&page=${page}`)
+    if (my && my === first.current) setSummary(r.summary)
+    return r
+  }, [])
   return (
     <div>
       <h1 className="page-title">검사 기록</h1>
+      {summary && <Summary s={summary} />}
       <DataList<InspectionRow>
         columns={COLUMNS}
         tabs={INSPECTION_TYPES.map((x) => ({ key: x.value, label: x.label }))}

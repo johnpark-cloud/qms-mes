@@ -344,6 +344,18 @@ try:
             ok = False
         check('검사 목록 탭', ok, page.url)
 
+        try:  # 요약 타일 = API 요약, ?tab 없이도 수입검사 메뉴가 강조된다
+            page.goto('/app/inspections')
+            page.locator('[data-summary]').wait_for(timeout=5000)
+            s = api_get(page, '/api/qms/inspections/?tab=INCOMING')['summary']
+            shown = page.locator('[data-summary]').inner_text()
+            sel = page.locator('.ant-menu-item-selected').inner_text()
+            ok = '합격률' in shown and str(s['total']) in shown and '수입검사' in sel
+            why = f"{s} / 메뉴 {sel!r}"
+        except Exception as e:
+            ok, why = False, str(e)[:80]
+        check('검사 목록 요약·메뉴 강조', ok, why)
+
         try:
             page.goto(f'/app/inspections/{insp_id}/print')
             page.locator('.doc-page').wait_for(timeout=5000)
@@ -368,6 +380,23 @@ try:
         except Exception:
             ok = False
         check('메뉴 → 새 화면', ok, page.url)
+
+        try:  # 즉시 확인(300ms) 전에 판정 → 불량유형 칸을 보여 주고 저장하지 않는다
+            page.goto('/app/inspect')
+            page.get_by_placeholder(scan_ph).fill('E2E-IN-2')
+            page.keyboard.press('Enter')
+            page.get_by_role('button', name='수입검사').click()
+            page.locator('.ant-select').first.click()
+            page.locator('.ant-select-item-option', has_text='E2E-G1').click()
+            page.locator('tbody tr', has_text='외관').get_by_role('button', name='OK', exact=True).click()
+            page.locator('tbody tr', has_text='두께').locator('input').fill('11')
+            page.get_by_role('button', name='판정').click()
+            page.get_by_text('불합격 항목이 있습니다').wait_for(timeout=5000)
+            n = api_get(page, '/api/qms/inspections/?tab=INCOMING&q=E2E-IN-2')['count']
+            ok = n == 0 and page.get_by_placeholder('불량유형').count() + page.get_by_text('불량유형').count() > 0
+        except Exception as e:
+            ok, n = False, str(e)[:80]
+        check('바로 판정 → 불량유형 먼저', ok, f'{n}')
 
         # 세션이 끊기면 API를 부르는 화면이 로그인으로 보내야 한다 (client.ts 의 403 처리)
         page.context.clear_cookies()

@@ -70,7 +70,7 @@ export default function DataList<T extends object>({ columns, tabs, fetchPage, e
   return (
     <div>
       <Tabs activeKey={tab} onChange={(k) => {
-          setTab(k)
+          if (tabProp === undefined) setTab(k) // 주소로 탭을 정하면 부모가 바꾼다
           onTab?.(k)
         }} items={tabs} />
       <Space style={{ marginBottom: 12 }} wrap>

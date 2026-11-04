@@ -1,4 +1,4 @@
-import { Alert, Button, Input, Select, Space, Table, Tag } from 'antd'
+import { Alert, Button, Input, Popconfirm, Select, Space, Table, Tag } from 'antd'
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
@@ -101,6 +101,18 @@ export default function MeasurePage() {
     setSaving(true)
     setErr('')
     try {
+      // 즉시 확인 응답 전에 눌렀으면 한 번 더 확인한다. 불합격인데 불량유형 칸을 못 봤으면 보여 주고 멈춘다.
+      if (!failed) {
+        const filled = Object.fromEntries(Object.entries(values).filter(([, v]) => v.trim()))
+        const r = Object.keys(filled).length ? await checkValues(spec, filled).catch(() => null) : null
+        if (r && Object.values(r.results).some((v) => v === false)) {
+          const mine = ++seq.current
+          Object.keys(filled).forEach((k) => (last.current[k] = mine))
+          setResults((p) => ({ ...p, ...r.results }))
+          setErr('불합격 항목이 있습니다. 불량유형을 고른 뒤 다시 판정하세요.')
+          return
+        }
+      }
       setDone(
         await submitInspection({
           lot,
@@ -126,6 +138,7 @@ export default function MeasurePage() {
         <b>{f.lot.number}</b> · {f.lot.item_code} {f.lot.item_name} · {f.spec.title} · 샘플링 {f.spec.sampling}
         {f.lot.on_hold && <Tag color="red" style={{ marginLeft: 8 }}>보류</Tag>}
       </p>
+      {f.done && <Alert type="warning" style={{ marginBottom: 12 }} message="이미 검사한 LOT입니다. 판정하면 재검사로 1건 더 등록됩니다." />}
       {hasVariable && (
         <div style={{ margin: '12px 0', maxWidth: 360 }}>
           <Select
@@ -191,9 +204,17 @@ export default function MeasurePage() {
       )}
       {err && <Alert style={{ marginTop: 16 }} type="error" message={err} role="alert" />}
       <div style={{ marginTop: 16 }}>
-        <Button ref={judge} type="primary" loading={saving} onClick={() => void submit()}>
-          판정
-        </Button>
+        {f.done ? (
+          <Popconfirm title="재검사로 판정할까요?" okText="판정" cancelText="취소" onConfirm={() => void submit()}>
+            <Button ref={judge} type="primary" loading={saving}>
+              판정
+            </Button>
+          </Popconfirm>
+        ) : (
+          <Button ref={judge} type="primary" loading={saving} onClick={() => void submit()}>
+            판정
+          </Button>
+        )}
       </div>
     </div>
   )

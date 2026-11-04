@@ -52,7 +52,8 @@ export default function AppLayout() {
       children: g.items.map((i) => ({ key: to(i.href), label: i.label })),
     })),
   ]
-  const selected = '/app' + pathname + (pathname === '/inspections' ? search : '')
+  // 검사 목록은 탭마다 메뉴가 따로 있다. ?tab 이 없으면 화면처럼 수입검사로 본다.
+  const selected = '/app' + pathname + (pathname === '/inspections' ? `?tab=${new URLSearchParams(search).get('tab') || 'INCOMING'}` : '')
   const open = user.nav.filter((g) => g.items.some((i) => to(i.href) === selected)).map((g) => g.group)
 
   return (
