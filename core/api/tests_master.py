@@ -96,3 +96,63 @@ class ItemApiTest(TestCase):
         r = self.put(self.fin, bom=[{'component': self.raw.pk, 'qty': '1'}])
         self.assertEqual(r.status_code, 403)
         self.assertEqual(BomLine.objects.count(), 0)
+
+
+
+class ProcessApiTest(TestCase):
+    URL = '/api/core/processes/'
+
+    def setUp(self):
+        self.client = APIClient()
+        self.boss = User.objects.create_superuser('boss', password='x')
+        self.user = User.objects.create_user('u', password='x', is_staff=True)
+        grant(self.user, 'view_process', 'add_process', 'change_process', 'delete_process')
+
+    def put(self, rows, version=None):
+        if version is None:
+            version = self.client.get(self.URL).json()['version']
+        return self.client.put(self.URL, {'rows': rows, 'version': version}, format='json')
+
+    def test_add_edit(self):
+        self.client.force_login(self.user)
+        r = self.put([{'code': 'P1', 'name': '코팅'}, {'code': 'P2', 'name': '조립'}])
+        self.assertEqual(r.status_code, 200)
+        d = r.json()
+        self.assertEqual([x['code'] for x in d['rows']], ['P1', 'P2'])
+        self.assertTrue(d['editable'])
+        self.assertFalse(d['can_delete'])
+        old = d['version']
+        self.put([{'id': d['rows'][0]['id'], 'code': 'P1', 'name': '도포'}], old)
+        self.assertEqual(Process.objects.get(code='P1').name, '도포')
+        self.assertEqual(self.put([{'code': 'P3', 'name': 'x'}], old).status_code, 409)
+        self.assertFalse(Process.objects.filter(code='P3').exists())
+
+    def test_delete_superuser_only(self):
+        p = Process.objects.create(code='P1', name='코팅')
+        self.client.force_login(self.user)
+        r = self.put([{'id': p.pk, 'delete': True}, {'code': 'P9', 'name': 'x'}])
+        self.assertEqual(r.status_code, 403)
+        self.assertTrue(Process.objects.filter(pk=p.pk).exists())
+        self.assertFalse(Process.objects.filter(code='P9').exists())
+        self.client.force_login(self.boss)
+        self.assertEqual(self.put([{'id': p.pk, 'delete': True}]).status_code, 200)
+        self.assertFalse(Process.objects.filter(pk=p.pk).exists())
+
+    def test_delete_used_process(self):
+        p = Process.objects.create(code='P1', name='코팅')
+        item = Item.objects.create(code='F', name='셀', item_type=Item.FINISHED)
+        RoutingStep.objects.create(item=item, seq=1, process=p)
+        self.client.force_login(self.boss)
+        self.assertEqual(self.put([{'id': p.pk, 'delete': True}]).status_code, 409)
+        self.assertTrue(Process.objects.filter(pk=p.pk).exists())
+
+    def test_permissions_and_export(self):
+        Process.objects.create(code='P1', name='코팅')
+        nobody = User.objects.create_user('n', password='x', is_staff=True)
+        self.client.force_login(nobody)
+        self.assertEqual(self.client.get(self.URL).status_code, 403)
+        self.assertEqual(self.client.put(self.URL, {'rows': []}, format='json').status_code, 403)
+        self.client.force_login(self.boss)
+        r = self.client.get(self.URL + '?export=xlsx')
+        ws = load_workbook(io.BytesIO(r.content)).active
+        self.assertEqual([c.value for c in ws[1]], ['공정 코드', '공정명'])

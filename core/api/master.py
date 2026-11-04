@@ -6,7 +6,8 @@ from rest_framework.views import APIView
 from core.api.permissions import require_perm
 from core.export import table_xlsx, xlsx_response
 from core.models import Item, Process
-from core.rules import Stale, item_version, save_item
+from core.grid import table_version
+from core.rules import Stale, item_version, save_item, save_table
 
 PAGE_SIZE = 50
 LIST_COLUMNS = ['품번', '품명', '구분', 'BOM 수', '라우팅 수']
@@ -106,3 +107,45 @@ class ItemDetailView(APIView):
         except Stale as e:
             return Response({'detail': str(e)}, status=409)
         return Response(_detail(item, request.user))
+
+
+class TableView(APIView):
+    """모델 전체를 한 표로 읽고 저장하는 화면(공정·고객사별 기한). 하위 클래스가 model·fields·unique·열을 정한다."""
+    schema = None
+    model = fields = unique = columns = filename = sheet = None
+
+    def _out(self, user):
+        app, name = self.model._meta.app_label, self.model._meta.model_name
+        return {'version': table_version(self.model),
+                'editable': user.has_perm(f'{app}.add_{name}') or user.has_perm(f'{app}.change_{name}'),
+                'can_delete': user.is_superuser,
+                'rows': [{'id': o.pk, **{f: getattr(o, f) for f in self.fields}}
+                         for o in self.model.objects.order_by(self.unique[0])]}
+
+    def get(self, request):
+        require_perm(request.user, f'{self.model._meta.app_label}.view_{self.model._meta.model_name}')
+        out = self._out(request.user)
+        if request.query_params.get('export') == 'xlsx':
+            rows = [[r[f] for f in self.fields] for r in out['rows']]
+            return xlsx_response(table_xlsx(self.sheet, self.columns, rows), self.filename)
+        return Response(out)
+
+    def put(self, request):
+        require_perm(request.user, f'{self.model._meta.app_label}.view_{self.model._meta.model_name}')
+        d = request.data
+        if not isinstance(d, dict):
+            return _bad(BAD_BODY)
+        rows = d.get('rows')
+        if not isinstance(rows, list) or not all(isinstance(r, dict) for r in rows):
+            return _bad('목록이어야 합니다.', 'rows')
+        try:
+            save_table(self.model, request.user, rows, self.fields, self.unique, d.get('version'))
+        except Stale as e:
+            return Response({'detail': str(e)}, status=409)
+        return Response(self._out(request.user))
+
+
+class ProcessTableView(TableView):
+    model, unique, sheet, filename = Process, ('code',), '공정', '공정.xlsx'
+    fields = {'code': 'text', 'name': 'text'}
+    columns = ['공정 코드', '공정명']

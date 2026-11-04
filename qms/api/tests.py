@@ -642,3 +642,21 @@ class InspectionApiTest(TestCase):
         r = self.c().get('/api/qms/inspections/999999/')
         self.assertEqual((r.status_code, r.json()['detail']), (404, '찾을 수 없습니다.'))
         self.assertEqual(self.c().get('/api/qms/inspections/999999/document/').status_code, 404)
+
+
+
+class CustomerRuleApiTest(TestCase):
+    URL = '/api/qms/customer-rules/'
+
+    def test_save_and_export(self):
+        c = APIClient()
+        c.force_login(User.objects.create_superuser('boss', password='x'))
+        v = c.get(self.URL).json()['version']
+        r = c.put(self.URL, {'version': v, 'rows': [{'customer': 'A사', 'containment_hours': '하루', 'corrective_days': 10}]}, format='json')
+        self.assertEqual(r.status_code, 400)
+        self.assertIn('rows.0.containment_hours', r.json()['fields'])
+        r = c.put(self.URL, {'version': v, 'rows': [{'customer': 'A사', 'containment_hours': 12, 'corrective_days': 7}]}, format='json')
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.json()['rows'][0]['containment_hours'], 12)
+        ws = load_workbook(BytesIO(c.get(self.URL + '?export=xlsx').content)).active
+        self.assertEqual([x.value for x in ws[1]], ['고객사', '봉쇄(D3) 기한(시간)', '대책(D5) 기한(일)'])

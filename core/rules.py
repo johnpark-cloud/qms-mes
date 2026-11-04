@@ -4,7 +4,7 @@ from django.contrib.contenttypes.models import ContentType
 from django.db import IntegrityError, transaction
 from django.utils import timezone
 
-from .grid import collect_rows, record_version
+from .grid import collect_rows, record_version, table_version
 from .models import BomLine, Nonconformance, RevisionLog, RoutingStep, is_approver
 from .records import can_edit_locked, delete_record, edit_unlocked, is_locked
 
@@ -234,3 +234,28 @@ def save_item(item, user, data, bom, routing, version):
             except IntegrityError:
                 raise ValidationError({key: [msg]})
     return item
+
+
+def save_table(model, user, rows, fields, unique, version):
+    """모델 전체를 한 표로 저장한다(공정·고객사별 기한). 오류 키는 rows.{줄}.{칸}. 하나라도 잘못이면 아무것도 바꾸지 않는다."""
+    name = model._meta.model_name
+    with transaction.atomic():
+        new, chg, dele, errors = collect_rows(
+            rows, {o.pk: o for o in model.objects.all()}, model, fields, 'rows', unique=unique)
+        perms = ['add_' + name] * bool(new) + ['change_' + name] * bool(chg)
+        if not all(user.has_perm(f'{model._meta.app_label}.{p}') for p in perms):
+            raise PermissionDenied('이 작업을 할 권한이 없습니다.')
+        if dele and not user.is_superuser:
+            raise PermissionDenied('시스템 관리자만 삭제할 수 있습니다.')
+        if version is not None and version != table_version(model):
+            raise Stale()
+        if errors:
+            raise ValidationError(errors)
+        for o in dele:
+            delete_as(o, user)
+        try:
+            with transaction.atomic():
+                for o in chg + new:
+                    o.save()
+        except IntegrityError:
+            raise ValidationError({'rows': ['같은 값이 이미 있습니다. 값을 맞바꿀 때는 두 번에 나눠 저장하세요.']})

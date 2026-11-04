@@ -3,6 +3,8 @@ import logging
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from core.api.master import TableView
+from qms.models import CustomerRule
 from qms.overview import sections
 from qms.widgets import WIDGETS, layout_for, save_layout, todo_items, valid_layout, widget_data
 
@@ -41,3 +43,9 @@ class DashboardSaveView(APIView):
             return Response({'detail': '저장할 수 없는 위젯 배치입니다.'}, status=400)
         save_layout(request.user, request.data)
         return Response({'ok': True})
+
+
+class CustomerRuleTableView(TableView):
+    model, unique, sheet, filename = CustomerRule, ('customer',), '고객사별 8D 기한', '고객사별 8D 기한.xlsx'
+    fields = {'customer': 'text', 'containment_hours': 'int', 'corrective_days': 'int'}
+    columns = ['고객사', '봉쇄(D3) 기한(시간)', '대책(D5) 기한(일)']

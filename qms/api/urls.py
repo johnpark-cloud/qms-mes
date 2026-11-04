@@ -4,6 +4,7 @@ from . import inspections, specs, views
 
 urlpatterns = [
     path('overview/', views.OverviewView.as_view()),
+    path('customer-rules/', views.CustomerRuleTableView.as_view()),
     path('todo/', views.TodoView.as_view()),
     path('dashboard/', views.DashboardSaveView.as_view()),
     path('specs/', specs.SpecListView.as_view()),

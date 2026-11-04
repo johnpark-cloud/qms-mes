@@ -13,6 +13,7 @@ urlpatterns = [
     path('items/', views.ItemLookupView.as_view()),
     path('core/items/', master.ItemListView.as_view()),
     path('core/items/<int:pk>/', master.ItemDetailView.as_view()),
+    path('core/processes/', master.ProcessTableView.as_view()),
     path('revision-log/<int:pk>/approve/', views.RevisionLogApproveView.as_view()),
     path('audit-log/', views.AuditLogView.as_view()),
     path('qms/', include('qms.api.urls')),
