@@ -9,7 +9,7 @@ from django.utils import timezone
 
 from core.models import Item, Lot, RevisionLog
 from core.rules import Locked, request_revision_log
-from qms.models import Characteristic, ControlPlan, ControlPlanLine, Inspection, InspectionSpec, Qualification
+from qms.models import Characteristic, ControlPlan, ControlPlanLine, Gauge, Inspection, InspectionSpec, Qualification
 from qms.rules import (RECEIVE_MSG, Stale, compare_specs, diff_text, measurement, new_spec_revision, open_or_new_revision,
                        receive_lot, save_spec, spec_logs, spec_version, submit_inspection)
 
@@ -37,6 +37,13 @@ class InspectionRulesTest(TestCase):
         self.assertEqual(insp.nonconformance.defect_type, '치수')
         self.assertEqual(insp.nonconformance.defect_qty, 0)
         self.assertTrue(self.lot.on_hold)
+
+    def test_gauge_required_once_registered(self):
+        g = Gauge.objects.create(number='G-1', name='마이크로미터', last_calibrated=timezone.localdate())
+        with self.assertRaisesMessage(ValidationError, '계측기를 골라야 합니다'):
+            submit_inspection(self.lot, self.spec, self.user, None, {self.char.pk: '10'})
+        self.assertFalse(Inspection.objects.exists())
+        self.assertEqual(submit_inspection(self.lot, self.spec, self.user, g, {self.char.pk: '10'}).result, Inspection.PASS)
 
     def test_missing_value_rolls_back(self):
         with self.assertRaisesMessage(ValidationError, '값을 입력하세요'):

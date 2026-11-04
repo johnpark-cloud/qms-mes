@@ -185,7 +185,7 @@ try:
         'characteristics-0-lsl': '95', 'characteristics-0-usl': '105', 'characteristics-0-special': 'CC'})
     check('셀 출하검사 기준 등록', s == 302, errors(html))
     post('/approve/qms/inspectionspec/2/', {'password': 'e2e-pass-123'})
-    s, html = post_only('/inspect/3/2/submit/', {'c2': '100'})
+    s, html = post_only('/inspect/3/2/submit/', {'c2': '100', 'gauge': 2})  # 계측기를 등록했으므로 계량형은 계측기 필수
     check('CELL-Z 초품 검사 합격', 'CELL-Z 합격' in html, html[:200])
     s, html = post('/admin/core/shipment/add/', {'lot': 3, 'customer': 'A사', 'qty': 1, **dt('shipped_at')})
     check('초품 합격 후 CELL-Z 출하 가능', s == 302, errors(html))

@@ -443,7 +443,11 @@ class InspectApiTest(TestCase):
         self.assertEqual(d['characteristics'][1]['spec_text'], 'OK/NG')
         self.assertIn('치수', d['defect_types'])
         self.assertFalse(d['done'])
-        self.assertTrue(self.c().get(f'/api/qms/inspect/form/{self.q2.pk}/{self.spec.pk}/').json()['done'])
+        r = self.c().get(f'/api/qms/inspect/form/{self.q2.pk}/{self.spec.pk}/')  # 합격한 LOT은 재검사 화면을 열지 않는다
+        self.assertEqual(r.status_code, 400)
+        self.assertIn('재검사는 처분 전인 부적합이 있을 때', r.json()['detail'])
+        submit_inspection(self.q1, self.spec, self.user, self.gauge, {self.thk.pk: '12', self.look.pk: 'OK'}, '치수', '1')
+        self.assertTrue(self.c().get(f'/api/qms/inspect/form/{self.q1.pk}/{self.spec.pk}/').json()['done'])
         draft = new_spec_revision(self.spec)
         self.assertEqual(self.c().get(f'/api/qms/inspect/form/{self.q1.pk}/{draft.pk}/').status_code, 404)
 

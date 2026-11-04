@@ -70,6 +70,7 @@
 | 불합격이면 부적합을 자동 생성한다(→ 계보 보류). | `Inspection.finalize` |
 | 판정된 검사와 그 측정값은 수정할 수 없다. | `Inspection.save`, `Measurement.clean` |
 | 검사원 자격: 그 검사구분에 자격 기록이 하나라도 있으면, 유효기한 안의 자격자만 판정할 수 있다. | `Inspection.finalize` |
+| 같은 LOT·같은 검사구분에 판정된 검사가 있으면 새 검사를 만들 수 없다. 처분 전인 부적합(`closed_at` 없음)이 있을 때만 재검사(재작업·수리 후)를 허용한다. 판정 전 검사는 세지 않는다. | `Inspection.clean` |
 | 검사 입력 화면의 "판정"은 전부 저장되거나 아무것도 저장되지 않는다. | `qms/rules.py` `submit_inspection`(뷰 `inspect_submit`이 호출), `Inspection.finalize`(`transaction.atomic`) |
 
 ## 6. 계측기 교정
@@ -78,6 +79,7 @@
 | --- | --- |
 | 다음 교정일 = 최근 교정일 + 교정 주기(일). | `Gauge.next_due` |
 | 측정값에 계측기를 적으면, 검사일이 다음 교정일을 지났거나 사용 중지된 계측기는 거부한다. | `Gauge.usable_on`, `Measurement.clean` |
+| 계측기를 하나라도 등록한 뒤부터, 검사 입력 화면(기존·React)의 판정은 계량형 항목이 있으면 계측기를 골라야 한다. 설비 수집(`collect`)과 관리 화면 입력은 제외. | `qms/rules.py` `submit_inspection` |
 | 교정 14일 전부터 내 할 일·알림에 표시한다. | `qms/due.py` |
 
 측정값 입력(검사 입력 화면, `collect` 자동 수집)은 NaN·무한대 값을 거부한다. `collect`는 읽을 수 없는 CSV를 `error/` 폴더로 옮기고 다음 파일을 계속 처리한다(`qms/rules.py` `measurement`, `qms/management/commands/collect.py`).

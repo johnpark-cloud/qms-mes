@@ -195,6 +195,12 @@ class Inspection(models.Model):
             current = InspectionSpec.current(self.lot.item, self.spec.inspection_type)
             if current != self.spec:
                 raise ValidationError(f'{self.spec}은(는) 유효본이 아닙니다. 승인된 최신 개정({current})으로 검사하세요.')
+            # 재검사는 처분 전 부적합(재작업·수리 대기)이 있을 때만. 처분은 재검사 합격 뒤에 입력한다 (Nonconformance.clean)
+            # shortcut: 두 판정이 동시에 들어오면 둘 다 통과할 수 있다(확인 후 저장), 여러 단말 동시 판정이 생기면 잠금 추가
+            done = Inspection.objects.filter(lot_id=self.lot_id, spec__inspection_type=self.spec.inspection_type).exclude(result='')
+            if done.exists() and not self.lot.nonconformances.filter(closed_at__isnull=True).exists():
+                raise ValidationError(f'{self.lot}은(는) 이미 {self.spec.get_inspection_type_display()}를 했습니다. '
+                                      '재검사는 처분 전인 부적합이 있을 때(재작업·수리 후)만 할 수 있습니다.')
 
     def save(self, *args, **kwargs):
         if self.pk and Inspection.objects.filter(pk=self.pk).exclude(result='').exists() and not getattr(self, '_finalizing', False):

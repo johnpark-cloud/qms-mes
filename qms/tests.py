@@ -56,6 +56,9 @@ class QmsTest(TestCase):
         self.look = Characteristic.objects.create(spec=self.spec, name='외관')
         approve(self.spec, self.lead)
 
+    def new_lot(self):
+        return Lot.objects.create(number=f'RAW-N{Lot.objects.count()}', item=self.raw_item)
+
     def inspect(self, thk, look=True, lot=None, at=None):
         insp = Inspection.objects.create(lot=lot or self.raw, spec=self.spec, **({'inspected_at': at} if at else {}))
         Measurement.objects.create(inspection=insp, characteristic=self.thk, value=Decimal(thk))
@@ -70,6 +73,21 @@ class QmsTest(TestCase):
             Inspection.objects.create(lot=self.raw, spec=draft)
         self.assertEqual(InspectionSpec.current(self.raw_item, InspectionSpec.INCOMING), self.spec)
 
+    def test_reinspection_only_while_nc_open(self):
+        self.inspect('10.0')
+        with self.assertRaisesMessage(ValidationError, '재검사는 처분 전인 부적합이 있을 때'):
+            Inspection.objects.create(lot=self.raw, spec=self.spec)
+        lot = self.new_lot()
+        nc = self.inspect('11', lot=lot).nonconformance
+        again = self.inspect('10.0', lot=lot, at=timezone.now() + datetime.timedelta(minutes=1))  # 재작업 후 재검사
+        self.assertEqual(again.result, Inspection.PASS)
+        nc.disposition, nc.approved_by = Nonconformance.REWORK, self.lead
+        nc.save()
+        with self.assertRaisesMessage(ValidationError, '재검사는 처분 전인 부적합이 있을 때'):
+            Inspection.objects.create(lot=lot, spec=self.spec)
+        pending = Inspection.objects.create(lot=self.new_lot(), spec=self.spec)  # 판정 전 검사는 세지 않는다
+        Inspection.objects.create(lot=pending.lot, spec=self.spec)
+
     def test_superseded_spec_rejected(self):
         pending = Inspection.objects.create(lot=self.raw, spec=self.spec)  # Rev.2 승인 전에 시작한 검사
         Measurement.objects.create(inspection=pending, characteristic=self.thk, value=Decimal('10.0'))
@@ -81,7 +99,7 @@ class QmsTest(TestCase):
             Inspection.objects.create(lot=self.raw, spec=self.spec)
         pending.finalize()  # 이미 만든 검사는 그대로 판정된다
         self.assertEqual(pending.result, Inspection.PASS)
-        Inspection.objects.create(lot=self.raw, spec=rev2)
+        Inspection.objects.create(lot=self.new_lot(), spec=rev2)
 
     def test_approved_spec_locked(self):
         self.spec.sampling = '바꿈'
@@ -154,14 +172,14 @@ class QmsTest(TestCase):
         cc = Characteristic.objects.create(spec=spec, name='용량', lsl=0, usl=100, special='CC')
         approve(spec, self.lead)
 
-        def run(v):
-            insp = Inspection.objects.create(lot=self.raw, spec=spec)
+        def run(v, lot=None):
+            insp = Inspection.objects.create(lot=lot or self.new_lot(), spec=spec)
             Measurement.objects.create(inspection=insp, characteristic=cc, value=Decimal(v))
             insp.finalize()
             return insp
         for v in ('50', '50.5', '49.5', '50.2', '49.8', '50'):
             self.assertIsNone(run(v).nonconformance)
-        insp = run('70')  # 규격 안이지만 관리한계 밖
+        insp = run('70', self.raw)  # 규격 안이지만 관리한계 밖
         self.assertEqual(insp.result, Inspection.PASS)
         self.assertIn('SPC 경보', insp.nonconformance.description)
         self.assertTrue(self.cell.on_hold)
@@ -173,7 +191,7 @@ class QmsTest(TestCase):
         approve(spec, self.lead)
         gauge = Gauge.objects.create(number='G-SPC', name='저울', last_calibrated=timezone.localdate())
         for v in ('50', '50.5', '49.5', '50.2', '49.8', '50'):
-            insp = Inspection.objects.create(lot=self.raw, spec=spec)
+            insp = Inspection.objects.create(lot=self.new_lot(), spec=spec)
             Measurement.objects.create(inspection=insp, characteristic=cc, value=Decimal(v))
             insp.finalize()
         insp = submit_inspection(self.raw, spec, self.lead, gauge, {cc.pk: '70'}, '', '1')  # 화면은 합격이어도 수량 1을 보낸다
@@ -187,7 +205,7 @@ class QmsTest(TestCase):
         approve(spec, self.lead)
 
         def run(*values):
-            insp = Inspection.objects.create(lot=self.raw, spec=spec)
+            insp = Inspection.objects.create(lot=self.new_lot(), spec=spec)
             for v in values:
                 Measurement.objects.create(inspection=insp, characteristic=cc, value=Decimal(v))
             insp.finalize()
@@ -199,7 +217,7 @@ class QmsTest(TestCase):
         self.assertIn('SPC 경보', insp.nonconformance.description)
 
     def test_spc_series_latest_subgroups(self):
-        a, b, c = (self.inspect(v) for v in ('9.9', '10.0', '10.1'))
+        a, b, c = (self.inspect(v, lot=self.new_lot()) for v in ('9.9', '10.0', '10.1'))
         with self.assertNumQueries(2):
             self.assertEqual(self.thk.spc_series(), [(a, [Decimal('9.9')]), (b, [Decimal('10.0')]), (c, [Decimal('10.1')])])
         self.assertEqual(self.thk.spc_series(limit=2), [(b, [Decimal('10.0')]), (c, [Decimal('10.1')])])
@@ -216,7 +234,7 @@ class QmsTest(TestCase):
         Measurement.objects.create(inspection=insp, characteristic=self.thk, value=10, gauge=g)
 
     def test_qualification_enforced_once_registered(self):
-        self.inspect('10.0')  # 자격 기록이 없으면 누구나 판정
+        self.inspect('10.0', lot=self.new_lot())  # 자격 기록이 없으면 누구나 판정
         Qualification.objects.create(user=self.lead, inspection_type=InspectionSpec.INCOMING,
                                      valid_until=timezone.localdate() + datetime.timedelta(days=30), basis='교육')
         insp = Inspection.objects.create(lot=self.raw, spec=self.spec)
@@ -414,8 +432,10 @@ class QmsTest(TestCase):
     def test_collect_csv(self):
         path = Path(tempfile.mkdtemp()) / 'm.csv'
         path.write_text('lot,type,characteristic,value\nRAW-1,수입검사,두께,10.1\nRAW-1,수입검사,외관,OK\n', encoding='utf-8')
-        self.assertEqual(ingest(path), ['RAW-1 합격'])
-        path.write_text('lot,type,characteristic,value\nRAW-1,수입검사,없는항목,1\n', encoding='utf-8')
+        Gauge.objects.create(number='G-IN', name='설비', last_calibrated=timezone.localdate())
+        self.assertEqual(ingest(path), ['RAW-1 합격'])  # 설비 수집은 계측기 없이 받는다
+        n = self.new_lot().number
+        path.write_text(f'lot,type,characteristic,value\n{n},수입검사,없는항목,1\n', encoding='utf-8')
         with self.assertRaises(ValueError):
             ingest(path)
 
@@ -752,7 +772,7 @@ class QmsTest(TestCase):
 
     def test_pages_render(self):
         for v in ('9.9', '10.0', '10.1'):
-            self.inspect(v)
+            self.inspect(v, lot=self.new_lot())
         claim = CustomerClaim.objects.create(number='CL-2', customer='A사', lot=self.cell, description='x',
                                              received_at=timezone.now() - datetime.timedelta(days=3))
         self.client.force_login(User.objects.create_superuser('admin', password='x'))

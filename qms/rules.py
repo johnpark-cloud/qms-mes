@@ -9,7 +9,7 @@ from django.db.models import Max
 from core.models import Lot, RevisionLog
 from core.rules import LOCKED_MSG, Locked, child_editable, save_with_lock
 
-from .models import Characteristic, Inspection, InspectionSpec, Measurement
+from .models import Characteristic, Gauge, Inspection, InspectionSpec, Measurement
 
 RECEIVE_MSG = '품목·LOT 번호·입고수량(0보다 큰 숫자)을 모두 입력하세요.'
 
@@ -36,6 +36,9 @@ def _qty(raw):
 def submit_inspection(lot, spec, user, gauge, values, defect_type='', defect_qty=None):
     """판정: 검사·측정값을 만들고 finalize()로 판정한다. 하나라도 거부되면 전부 되돌린다.
     values는 {Characteristic.pk: 입력 문자열}. 실패하면 ValidationError."""
+    # 사람이 재는 판정에만 계측기를 강제한다(설비 수집 collect·관리 화면 소급 입력은 제외). 계측기를 등록한 뒤부터 (자격과 같은 점진 도입)
+    if gauge is None and Gauge.objects.exists() and any(c.is_variable for c in spec.characteristics.all()):
+        raise ValidationError('계량형 항목이 있으면 계측기를 골라야 합니다.')
     with transaction.atomic():
         insp = Inspection.objects.create(lot=lot, spec=spec, inspector=user)
         for char in spec.characteristics.all():
