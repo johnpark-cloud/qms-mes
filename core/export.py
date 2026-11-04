@@ -7,6 +7,7 @@ from django.utils.http import content_disposition_header
 from openpyxl import Workbook
 from openpyxl.cell.cell import ILLEGAL_CHARACTERS_RE
 from openpyxl.styles import Alignment, Border, Font, Side
+from openpyxl.utils import get_column_letter
 
 DRAFT_MARK = '초안 — 승인 전'
 XLSX = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
@@ -74,8 +75,8 @@ def document_xlsx(doc):
                                                       r['approved_at']] for r in doc['revisions']]) + 1
     s = doc['signoff']
     _grid(ws, row, ['구분', '이름', '일자'], [['작성', s['written_by'], s['written_at']], ['승인', s['approved_by'], s['approved_at']]])
-    for col in 'ABCDEF':
-        ws.column_dimensions[col].width = 18
+    for col in range(1, max(6, ws.max_column) + 1):
+        ws.column_dimensions[get_column_letter(col)].width = 18
     return _save(ws, wb, 'landscape' if doc.get('landscape') else 'portrait')
 
 

@@ -39,7 +39,7 @@ def _set(obj, f, kind, v):
             except (ValueError, TypeError):
                 return '정수를 입력하세요.'
     else:
-        setattr(obj, f, '' if v is None else v)
+        setattr(obj, f, '' if v is None else v.strip() if isinstance(v, str) else v)
 
 
 def collect_rows(rows, own, make, fields, prefix, exclude=(), unique=()):
@@ -80,8 +80,10 @@ def collect_rows(rows, own, make, fields, prefix, exclude=(), unique=()):
         seen = set()
         for i, row, obj in kept:
             v = getattr(obj, f'{f}_id' if fields.get(f) == 'fk' else f)
+            if v is None:
+                continue
             if v in seen:
-                errors[f'{prefix}.{i}.{f}'] = ['같은 값이 두 번 있습니다.']
+                errors.setdefault(f'{prefix}.{i}.{f}', ['같은 값이 두 번 있습니다.'])
             seen.add(v)
     return new, changed, deleted, errors
 

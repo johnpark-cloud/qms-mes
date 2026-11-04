@@ -5,7 +5,6 @@ from django.contrib import admin, messages
 from django.contrib.contenttypes.models import ContentType
 from django.core.exceptions import ValidationError
 from django.db import transaction
-from django.db.models import Max
 from django.shortcuts import redirect
 from django.urls import reverse
 from django.utils import timezone

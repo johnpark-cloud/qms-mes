@@ -5,6 +5,7 @@ from django.contrib.auth.models import Group, User
 from django.core.exceptions import ValidationError
 from django.test import TestCase
 from openpyxl import load_workbook
+from openpyxl.utils import get_column_letter
 from rest_framework.test import APIClient
 
 from core.export import DRAFT_MARK
@@ -134,6 +135,35 @@ class PlanApiTest(TestCase):
         self.assertEqual(by['두께']['status'], 'added')
         self.assertIn('항목 추가:', plan_diff_text(diff))
         self.assertEqual(plan_diff_text(None), '최초 제정')
+
+    def test_document_xlsx_widths_all_columns(self):
+        plan = self.mkplan(approved=True)
+        ws = load_workbook(BytesIO(self.c(self.eng).get(f'/api/qms/plans/{plan.pk}/document/?export=xlsx').content)).active
+        self.assertGreater(ws.max_column, 6)
+        self.assertEqual(ws.column_dimensions[get_column_letter(ws.max_column)].width, 18)
+
+    def test_make_specs_only_current_revision(self):
+        old = self.mkplan(approved=True)
+        new = ControlPlan.objects.create(item=self.item, revision=2)
+        self.approve(new)
+        self.assertTrue(self.c(self.lead).get(f'/api/qms/plans/{new.pk}/').json()['can_make_specs'])
+        self.assertFalse(self.c(self.lead).get(f'/api/qms/plans/{old.pk}/').json()['can_make_specs'])
+        r = self.c(self.lead).post(f'/api/qms/plans/{old.pk}/make-specs/')
+        self.assertEqual(r.status_code, 400)
+        self.assertIn('최신 승인 개정', r.json()['detail'] if 'detail' in r.json() else str(r.json()))
+
+    def test_compare_plans_duplicate_keys(self):
+        def mk(rev, usl):
+            plan = ControlPlan.objects.create(item=self.item, revision=rev)
+            ControlPlanLine.objects.create(plan=plan, process=self.p1, characteristic='외경', usl=10)
+            ControlPlanLine.objects.create(plan=plan, process=self.p1, characteristic='외경', usl=usl)
+            return plan
+        rows = compare_plans(mk(1, 20), mk(2, 25))['rows']
+        self.assertEqual([(r['status'], r['cells']) for r in rows], [('changed', ['usl'])])
+
+    def test_bad_digit_input_is_400(self):
+        r = self.c(self.eng).post('/api/qms/plans/', {'item': '²', 'stage': 'PRODUCTION'}, format='json')
+        self.assertEqual(r.status_code, 400)
 
     def test_admin_make_specs_midway_failure_rolls_back(self):
         a = self.mkplan(approved=True)

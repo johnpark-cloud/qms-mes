@@ -176,6 +176,10 @@ class ImportApiTest(TestCase):
         return self.client.post('/api/core/import/', {'profile': self.profile.pk, 'file': self.file(text), 'commit': commit},
                                 format='multipart')
 
+    def test_non_ascii_digit_profile_is_400(self):
+        r = self.client.post('/api/core/import/', {'profile': '²', 'file': self.file(), 'commit': '0'}, format='multipart')
+        self.assertEqual(r.status_code, 400)
+
     def test_preview_writes_nothing(self):
         r = self.post('0')
         self.assertEqual(r.status_code, 200)

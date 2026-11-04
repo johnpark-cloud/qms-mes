@@ -48,6 +48,11 @@ def _line(ln):
     return d
 
 
+def _is_current(plan):
+    cur = current_plan(plan.item, plan.stage)
+    return bool(plan.approved_at and cur and cur.pk == plan.pk)
+
+
 def _detail(plan, user):
     plan = ControlPlan.objects.select_related('item', 'approved_by').get(pk=plan.pk)
     prev = prev_plan(plan)
@@ -58,7 +63,7 @@ def _detail(plan, user):
         'editable': bool((not is_locked(plan) or edit_unlocked(plan, user)) and user.has_perm('qms.change_controlplan')),
         'can_approve': bool(is_approver(user) and not plan.approved_at),
         'can_delete_rows': user.has_perm('qms.delete_controlplanline'),
-        'can_make_specs': bool(plan.approved_at and user.has_perm('qms.add_inspectionspec')),
+        'can_make_specs': bool(_is_current(plan) and user.has_perm('qms.add_inspectionspec')),
         'prev_id': prev.pk if prev else None,
         'lines': [_line(ln) for ln in plan.lines.order_by('pk')],
         'process_options': [{'value': p.pk, 'label': str(p)} for p in Process.objects.order_by('code')],
@@ -94,7 +99,7 @@ class PlanListView(APIView):
         if not isinstance(request.data, dict):
             return _bad('요청 형식이 올바르지 않습니다.')
         stage = request.data.get('stage')
-        item = Item.objects.filter(pk=request.data.get('item')).first() if str(request.data.get('item') or '').isdigit() else None
+        item = Item.objects.filter(pk=request.data.get('item')).first() if str(request.data.get('item') or '').isdecimal() else None
         if item is None or not isinstance(stage, str) or stage not in dict(ControlPlan.STAGES):
             return _bad('품번과 단계를 고르세요.')
         try:
@@ -202,6 +207,8 @@ class PlanMakeSpecsView(APIView):
     def post(self, request, pk):
         require_perm(request.user, 'qms.add_inspectionspec')
         plan = get_object_or_404(ControlPlan, pk=pk)
+        if plan.approved_at and not _is_current(plan):
+            return _bad('최신 승인 개정에서만 검사기준서를 만들 수 있습니다.')
         with transaction.atomic():
             made = make_specs_from_plan(plan)  # 미승인이면 ValidationError → 400
         return Response({'made': [{'id': s.pk, 'title': str(s)} for s in made]})

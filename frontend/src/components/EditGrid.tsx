@@ -32,8 +32,8 @@ interface Props {
 let seq = 0
 export const newKey = () => `n${++seq}`
 
-const typed = (cols: GridColumn[]) => cols.filter((c) => c.kind === 'text' || c.kind === 'number')
-export const isBlank = (r: GridRow, cols: GridColumn[]) => r.id === null && typed(cols).every((c) => String(r[c.key] ?? '').trim() === '')
+export const isBlank = (r: GridRow, cols: GridColumn[]) =>
+  r.id === null && cols.filter((c) => c.kind !== 'link').every((c) => String(r[c.key] ?? '').trim() === '')
 
 // 맨 아래에 입력용 빈 줄이 하나 있게 한다.
 export function withTail(rows: GridRow[], cols: GridColumn[], readOnly = false): GridRow[] {

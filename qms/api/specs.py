@@ -126,7 +126,7 @@ class SpecListView(APIView):
         if not isinstance(request.data, dict):
             return _bad('요청 형식이 올바르지 않습니다.')
         kind = request.data.get('inspection_type')
-        item = Item.objects.filter(pk=request.data.get('item')).first() if str(request.data.get('item') or '').isdigit() else None
+        item = Item.objects.filter(pk=request.data.get('item')).first() if str(request.data.get('item') or '').isdecimal() else None
         if item is None or not isinstance(kind, str) or kind not in dict(InspectionSpec.TYPES):
             return Response({'detail': '품번과 검사 구분을 고르세요.'}, status=400)
         try:

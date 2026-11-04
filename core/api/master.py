@@ -168,7 +168,7 @@ class ImportView(APIView):
 
     def post(self, request):
         d = request.data
-        profile = ImportProfile.objects.filter(pk=d.get('profile')).first() if str(d.get('profile', '')).isdigit() else None
+        profile = ImportProfile.objects.filter(pk=d.get('profile')).first() if str(d.get('profile', '')).isdecimal() else None
         if profile is None:
             return _bad('가져오기 설정을 선택하세요.', 'profile')
         if not d.get('file'):

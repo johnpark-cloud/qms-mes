@@ -327,12 +327,25 @@ def _plan_key(ln):
     return f"{ln.process.code if ln.process else ''} {ln.characteristic}".strip()
 
 
+def _keyed(lines):
+    """(공정, 특성)이 같은 줄이 여럿이면 순번을 붙여 하나도 빠지지 않게 한다."""
+    out = {}
+    for ln in lines:
+        k = _plan_key(ln)
+        n = 1
+        while k in out:
+            n += 1
+            k = f'{_plan_key(ln)} #{n}'
+        out[k] = ln
+    return out
+
+
 def compare_plans(prev, cur):
     """이전 개정과 비교. 항목은 (공정 코드, 특성)으로 짝짓는다. 모양은 compare_specs와 같다."""
     if prev is None:
         return None
-    old = {_plan_key(ln): ln for ln in prev.lines.select_related('process')}
-    new = {_plan_key(ln): ln for ln in cur.lines.select_related('process')}
+    old = _keyed(prev.lines.select_related('process').order_by('pk'))
+    new = _keyed(cur.lines.select_related('process').order_by('pk'))
     rows = _pair_rows(old, new, _PLAN_CELLS)
     return {'fields': {}, 'rows': rows}
 

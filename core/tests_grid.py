@@ -3,7 +3,7 @@ from decimal import Decimal
 from django.test import TestCase
 
 from core.grid import collect_rows, record_version, table_version
-from core.models import BomLine, Item
+from core.models import BomLine, Item, RoutingStep
 
 FIELDS = {'component': 'fk', 'qty': 'number'}
 
@@ -66,3 +66,16 @@ class GridTests(TestCase):
         from core.rules import Stale as S2
         from qms.rules import Stale
         self.assertIs(Stale, S2)
+
+    def test_text_cells_stripped(self):
+        new, _, _, errors = collect_rows([{'id': None, 'code': ' P10 ', 'name': '공정'}], {}, Item,
+                                         {'code': 'text', 'name': 'text'}, 'rows', exclude=['item_type'])
+        self.assertEqual((new[0].code, errors), ('P10', {}))
+
+    def test_duplicate_keeps_cell_error_and_skips_none(self):
+        make = lambda: RoutingStep(item=self.item)
+        fields = {'seq': 'int'}
+        _, _, _, errors = collect_rows([{'id': None, 'seq': 'abc'}, {'id': None, 'seq': 'abc'}], {}, make, fields, 'r',
+                                       exclude=['item', 'process'], unique=('seq',))
+        self.assertEqual(errors['r.0.seq'], ['정수를 입력하세요.'])
+        self.assertEqual(errors['r.1.seq'], ['정수를 입력하세요.'])
