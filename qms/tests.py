@@ -166,6 +166,21 @@ class QmsTest(TestCase):
         self.assertIn('SPC 경보', insp.nonconformance.description)
         self.assertTrue(self.cell.on_hold)
 
+    def test_submit_pass_keeps_spc_alarm_defect(self):
+        from .rules import submit_inspection
+        spec = InspectionSpec.objects.create(item=self.raw_item, inspection_type=InspectionSpec.PROCESS)
+        cc = Characteristic.objects.create(spec=spec, name='용량', lsl=0, usl=100, special='CC')
+        approve(spec, self.lead)
+        gauge = Gauge.objects.create(number='G-SPC', name='저울', last_calibrated=timezone.localdate())
+        for v in ('50', '50.5', '49.5', '50.2', '49.8', '50'):
+            insp = Inspection.objects.create(lot=self.raw, spec=spec)
+            Measurement.objects.create(inspection=insp, characteristic=cc, value=Decimal(v))
+            insp.finalize()
+        insp = submit_inspection(self.raw, spec, self.lead, gauge, {cc.pk: '70'}, '', '1')  # 화면은 합격이어도 수량 1을 보낸다
+        self.assertEqual(insp.result, Inspection.PASS)
+        self.assertEqual(insp.nonconformance.defect_type, 'SPC 경보')
+        self.assertNotEqual(insp.nonconformance.defect_qty, 1)
+
     def test_spc_mixed_subgroup_sizes_still_alarm(self):
         spec = InspectionSpec.objects.create(item=self.raw_item, inspection_type=InspectionSpec.PROCESS)
         cc = Characteristic.objects.create(spec=spec, name='용량', lsl=0, usl=100, special='CC')
