@@ -19,7 +19,11 @@ import InspectionPrint from './pages/inspections/InspectionPrint'
 import Overview from './pages/Overview'
 import ItemList from './pages/items/ItemList'
 import ItemPage from './pages/items/ItemPage'
+import ImportPage from './pages/import/ImportPage'
 import TablePage from './pages/master/TablePage'
+import PlanList from './pages/plans/PlanList'
+import PlanPage from './pages/plans/PlanPage'
+import PlanPrint from './pages/plans/PlanPrint'
 import SpecList from './pages/specs/SpecList'
 import SpecPage from './pages/specs/SpecPage'
 import SpecPrint from './pages/specs/SpecPrint'
@@ -50,12 +54,16 @@ function App() {
           <Routes>
             <Route path="login" element={<Login />} />
             <Route path="specs/:id/print" element={<SpecPrint />} />
+            <Route path="plans/:id/print" element={<PlanPrint />} />
             <Route path="inspections/:id/print" element={<InspectionPrint />} />
             <Route element={<AppLayout />}>
               <Route path="overview" element={<Overview />} />
               <Route path="todo" element={<Todo />} />
               <Route path="specs" element={<SpecList />} />
               <Route path="specs/:id" element={<SpecPage />} />
+              <Route path="plans" element={<PlanList />} />
+              <Route path="plans/:id" element={<PlanPage />} />
+              <Route path="import" element={<ImportPage />} />
               <Route path="items" element={<ItemList />} />
               <Route path="items/:id" element={<ItemPage />} />
               <Route path="processes" element={<TablePage title="공정" endpoint="/api/core/processes/" exportName="공정" columns={PROCESS_COLUMNS} />} />

@@ -4,7 +4,8 @@ import type { DocStruct } from '../api/specs'
 export default function DocumentView({ doc }: { doc: DocStruct }) {
   const s = doc.signoff
   return (
-    <div className="doc-page">
+    <div className={doc.landscape ? 'doc-page doc-landscape' : 'doc-page'}>
+      {doc.landscape && <style>{'@page { size: A4 landscape; margin: 12mm }'}</style>}
       {doc.draft && <div className="doc-watermark" aria-hidden="true">초안 — 승인 전</div>}
       <div className="doc-top">
         <div>
