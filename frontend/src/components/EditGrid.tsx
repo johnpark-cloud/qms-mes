@@ -26,6 +26,7 @@ interface Props {
   errors: Record<string, string[]>
   diff?: { rows: DiffRow[] } | null
   canDelete?: boolean
+  errorPrefix?: string // 오류 키 앞부분(characteristics·bom·routing·rows)
 }
 
 let seq = 0
@@ -40,7 +41,7 @@ export function withTail(rows: GridRow[], cols: GridColumn[], readOnly = false):
   return [...rows, { _key: newKey(), id: null }]
 }
 
-export default function EditGrid({ columns, rows, onChange, readOnly, errors, diff, canDelete = true }: Props) {
+export default function EditGrid({ columns, rows, onChange, readOnly, errors, diff, canDelete = true, errorPrefix = 'characteristics' }: Props) {
   const change = (next: GridRow[]) => onChange(withTail(next, columns, readOnly))
   const set = (i: number, key: string, v: string | number | null) => change(rows.map((r, j) => (j === i ? { ...r, [key]: v } : r)))
 
@@ -103,7 +104,7 @@ export default function EditGrid({ columns, rows, onChange, readOnly, errors, di
             return (
               <tr key={r._key} data-grid-row style={r.delete ? { textDecoration: 'line-through', opacity: 0.6 } : undefined} className={d?.status === 'added' ? 'diff-added' : undefined}>
                 {columns.map((c) => {
-                  const err = errors[`characteristics.${i}.${c.key}`]
+                  const err = errors[`${errorPrefix}.${i}.${c.key}`]
                   const cls = [d?.cells.includes(c.key) ? 'diff-changed' : '', err ? 'cell-error' : ''].join(' ').trim()
                   const old = d?.values[c.key]?.[0]
                   let body

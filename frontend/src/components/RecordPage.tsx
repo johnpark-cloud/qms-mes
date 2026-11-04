@@ -3,7 +3,7 @@ import type { ReactNode } from 'react'
 
 interface Props {
   title: string
-  status: '초안' | '승인됨' | '잠김' | '합격' | '불합격' | '미판정'
+  status?: '초안' | '승인됨' | '잠김' | '합격' | '불합격' | '미판정'
   actions: ReactNode
   props: { label: string; node: ReactNode }[]
   children: ReactNode
@@ -16,7 +16,7 @@ export default function RecordPage({ title, status, actions, props, children, si
   return (
     <div style={{ paddingBottom: 72 }}>
       <h1 className="page-title">
-        {title} <Tag color={COLOR[status]}>{status}</Tag>
+        {title} {status && <Tag color={COLOR[status]}>{status}</Tag>}
       </h1>
       <Space wrap style={{ marginBottom: 16 }}>
         {actions}
