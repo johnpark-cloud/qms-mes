@@ -14,6 +14,13 @@ class Locked(ValidationError):
     """잠금 때문에 막힌 저장. API는 409로 바꾼다."""
 
 
+class Stale(Exception):
+    """다른 사람이 먼저 저장했다. API는 409로 바꾼다."""
+
+    def __init__(self, msg='다른 사람이 먼저 고쳤습니다. 다시 불러오세요.'):
+        super().__init__(msg)
+
+
 def begin_edit(obj, user):
     """obj의 잠금 해제 여부(_edit_unlocked)를 정하고, 이번 저장이 쓸 수정 승인을 돌려준다 (새 기록이면 None)."""
     unlock = edit_unlocked(obj, user) if obj.pk else None

@@ -7,7 +7,7 @@ from django.db import transaction
 from django.db.models import Max
 
 from core.models import Lot, RevisionLog
-from core.rules import LOCKED_MSG, Locked, child_editable, save_with_lock
+from core.rules import LOCKED_MSG, Locked, Stale, child_editable, save_with_lock
 
 from .models import Characteristic, Gauge, Inspection, InspectionSpec, Measurement
 
@@ -72,13 +72,6 @@ def receive_lot(number, item, qty_raw, supplier):
 
 
 # ---------- 검사기준서 ----------
-
-class Stale(Exception):
-    """다른 사람이 먼저 저장했다. API는 409로 바꾼다."""
-
-    def __init__(self, msg='다른 사람이 먼저 고쳤습니다. 다시 불러오세요.'):
-        super().__init__(msg)
-
 
 def new_spec_revision(spec):
     """승인된 기준서의 항목을 복사해 다음 개정(초안)을 만든다. 호출하는 쪽이 트랜잭션 안에서 부른다."""
