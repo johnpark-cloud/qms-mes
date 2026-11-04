@@ -1380,3 +1380,15 @@ class InspectionDocumentTest(TestCase):
         self.assertEqual(title, '수입검사 성적서')
         self.assertIn('성일철강', str(rows))
         self.assertIn('11', str(rows))
+
+
+class GaugeAdminDaysLeftTest(TestCase):
+    def test_days_left_column(self):
+        today = timezone.localdate()
+        Gauge.objects.create(number='G-A', name='여유', last_calibrated=today, interval_days=30)
+        Gauge.objects.create(number='G-B', name='당일', last_calibrated=today - datetime.timedelta(days=30), interval_days=30)
+        Gauge.objects.create(number='G-C', name='지남', last_calibrated=today - datetime.timedelta(days=33), interval_days=30)
+        self.client.force_login(User.objects.create_superuser('gauge-su', password='x'))
+        body = self.client.get('/admin/qms/gauge/').content.decode()
+        for text in ('남은 일수', 'D-30', '오늘까지', '기한 지남 3일'):
+            self.assertIn(text, body)

@@ -147,13 +147,18 @@ class InspectionAdmin(ReportLinksMixin, BaseAdmin):
 
 @admin.register(Gauge)
 class GaugeAdmin(BaseAdmin):
-    list_display = ['number', 'name', 'last_calibrated', 'next_due', 'active']
+    list_display = ['number', 'name', 'last_calibrated', 'next_due', 'days_left', 'active']
     list_filter = ['active']
     search_fields = ['number', 'name']
     fieldsets = [
         (None, {'fields': ['number', 'name', 'last_calibrated']}),
         ('추가 정보', {'classes': ['collapse'], 'fields': ['interval_days', 'certificate', 'active']}),
     ]
+
+    @admin.display(description='남은 일수')
+    def days_left(self, obj):
+        n = (obj.next_due - timezone.localdate()).days  # 기한 당일까지 쓸 수 있다 (Gauge.usable_on)
+        return f'기한 지남 {-n}일' if n < 0 else ('오늘까지' if n == 0 else f'D-{n}')
 
 
 @admin.register(Qualification)
