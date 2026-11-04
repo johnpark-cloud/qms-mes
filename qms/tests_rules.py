@@ -187,6 +187,17 @@ class SpecRulesTest(TestCase):
             save_spec(self.spec, self.eng, {}, [{'id': c.pk, 'delete': True}], None)
         self.assertTrue(Characteristic.objects.filter(pk=c.pk).exists())
 
+    def test_spec_version_sees_spec_only_change(self):
+        draft, _ = open_or_new_revision(self.spec)
+        for n in range(3):  # 항목 이력 번호가 기준서 이력 번호보다 앞서게 한다
+            Characteristic.objects.create(spec=draft, name=f'x{n}')
+        self.assertGreater(Characteristic.history.filter(spec_id=draft.pk).latest('history_id').history_id,
+                           draft.history.latest('history_id').history_id)
+        v = spec_version(draft)
+        draft.sampling = 'n=99'
+        draft.save()
+        self.assertNotEqual(spec_version(draft), v)
+
     def test_stale_version_rejected(self):
         draft, _ = open_or_new_revision(self.spec)
         v = spec_version(draft)

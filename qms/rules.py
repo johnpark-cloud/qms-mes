@@ -96,10 +96,8 @@ def open_or_new_revision(spec):
 
 
 def spec_version(spec):
-    """동시 수정 감지 번호: 기준서와 그 항목(삭제 포함)의 이력 중 가장 큰 history_id. 이력이 없으면 0."""
-    a = spec.history.aggregate(m=Max('history_id'))['m'] or 0
-    b = Characteristic.history.filter(spec_id=spec.pk).aggregate(m=Max('history_id'))['m'] or 0
-    return max(a, b)
+    """동시 수정 감지 번호: 기준서와 그 항목(삭제 포함) 이력의 최대 history_id 합. 이력이 없으면 0."""
+    return record_version(spec, [(Characteristic, 'spec')])
 
 
 _ROW_FIELDS = ('name', 'lsl', 'usl', 'unit', 'special')
