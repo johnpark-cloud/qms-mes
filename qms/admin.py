@@ -19,7 +19,7 @@ from core.rules import child_editable
 from .models import (AuditChecklist, AuditFinding, AuditItem, Capa, ChangeRequest, Characteristic, ControlPlan,
                      ControlPlanLine, CustomerClaim, CustomerRule, Document, DocumentRevision, Evidence, ExcelTemplate, Gauge,
                      Inspection, InspectionSpec, InternalAudit, Measurement, Memo, MemoPhoto, PpapElement, PpapSubmission, Qualification, Scar)
-from .rules import new_spec_revision
+from .rules import make_specs_from_plan, new_spec_revision
 from .similar import similar_html
 
 
@@ -189,21 +189,10 @@ class ControlPlanAdmin(ApprovalAdminMixin, BaseAdmin):
         made = []
         with transaction.atomic():
             for plan in queryset:
-                if not plan.is_approved:
-                    self.message_user(request, f'{plan}: 승인 후에 만들 수 있습니다.', messages.ERROR)
-                    continue
-                for itype, _ in InspectionSpec.TYPES:
-                    lines = plan.lines.filter(inspection_type=itype)
-                    if not lines:
-                        continue
-                    top = InspectionSpec.objects.filter(item=plan.item, inspection_type=itype).aggregate(m=Max('revision'))['m']
-                    spec = InspectionSpec.objects.create(item=plan.item, inspection_type=itype, revision=(top or 0) + 1,
-                                                         sampling=', '.join(sorted({l.sampling for l in lines if l.sampling})),
-                                                         note=f'{plan}에서 생성')
-                    for l in lines:
-                        Characteristic.objects.create(spec=spec, name=l.characteristic, lsl=l.lsl, usl=l.usl, unit=l.unit,
-                                                      special=l.special, plan_line=l)
-                    made.append(str(spec))
+                try:
+                    made += [str(spec) for spec in make_specs_from_plan(plan)]
+                except ValidationError as e:
+                    self.message_user(request, ' '.join(e.messages), messages.ERROR)
         if made:
             self.message_user(request, f'검사기준 초안: {", ".join(made)}. 확인 후 승인 서명하세요.')
 

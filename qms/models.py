@@ -345,6 +345,40 @@ class ControlPlan(Approvable):
     def __str__(self):
         return f'{self.item.code} {self.get_stage_display()} 관리계획서 Rev.{self.revision}'
 
+    def document(self):
+        """관리계획서 문서 구조. 키는 InspectionSpec.document()와 같고 열이 많아 가로(landscape)로 찍는다."""
+        from .rules import plan_logs
+
+        def who(u):
+            return (u.get_full_name() or u.username) if u else ''
+
+        def day(dt):
+            return timezone.localtime(dt).strftime('%Y-%m-%d') if dt else ''
+
+        def num(d):
+            return '' if d is None else format(d.normalize(), 'f')
+
+        def n(v):
+            return '' if v is None else v
+
+        first = self.history.order_by('history_date', 'history_id').first()
+        rows = [[str(ln.process or ''), ln.characteristic, ln.special, num(ln.lsl), num(ln.usl), ln.unit, ln.method, ln.sampling,
+                 ln.get_inspection_type_display(), ln.reaction, ln.failure_mode, n(ln.severity), n(ln.occurrence), n(ln.detection),
+                 ln.action_priority] for ln in self.lines.select_related('process').order_by('pk')]
+        logs = plan_logs(self, confirmed_only=True).select_related('requested_by', 'approved_by')
+        return {
+            'title': str(self), 'number': None, 'revision': f'Rev.{self.revision}', 'draft': self.approved_by_id is None,
+            'landscape': True,
+            'head': [['품번', self.item.code], ['품명', self.item.name], ['단계', self.get_stage_display()],
+                     ['개정', f'Rev.{self.revision}']],
+            'tables': [{'title': '관리 항목', 'columns': ['공정', '특성', '특별특성', '하한', '상한', '단위', '측정방법', '샘플링', '검사 구분',
+                                                       '이상 시 조치', '잠재 고장모드', 'S', 'O', 'D', 'AP'], 'rows': rows}],
+            'revisions': [{'label': g.label, 'changes': g.changes, 'reason': g.reason, 'requested_by': who(g.requested_by),
+                           'approved_by': who(g.approved_by), 'approved_at': day(g.approved_at)} for g in logs],
+            'signoff': {'written_by': who(first and first.history_user), 'written_at': day(first and first.history_date),
+                        'approved_by': who(self.approved_by), 'approved_at': day(self.approved_at)},
+        }
+
 
 class ControlPlanLine(models.Model):
     plan = models.ForeignKey(ControlPlan, on_delete=models.CASCADE, related_name='lines', verbose_name='관리계획서')

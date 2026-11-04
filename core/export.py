@@ -76,7 +76,7 @@ def document_xlsx(doc):
     _grid(ws, row, ['구분', '이름', '일자'], [['작성', s['written_by'], s['written_at']], ['승인', s['approved_by'], s['approved_at']]])
     for col in 'ABCDEF':
         ws.column_dimensions[col].width = 18
-    return _save(ws, wb, 'portrait')
+    return _save(ws, wb, 'landscape' if doc.get('landscape') else 'portrait')
 
 
 def table_xlsx(title, columns, rows):

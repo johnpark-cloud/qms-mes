@@ -6,10 +6,11 @@ from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import transaction
 from django.db.models import Max
 
+from core.grid import collect_rows, record_version
 from core.models import Lot, RevisionLog
 from core.rules import LOCKED_MSG, Locked, Stale, child_editable, save_with_lock
 
-from .models import Characteristic, Gauge, Inspection, InspectionSpec, Measurement
+from .models import (Characteristic, ControlPlan, ControlPlanLine, Gauge, Inspection, InspectionSpec, Measurement)
 
 RECEIVE_MSG = '품목·LOT 번호·입고수량(0보다 큰 숫자)을 모두 입력하세요.'
 
@@ -219,18 +220,19 @@ def _label(model, name):
     return str(model._meta.get_field(name).verbose_name).split('(')[0]  # 하한(LSL) → 하한
 
 
-def diff_text(diff):
+def diff_text(diff, models=(InspectionSpec, Characteristic)):
     """비교 결과를 한 줄씩 쓴 글. 이력 남기기의 미리 채움 내용으로 쓴다."""
     if diff is None:
         return '최초 제정'
-    lines = [f"{_label(InspectionSpec, f)}: '{o}' → '{n}'" for f, (o, n) in diff['fields'].items()]
+    head, row = models
+    lines = [f"{_label(head, f)}: '{o}' → '{n}'" for f, (o, n) in diff['fields'].items()]
     for r in diff['rows']:
         if r['status'] == 'added':
             lines.append(f"항목 추가: {r['name']}")
         elif r['status'] == 'removed':
             lines.append(f"항목 삭제: {r['name']}")
         else:
-            cells = ', '.join(f"{_label(Characteristic, c)} {o} → {n}" for c, (o, n) in r['values'].items())
+            cells = ', '.join(f"{_label(row, c)} {o} → {n}" for c, (o, n) in r['values'].items())
             lines.append(f"항목 변경: {r['name']} ({cells})")
     return '\n'.join(lines) or '변경 없음'
 
@@ -241,3 +243,127 @@ def spec_logs(spec, confirmed_only):
                                         revision__lte=spec.revision).values_list('pk', flat=True)
     logs = RevisionLog.objects.filter(content_type=ContentType.objects.get_for_model(InspectionSpec), object_id__in=ids)
     return logs.filter(status=RevisionLog.CONFIRMED) if confirmed_only else logs
+
+
+# ---------- 관리계획서 ----------
+
+PLAN_FIELDS = {'process': 'fk', 'characteristic': 'text', 'special': 'text', 'lsl': 'number', 'usl': 'number', 'unit': 'text',
+               'method': 'text', 'sampling': 'text', 'inspection_type': 'text', 'reaction': 'text', 'failure_mode': 'text',
+               'severity': 'int', 'occurrence': 'int', 'detection': 'int'}
+
+
+def plan_version(plan):
+    return record_version(plan, [(ControlPlanLine, 'plan')])
+
+
+def save_plan(plan, user, data, lines, version):
+    """관리계획서 속성(단계)과 항목 줄을 한꺼번에 저장한다. 하나라도 잘못이면 아무것도 저장하지 않는다.
+    오류 키는 lines.{줄}.{칸}. 승인 잠금은 save_with_lock이 Locked로 알린다. 품번·개정은 고치지 않는다."""
+    with transaction.atomic():
+        new, changed, deleted, errors = collect_rows(
+            lines, {ln.pk: ln for ln in plan.lines.all()}, lambda: ControlPlanLine(plan=plan), PLAN_FIELDS, 'lines',
+            exclude=['plan'])
+        perms = ['change_controlplan'] + ['add_controlplanline'] * bool(new) + \
+                ['change_controlplanline'] * bool(changed) + ['delete_controlplanline'] * bool(deleted)
+        if not all(user.has_perm(f'qms.{p}') for p in perms):
+            raise PermissionDenied('이 작업을 할 권한이 없습니다.')
+        if version is not None and version != plan_version(plan):
+            raise Stale()
+        if deleted and not child_editable(plan, user):
+            raise Locked(LOCKED_MSG)
+        if 'stage' in data:
+            plan.stage = data['stage']
+            try:
+                plan.full_clean()
+            except ValidationError as e:
+                errors.update({k: v for k, v in e.message_dict.items() if k in ('stage', '__all__')})
+        if errors:
+            raise ValidationError(errors)
+        save_with_lock(plan, user, children=changed + new)
+        for ln in deleted:
+            ln.delete()
+    return plan
+
+
+def current_plan(item, stage):
+    return (ControlPlan.objects.filter(item=item, stage=stage, approved_at__isnull=False).order_by('-revision').first())
+
+
+def new_plan_revision(plan):
+    """승인된 관리계획서의 항목을 복사해 다음 개정(초안)을 만든다."""
+    top = ControlPlan.objects.filter(item=plan.item, stage=plan.stage).aggregate(m=Max('revision'))['m']
+    new = ControlPlan.objects.create(item=plan.item, stage=plan.stage, revision=top + 1)
+    for ln in plan.lines.all():
+        ln.pk = None
+        ln.plan = new
+        ln.save()
+    return new
+
+
+def open_or_new_plan_revision(plan):
+    """(열려 있는 초안, 새로 만들었는가). 같은 품번·단계에 미승인 개정이 있으면 그것을 쓴다."""
+    with transaction.atomic():
+        draft = ControlPlan.objects.filter(item=plan.item, stage=plan.stage, approved_at__isnull=True).order_by('-revision').first()
+        return (draft, False) if draft else (new_plan_revision(plan), True)
+
+
+def prev_plan(plan):
+    return (ControlPlan.objects.filter(item=plan.item, stage=plan.stage, revision__lt=plan.revision)
+            .order_by('-revision').first())
+
+
+_PLAN_CELLS = tuple(f for f in PLAN_FIELDS if f not in ('characteristic', 'process'))
+
+
+def _plan_key(ln):
+    return f"{ln.process.code if ln.process else ''} {ln.characteristic}".strip()
+
+
+def compare_plans(prev, cur):
+    """이전 개정과 비교. 항목은 (공정 코드, 특성)으로 짝짓는다. 모양은 compare_specs와 같다."""
+    if prev is None:
+        return None
+    old = {_plan_key(ln): ln for ln in prev.lines.select_related('process')}
+    new = {_plan_key(ln): ln for ln in cur.lines.select_related('process')}
+    rows = []
+    for name in list(old) + [n for n in new if n not in old]:
+        o, n = old.get(name), new.get(name)
+        if o is None or n is None:
+            rows.append({'id': (n or o).pk, 'name': name, 'status': 'added' if o is None else 'removed',
+                         'cells': [], 'values': {}})
+            continue
+        cells = [f for f in _PLAN_CELLS if getattr(o, f) != getattr(n, f)]
+        if cells:
+            rows.append({'id': n.pk, 'name': name, 'status': 'changed', 'cells': cells,
+                         'values': {c: [_fmt(getattr(o, c)), _fmt(getattr(n, c))] for c in cells}})
+    return {'fields': {}, 'rows': rows}
+
+
+def plan_diff_text(diff):
+    return diff_text(diff, (ControlPlan, ControlPlanLine))
+
+
+def plan_logs(plan, confirmed_only):
+    ids = ControlPlan.objects.filter(item=plan.item, stage=plan.stage, revision__lte=plan.revision).values_list('pk', flat=True)
+    logs = RevisionLog.objects.filter(content_type=ContentType.objects.get_for_model(ControlPlan), object_id__in=ids)
+    return logs.filter(status=RevisionLog.CONFIRMED) if confirmed_only else logs
+
+
+def make_specs_from_plan(plan):
+    """승인된 관리계획서에서 검사 구분별 검사기준 초안을 만든다. 호출하는 쪽이 트랜잭션 안에서 부른다."""
+    if not plan.is_approved:
+        raise ValidationError(f'{plan}: 승인 후에 만들 수 있습니다.')
+    made = []
+    for itype, _ in InspectionSpec.TYPES:
+        lines = plan.lines.filter(inspection_type=itype)
+        if not lines:
+            continue
+        top = InspectionSpec.objects.filter(item=plan.item, inspection_type=itype).aggregate(m=Max('revision'))['m']
+        spec = InspectionSpec.objects.create(item=plan.item, inspection_type=itype, revision=(top or 0) + 1,
+                                             sampling=', '.join(sorted({l.sampling for l in lines if l.sampling})),
+                                             note=f'{plan}에서 생성')
+        for l in lines:
+            Characteristic.objects.create(spec=spec, name=l.characteristic, lsl=l.lsl, usl=l.usl, unit=l.unit,
+                                          special=l.special, plan_line=l)
+        made.append(spec)
+    return made

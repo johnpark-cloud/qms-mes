@@ -1,6 +1,6 @@
 from django.urls import path
 
-from . import inspections, specs, views
+from . import inspections, plans, specs, views
 
 urlpatterns = [
     path('overview/', views.OverviewView.as_view()),
@@ -13,6 +13,13 @@ urlpatterns = [
     path('specs/<int:pk>/approve/', specs.SpecApproveView.as_view()),
     path('specs/<int:pk>/revision-log/', specs.SpecRevisionLogView.as_view()),
     path('specs/<int:pk>/document/', specs.SpecDocumentView.as_view()),
+    path('plans/', plans.PlanListView.as_view()),
+    path('plans/<int:pk>/', plans.PlanDetailView.as_view()),
+    path('plans/<int:pk>/new-revision/', plans.PlanNewRevisionView.as_view()),
+    path('plans/<int:pk>/approve/', plans.PlanApproveView.as_view()),
+    path('plans/<int:pk>/revision-log/', plans.PlanRevisionLogView.as_view()),
+    path('plans/<int:pk>/document/', plans.PlanDocumentView.as_view()),
+    path('plans/<int:pk>/make-specs/', plans.PlanMakeSpecsView.as_view()),
     path('inspections/', inspections.InspectionListView.as_view()),
     path('inspections/<int:pk>/', inspections.InspectionDetailView.as_view()),
     path('inspections/<int:pk>/document/', inspections.InspectionDocumentView.as_view()),
