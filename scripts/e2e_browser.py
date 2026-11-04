@@ -189,7 +189,7 @@ try:
             check('목록 엑셀로 받기', False, str(e)[:80])
 
         # 기록 페이지: 엑셀 붙여넣기 → 저장 → 승인 → 새 개정
-        tsv = '\n'.join(f'항목{i}\t{i},000.5\t{i + 1}\tmm' if i != 3 else f'항목{i}\t\t\t' for i in range(1, 11))
+        tsv = '\n'.join(f'항목{i}\t{i},000.5\t{i + 1},000.9\tmm' if i != 3 else f'항목{i}\t\t\t' for i in range(1, 11))
         try:
             page.goto(f'/app/specs/{spec_id}')
             first = page.locator('[data-grid] [data-grid-row] input').first
@@ -252,6 +252,122 @@ try:
             check('감사 기록: 저장 이력이 보임', n >= 2, f'{n}줄')
         except Exception as e:
             check('감사 기록: 저장 이력이 보임', False, str(e)[:80])
+
+        # 검사 입력(/app/inspect)·측정·검사 목록·성적서
+        manage('shell', '-c', (
+            "import datetime; from django.contrib.auth import get_user_model; from django.utils import timezone;"
+            "from core.models import Item, Lot; from qms.models import Characteristic, Gauge, InspectionSpec;"
+            "i=Item.objects.create(code='E2E-I1', name='E2E 검사 자재', item_type='RAW');"
+            "s=InspectionSpec.objects.create(item=i, inspection_type='INCOMING', revision=1, sampling='n=1');"
+            "Characteristic.objects.create(spec=s, name='두께', lsl='9.9', usl='10.1', unit='mm');"
+            "Characteristic.objects.create(spec=s, name='외관');"
+            "InspectionSpec.objects.filter(pk=s.pk).update(approved_at=timezone.now(), approved_by=get_user_model().objects.get(username='boss'));"
+            "Gauge.objects.create(number='E2E-G1', name='E2E 마이크로미터', last_calibrated=datetime.date.today());"
+            "Lot.objects.create(number='E2E-IN-1', item=i); Lot.objects.create(number='E2E-IN-2', item=i)"))
+        scan_ph = 'LOT 번호를 스캔하거나 입력하고 Enter'
+
+        try:
+            page.goto('/app/inspect')
+            page.locator('[data-row]', has_text='E2E-IN-1').wait_for(timeout=5000)
+            ok = page.locator('[data-row]', has_text='E2E-IN-2').count() == 1
+        except Exception:
+            ok = False
+        check('검사 대기에 미검사 LOT', ok)
+
+        try:
+            page.get_by_placeholder(scan_ph).fill('E2E-IN-1')
+            page.keyboard.press('Enter')
+            page.get_by_role('button', name='수입검사').click()
+            page.get_by_text('두께', exact=True).wait_for(timeout=5000)
+            ok = page.get_by_text('9.9 ~ 10.1 mm').count() == 1
+        except Exception:
+            ok = False
+        check('스캔 → 측정 화면', ok, page.url)
+
+        try:
+            page.locator('.ant-select').first.click()
+            page.locator('.ant-select-item-option', has_text='E2E-G1').click()
+            thick = page.locator('tbody tr', has_text='두께').locator('input')
+            thick.fill('10.0')
+            page.get_by_text('합격', exact=True).wait_for(timeout=5000)
+            thick.fill('11')
+            page.get_by_text('규격 이탈', exact=True).wait_for(timeout=5000)
+            ok = page.get_by_text('합격', exact=True).count() == 0
+        except Exception:
+            ok = False
+        check('입력 즉시 색', ok)
+
+        try:
+            page.get_by_role('button', name='OK', exact=True).click()
+            page.get_by_role('button', name='판정').dblclick()
+            page.get_by_text('판정 결과').wait_for(timeout=5000)
+            n = api_get(page, '/api/qms/inspections/?tab=INCOMING&q=E2E-IN-1')['count']
+            check('판정 두 번 눌러도 1건', n == 1, f'{n}건')
+        except Exception as e:
+            check('판정 두 번 눌러도 1건', False, str(e)[:80])
+
+        try:
+            alert = page.locator('.ant-alert', has_text='부적합')
+            alert.wait_for(timeout=5000)
+            txt = alert.inner_text()
+            ok = any(ch.isdigit() for ch in txt)
+        except Exception:
+            ok, txt = False, ''
+        check('불합격 → 부적합 번호', ok, txt[:60])
+
+        try:
+            page.goto('/app/inspect')
+            page.get_by_placeholder(scan_ph).fill('E2E-NEW-1')
+            page.keyboard.press('Enter')
+            page.get_by_text('입고 등록').first.wait_for(timeout=5000)
+            page.locator('.ant-modal .ant-select').first.click()
+            page.locator('.ant-select-item-option', has_text='E2E-I1').click()
+            page.get_by_label('입고수량').fill('5')
+            page.get_by_role('button', name='저장').click()
+            page.get_by_role('button', name='수입검사').wait_for(timeout=5000)
+            ok, why = True, ''
+        except Exception as e:
+            ok, why = False, str(e)[:200]
+        check('없는 LOT → 입고 창', ok, why)
+
+        insp_id = ''
+        try:
+            page.goto('/app/inspections?tab=INCOMING')
+            row = page.locator('[data-row]', has_text='E2E-IN-1')
+            row.wait_for(timeout=5000)
+            row.click()
+            page.get_by_role('button', name='전체 화면으로').click()
+            page.wait_for_url('**/app/inspections/*')
+            insp_id = page.url.rstrip('/').split('/')[-1]
+            ok = insp_id.isdigit()
+        except Exception:
+            ok = False
+        check('검사 목록 탭', ok, page.url)
+
+        try:
+            page.goto(f'/app/inspections/{insp_id}/print')
+            page.locator('.doc-page').wait_for(timeout=5000)
+            page.emulate_media(media='print')
+            pdf = page.pdf(format='A4', print_background=True)
+            pages = pdf.count(b'/Type /Page') - pdf.count(b'/Type /Pages')
+            bar = page.locator('.print-bar').is_visible()
+            check('성적서 A4 1쪽', pages == 1 and not bar, f'{pages}쪽, 인쇄 막대 보임={bar}')
+        except Exception as e:
+            check('성적서 A4 1쪽', False, str(e)[:80])
+        page.emulate_media(media='screen')
+
+        try:
+            page.goto('/app/todo')
+            page.locator('.ant-menu-submenu-title', has_text='품질관리').click()
+            page.get_by_role('menuitem', name='검사 입력', exact=True).click()
+            page.wait_for_url('**/app/inspect')
+            ok = page.url.endswith('/app/inspect')
+            page.get_by_role('menuitem', name='수입검사', exact=True).click()
+            page.wait_for_url('**/app/inspections?tab=INCOMING')
+            ok = ok and page.url.endswith('/app/inspections?tab=INCOMING')
+        except Exception:
+            ok = False
+        check('메뉴 → 새 화면', ok, page.url)
 
         # 세션이 끊기면 API를 부르는 화면이 로그인으로 보내야 한다 (client.ts 의 403 처리)
         page.context.clear_cookies()
