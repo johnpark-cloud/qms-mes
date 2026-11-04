@@ -161,17 +161,19 @@ class Inspection(models.Model):
             c = m.characteristic
             got = (format(m.value.normalize(), 'f') if m.value is not None else '-') if c.is_variable else {True: 'OK', False: 'NG'}.get(m.ok, '-')
             rows.append([c.name, c.spec_text(), got, m.gauge.number if m.gauge else '', '합격' if m.passed else '불합격'])
+        u = self.inspector
+        who = (u.get_full_name() or u.username) if u else ''  # 검사기준서·목록 API와 같은 이름 표기
         return {
             'title': f'{self.spec.get_inspection_type_display()} 성적서', 'number': None, 'revision': f'Rev.{self.spec.revision}',
             'draft': self.result == '',
             'head': [['LOT', str(lot)], ['품번', item.code], ['품명', item.name], ['협력사', lot.supplier or '-'],
                      ['수량', format(lot.qty.normalize(), 'f')], ['검사기준', str(self.spec)], ['샘플링', self.spec.sampling],
-                     ['검사자', str(self.inspector or '-')],
+                     ['검사자', who or '-'],
                      ['검사 일시', timezone.localtime(self.inspected_at).strftime('%Y-%m-%d %H:%M')],
                      ['판정', self.get_result_display() or '미판정'], ['부적합', self.nonconformance.number if self.nonconformance else '']],
             'tables': [{'title': '측정 결과', 'columns': ['검사항목', '규격', '측정값', '계측기', '판정'], 'rows': rows}],
             'revisions': None,
-            'signoff': {'written_by': str(self.inspector or ''), 'written_at': timezone.localtime(self.inspected_at).strftime('%Y-%m-%d'),
+            'signoff': {'written_by': who, 'written_at': timezone.localtime(self.inspected_at).strftime('%Y-%m-%d'),
                         'approved_by': '', 'approved_at': ''},
         }
 
