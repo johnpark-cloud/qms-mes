@@ -1,10 +1,11 @@
 """admin·기존 뷰·API가 함께 쓰는 업무 규칙. 본문은 기존 admin·뷰 코드를 옮긴 것이다(docs/architecture-migration-plan.md 3.2)."""
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.contrib.contenttypes.models import ContentType
-from django.db import transaction
+from django.db import IntegrityError, transaction
 from django.utils import timezone
 
-from .models import Nonconformance, RevisionLog, is_approver
+from .grid import collect_rows, record_version
+from .models import BomLine, Nonconformance, RevisionLog, RoutingStep, is_approver
 from .records import can_edit_locked, delete_record, edit_unlocked, is_locked
 
 LOCKED_MSG = '잠긴 기록입니다. 수정 요청 후 승인받아야 수정할 수 있습니다.'
@@ -177,3 +178,59 @@ def approve_and_log(obj, user, password, label, changes, reason):
     approve(obj, user, password)
     return _new_log(obj, user, label, changes, reason, status=RevisionLog.CONFIRMED,
                     approved_by=user, approved_at=obj.approved_at)
+
+
+ITEM_CHILDREN = [(BomLine, 'parent'), (RoutingStep, 'item')]
+
+
+def item_version(item):
+    return record_version(item, ITEM_CHILDREN)
+
+
+def save_item(item, user, data, bom, routing, version):
+    """품번 속성과 BOM·라우팅 줄을 한꺼번에 저장한다. 하나라도 잘못이면 아무것도 저장하지 않는다.
+    오류 키는 bom.{줄}.{칸}, routing.{줄}.{칸}. 품번은 승인 대상이 아니어서 잠금이 없다."""
+    with transaction.atomic():
+        if version is not None and version != item_version(item):
+            raise Stale()
+        b_new, b_chg, b_del, errors = collect_rows(
+            bom, {r.pk: r for r in item.bom_lines.all()}, lambda: BomLine(parent=item),
+            {'component': 'fk', 'qty': 'number'}, 'bom', exclude=['parent'], unique=['component'])
+        r_new, r_chg, r_del, e2 = collect_rows(
+            routing, {r.pk: r for r in item.routing.all()}, lambda: RoutingStep(item=item),
+            {'seq': 'int', 'process': 'fk'}, 'routing', exclude=['item'], unique=['seq'])
+        errors.update(e2)
+
+        perms = ['change_item']
+        for model, new, chg, dele in (('bomline', b_new, b_chg, b_del), ('routingstep', r_new, r_chg, r_del)):
+            perms += ['add_' + model] * bool(new) + ['change_' + model] * bool(chg) + ['delete_' + model] * bool(dele)
+        if not all(user.has_perm(f'core.{p}') for p in perms):
+            raise PermissionDenied('이 작업을 할 권한이 없습니다.')
+
+        for f in ('code', 'name', 'item_type'):
+            if f in data:
+                if not isinstance(data[f], str):
+                    errors[f] = ['글이어야 합니다.']
+                else:
+                    setattr(item, f, data[f].strip())
+        if not any(k in errors for k in ('code', 'name', 'item_type')):
+            try:
+                item.full_clean()
+            except ValidationError as e:
+                errors.update(e.message_dict)
+        if errors:
+            raise ValidationError(errors)
+
+        for r in b_del + r_del:
+            r.delete()
+        save_with_lock(item, user)
+        # shortcut: 순서를 맞바꾸는 저장은 DB 고유 제약에 걸려 오류로 돌려준다(줄을 임시 값으로 옮기지 않음). 필요해지면 두 단계로 저장한다.
+        for key, rows, msg in (('bom', b_chg + b_new, '같은 자품번이 이미 있습니다.'),
+                               ('routing', r_chg + r_new, '순서를 맞바꿀 때는 두 번에 나눠 저장하세요.')):
+            try:
+                with transaction.atomic():  # 오류 뒤에도 바깥 트랜잭션이 깨끗이 되돌아가도록 세이브포인트로 감싼다
+                    for r in rows:
+                        r.save()
+            except IntegrityError:
+                raise ValidationError({key: [msg]})
+    return item
