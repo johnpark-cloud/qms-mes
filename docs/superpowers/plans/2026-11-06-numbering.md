@@ -4,7 +4,7 @@
 
 **Goal:** 품번(완제품·반제품·원자재)과 문서번호(관리표준·양식·기술문서)를 드롭다운으로 고르면 일련번호가 자동으로 붙고, 번호의 각 자리 뜻을 풀어 보여 준다.
 
-**Architecture:** 코드값은 새 모델 `core.CodeValue` 하나에 묶음(group)별로 저장하고 관리 화면에서 편집한다. 번호 모양 5가지와 일련번호 계산·풀이는 새 파일 `core/numbering.py` 한 곳에 둔다. 품번은 React 새 화면 등록 창과 `/api/core/items/` POST가, 문서번호는 Django 관리 화면의 문서 추가 폼이 이 모듈을 부른다.
+**Architecture:** 코드값은 새 모델 `core.CodeValue` 하나에 묶음(group)별로 저장하고 관리 화면에서 편집한다. 번호 모양 7가지와 일련번호 계산·풀이는 새 파일 `core/numbering.py` 한 곳에 둔다. 품번은 React 새 화면 등록 창과 `/api/core/items/` POST가, 문서번호는 Django 관리 화면의 문서 추가 폼이 이 모듈을 부른다.
 
 **Tech Stack:** Django 6.1, DRF, django-simple-history, SQLite, React 19 + TypeScript + Vite + antd 6.
 
@@ -30,6 +30,7 @@
 3. 자재 분류 체인에서 **다른 부모 아래 같은 코드**(예: 중분류 `1`이 311과 313 아래 둘 다)를 고를 때 엉뚱한 부모의 값이 잡히면 안 된다 → Task 2 `test_raw_code_uses_parent_chain`.
 4. 미리보기 뒤 **다른 사람이 같은 번호를 먼저 저장**하면 저장 때 다시 계산해 다음 번호를 받는다 → Task 3 `test_auto_code_recomputed_on_save`.
 5. 개정 칸을 비웠을 때 **문자 개정(`A`)·`Rev.1` 표기가 섞인** 기존 개정이 있어도 숫자 최댓값 + 1이 나와야 한다 → Task 2 `test_next_revision`, Task 5 `test_blank_revision_filled`.
+6. **도면 품번은 도면 문서번호와 같은 번호를 쓴다.** 도면 문서만 먼저 등록된 번호(`Document 1TRT038-AS105`)가 있으면 품번 일련번호가 그 뒤를 이어야 한다 → Task 2 `test_drawing_part_counts_documents`.
 
 ---
 
@@ -127,16 +128,19 @@ SMALL = {'000': NONE, '111': SIZE_A, '112': NONE, '113': NONE, '120': NONE, '131
 - Consumes: Task 1의 `CodeValue` 상수·필드.
 - Produces (모두 `core/numbering.py`):
   - `class NumberingError(ValueError)` — 메시지는 사용자에게 그대로 보이는 한국어.
-  - 모양 정규식(이름 고정): `STD_DOC = r'^KEN-([A-Z])([A-Z])-(\d{2})$'`, `FORM = r'^(KEN-[A-Z][A-Z]-\d{2})-(\d{2})$'`, `PRODUCT = r'^(\d)([A-Z])([A-Z]{2})(\d{3})$'`, `RAW = r'^(\d)(\d)(\d)(\d)(\d)-(\d{5})$'`, `TECH = r'^(\d[A-Z][A-Z]{2}\d{3})-([A-Z]{2})(\d{3})$'`.
+  - 모양 정규식(이름 고정): `STD_DOC = r'^KEN-([A-Z])([A-Z])-(\d{2})$'`, `FORM = r'^(KEN-[A-Z][A-Z]-\d{2})-(\d{2})$'`, `PRODUCT = r'^(\d)([A-Z])([A-Z]{2})(\d{3})$'`, `RAW = r'^(\d)(\d)(\d)(\d)(\d)-(\d{5})$'`, `TECH = r'^(\d[A-Z][A-Z]{2}\d{3})-([A-Z]{2})(\d{3})$'`, `PART_DRAWING = r'^(\d[A-Z][A-Z]{2}\d{3})-(AS|SU|DT|PA|BA)(\d{3})$'`, `STD_PART = r'^3([A-Z][A-Z]{2}\d{3})-(\d{4})$'`.
+  - 상수 `PART_DRAWING_TYPES = {'AS': 'SEMI', 'SU': 'SEMI', 'BA': 'SEMI', 'DT': 'RAW', 'PA': 'RAW'}` — 도면 품번에 쓸 수 있는 도면코드와 기본 `Item.item_type`.
   - `next_serial(numbers: Iterable[str], prefix: str, width: int) -> str` — 순수 함수. `^{re.escape(prefix)}(\d{width})$`에 맞는 것의 최댓값 + 1을 `width`자리 0 채움으로. 없으면 `1`. `10**width - 1`을 넘으면 `NumberingError('일련번호가 다 찼습니다.')`.
   - `next_item_code(category: str, industry: str, customer: str) -> str` — `Item.code`에서 계산. category의 `item_type`이 `FIN`·`SEMI`가 아니면 `NumberingError`.
   - `next_raw_code(category: str, material: str, large: str, middle: str, small: str) -> str` — prefix `f'{category}{material}{large}{middle}{small}-'`, width 5. category `item_type`이 `RAW`가 아니면 오류. large는 material 행의 자식, middle은 large 행의 자식, small은 middle 행의 자식에서 찾는다.
   - `next_std_doc(kind: str, dept: str) -> str` — prefix `f'KEN-{kind}{dept}-'`, width 2, `qms.Document.number`에서.
   - `next_form(parent_number: str) -> str` — parent가 `STD_DOC` 모양이고 `Document`에 있어야 함. prefix `f'{parent}-'`, width 2.
   - `next_tech_doc(product_code: str, design: str) -> str` — product가 `PRODUCT` 모양이고 `Item`에 있어야 함. prefix `f'{product}-{design}'`, width 3.
+  - `next_drawing_part(product_code: str, design: str) -> str` — design이 `PART_DRAWING_TYPES`에 없으면 `NumberingError`. product는 `PRODUCT` 모양, `Item`에 있고 첫 자리 품목분류의 `item_type`이 `FIN`이어야 함. prefix `f'{product}-{design}'`, width 3. 후보 번호는 `Item.code`와 `qms.Document.number` **둘 다**에서 모은다(도면 품번 = 도면 문서번호).
+  - `next_std_part(product_code: str) -> str` — product 조건은 `next_drawing_part`와 같다. prefix `f'3{product[1:]}-'`, width 4, `Item.code`에서.
   - `next_revision(values: Iterable[str]) -> str` — 앞의 `Rev.`/`Rev`(대소문자 무시, 공백 허용)를 떼고 숫자만인 값의 최댓값 + 1. 숫자 값이 없으면 `'0'`.
   - `codebook() -> dict[tuple[str, int | None, str], CodeValue]` — 전체 코드값(비활성 포함)을 `(group, parent_id, code)`로. 쿼리 1번.
-  - `describe(number: str, book: dict | None = None) -> list[tuple[str, str]]` — 5가지 모양 중 맞는 것으로 `[(자리 글자, 뜻), ...]`. 뜻이 없으면 `'미등록'`, 일련번호 자리는 `(serial, '일련번호')`. 기술문서는 앞 7자리를 `PRODUCT` 풀이로 펼친 뒤 설계자료분류·일련번호를 잇는다. 양식은 상위 관리표준 풀이 뒤에 `(NN, '양식 일련번호')`. 모양에 안 맞으면 `[]`.
+  - `describe(number: str, book: dict | None = None) -> list[tuple[str, str]]` — 7가지 모양 중 맞는 것으로 `[(자리 글자, 뜻), ...]`. 도면 품번은 `TECH` 풀이와 같다(모양이 `TECH`의 부분집합). 표준품은 `[('3','원자재'), (산업 글자, 뜻), (고객사 글자, 뜻), (NNN, '프로젝트 일련번호'), (NNNN, '일련번호')]` — `'원자재'`는 품목분류 `3`의 코드표 이름. 뜻이 없으면 `'미등록'`, 일련번호 자리는 `(serial, '일련번호')`. 기술문서는 앞 7자리를 `PRODUCT` 풀이로 펼친 뒤 설계자료분류·일련번호를 잇는다. 양식은 상위 관리표준 풀이 뒤에 `(NN, '양식 일련번호')`. 모양에 안 맞으면 `[]`.
   - `describe_text(number: str, book: dict | None = None) -> str` — `' · '.join(f'{c} {n}')`. 빈 풀이면 `''`.
   - 활성 코드값 조회는 내부 함수 하나로: 없거나 `active=False`면 `NumberingError(f'{묶음 이름} {code}: 없거나 사용 중지된 코드입니다.')`.
 
@@ -148,6 +152,8 @@ SMALL = {'000': NONE, '111': SIZE_A, '112': NONE, '113': NONE, '120': NONE, '131
   - `test_doc_numbers`: `Document(number='KEN-PQ-01')`·`'KEN-PQ-01-01'` 저장 후 `next_std_doc('P','Q') == 'KEN-PQ-02'`, `next_form('KEN-PQ-01') == 'KEN-PQ-01-02'`, `next_form('KEN-PQ-09')` → 오류(없는 문서). `Item(code='1TDS001')` 저장 후 `next_tech_doc('1TDS001','BM') == '1TDS001-BM001'`.
   - `test_inactive_code_rejected_but_described`: `customer DC`를 `active=False`로 바꾼 뒤 `next_item_code('1','V','DC')` → `NumberingError`. `describe_text('1VDC001') == '1 완제품 · V Vehicle, 전기자동차(소형자동차 이상) · DC 디피코 · 001 일련번호'`.
   - `test_describe`: `describe('1VZZ001')`의 세 번째 항목 `('ZZ','미등록')`. `describe('31111-00001')`의 뜻 열 = `['원자재','PBA, 회로자재','Capacitor','Chip','size 1005','일련번호']`. `describe('1TDS001-BM001')` 마지막 두 항목 `('BM','BOM')`, `('001','일련번호')`. `describe('KEN-PQ-01-01')` 앞 두 항목 `('P','절차서')`, `('Q','품질')`. `describe('ABC') == []`.
+  - `test_drawing_part_counts_documents`: `Item(code='1TRT038')`, `Item(code='1TRT038-AS101')`, `Document(number='1TRT038-AS105')` 저장 후 `next_drawing_part('1TRT038','AS') == '1TRT038-AS106'`. `next_drawing_part('1TRT038','DT') == '1TRT038-DT001'`. `next_drawing_part('1TRT038','BM')` → `NumberingError`. `next_drawing_part('1TRT099','AS')` → `NumberingError`(없는 제품).
+  - `test_std_part`: `Item(code='1TRT038')` 저장 후 `next_std_part('1TRT038') == '3TRT038-0001'`. `Item(code='3TRT038-0014')` 저장 후 `'3TRT038-0015'`. `describe('3TRT038-0001')`의 첫 항목 `('3','원자재')`, 마지막 두 항목 `('038','프로젝트 일련번호')`, `('0001','일련번호')`. `describe('1TRT38-DT302') == []`.
   - `test_next_revision`: `next_revision([]) == '0'`, `next_revision(['0','1']) == '2'`, `next_revision(['Rev.3','A','rev 1']) == '4'`, `next_revision(['A','B']) == '0'`.
 
 - [ ] **Step 2: 실행해 실패 확인** — `./.venv/Scripts/python manage.py test core.tests_numbering.NumberingTest` → `ModuleNotFoundError: core.numbering`.
@@ -168,12 +174,14 @@ SMALL = {'000': NONE, '111': SIZE_A, '112': NONE, '113': NONE, '120': NONE, '131
 - Test: `core/api/tests.py` (`ItemApiTest`에 추가)
 
 **Interfaces:**
-- Consumes: Task 2의 `next_item_code`, `next_raw_code`, `NumberingError`, `codebook`, `describe_text`.
+- Consumes: Task 2의 `next_item_code`, `next_raw_code`, `next_drawing_part`, `next_std_part`, `PART_DRAWING_TYPES`, `PRODUCT`, `NumberingError`, `codebook`, `describe_text`.
 - Produces:
   - `GET /api/core/numbering/item-options/` (`require_perm(user, 'core.add_item')`) → 활성 코드값만, `sort` 순:
-    `{"category": [{"code","name","item_type"}], "industry": [{"code","name"}], "customer": [...], "material": [{"code","name","children":[{"code","name","children":[{"code","name","children":[{"code","name"}]}]}]}]}`
-  - `GET /api/core/numbering/item-preview/?category=&industry=&customer=` 또는 `?category=&material=&large=&middle=&small=` (`core.add_item`) → `{"number": "1VDC001"}`. `NumberingError`·빠진 값 → `_bad(msg)` 400.
-  - `POST /api/core/items/` 본문에 `auto` 객체가 있으면(`{"name": "...", "auto": {"category": "1", "industry": "V", "customer": "DC"}}` 또는 원자재 5개 키) `code`·`item_type`을 무시하고 서버가 계산한다. `item_type`은 품목분류 행의 `item_type`. `auto`가 없으면 지금 동작 그대로.
+    `{"category": [{"code","name","item_type"}], "industry": [{"code","name"}], "customer": [...], "material": [{"code","name","children":[{"code","name","children":[{"code","name","children":[{"code","name"}]}]}]}], "drawing_codes": [{"code","name","item_type"}], "products": [{"code","name"}]}`
+    - `drawing_codes`: `PART_DRAWING_TYPES` 순서대로, `name`은 설계자료분류 코드표 이름.
+    - `products`: `PRODUCT` 모양이고 첫 자리 품목분류의 `item_type`이 `FIN`인 `Item`, 품번 순.
+  - `GET /api/core/numbering/item-preview/` (`core.add_item`) → `{"number": "1VDC001"}`. 쿼리 묶음 4개: `?category=&industry=&customer=`, `?category=&material=&large=&middle=&small=`, `?product=&design=`(도면 품번), `?product=&std=1`(표준품). `NumberingError`·빠진 값 → `_bad(msg)` 400.
+  - `POST /api/core/items/` 본문에 `auto` 객체가 있으면 `code`를 무시하고 서버가 계산한다. `auto` 키 묶음 4개: `{"category","industry","customer"}`, 원자재 5개 키, `{"product","design"}`, `{"product","std": true}`. `item_type`: 앞의 둘은 품목분류 행의 `item_type`; 도면 품번은 본문 `item_type`이 있으면 그것, 없으면 `PART_DRAWING_TYPES[design]`; 표준품은 `RAW`. `auto`가 없으면 지금 동작 그대로.
   - `_row(i, book)` 결과에 `"code_parts": describe_text(i.code, book)` 추가(목록은 `codebook()`을 한 번만 불러 넘긴다). `_detail` 결과에도 `"code_parts"`.
 
 - [ ] **Step 1: 실패하는 테스트 작성** (`ItemApiTest`, 기존 클래스의 사용자·로그인 준비를 그대로 쓴다):
@@ -181,6 +189,8 @@ SMALL = {'000': NONE, '111': SIZE_A, '112': NONE, '113': NONE, '120': NONE, '131
   - `test_item_preview`: `?category=1&industry=V&customer=DC` → `{"number":"1VDC001"}`. `?category=3&industry=V&customer=DC` → 400.
   - `test_auto_code_recomputed_on_save`: preview로 `1VDC001`을 본 뒤 `Item.objects.create(code='1VDC001', ...)`, 그 다음 `auto`로 POST → 201, 응답 `code == '1VDC002'`, `item_type == 'FIN'`.
   - `test_auto_raw`: `auto={"category":"3","material":"1","large":"1","middle":"1","small":"1"}` → `code == '31111-00001'`, `item_type == 'RAW'`.
+  - `test_auto_drawing_part`: `Item(code='1TRT038', item_type='FIN')` 준비. `auto={"product":"1TRT038","design":"AS"}` → 201, `code == '1TRT038-AS001'`, `item_type == 'SEMI'`. 같은 묶음 + 본문 `item_type='RAW'` → `code == '1TRT038-AS002'`, `item_type == 'RAW'`. `design="BM"` → 400. options의 `products`에 `1TRT038`, `drawing_codes` 코드 `['AS','SU','BA','DT','PA']`(순서는 `PART_DRAWING_TYPES` 그대로).
+  - `test_auto_std_part`: 같은 준비, `auto={"product":"1TRT038","std":true}` → `code == '3TRT038-0001'`, `item_type == 'RAW'`. preview `?product=1TRT038&std=1` → `{"number":"3TRT038-0002"}`.
   - `test_auto_inactive_rejected`: `industry V`를 끄고 POST → 400, `detail`에 `사용 중지`.
   - `test_auto_integrity_retry_message`: `core.api.master.next_item_code`를 이미 있는 품번을 돌려주도록 `unittest.mock.patch`하고 POST → 400, `detail == '같은 번호가 방금 사용되었습니다. 다시 시도하세요.'`, 품번 개수 변화 없음.
   - `test_manual_code_unchanged`: `auto` 없이 `code='ABC-1'` POST → 201(모양 검사 없음).
@@ -189,7 +199,7 @@ SMALL = {'000': NONE, '111': SIZE_A, '112': NONE, '113': NONE, '120': NONE, '131
 
 - [ ] **Step 2: 실행해 실패 확인** — `./.venv/Scripts/python manage.py test core.api.tests.ItemApiTest` → 404·KeyError로 실패.
 
-- [ ] **Step 3: 구현** — `auto`의 모든 값은 문자열이어야 하고(아니면 `_bad`), 키 묶음으로 완제품형/원자재형을 고른다. 저장은 `with transaction.atomic():` 안에서 `next_*` → `item.full_clean()` → `item.save()`. `full_clean`의 품번 중복 `ValidationError`와 `IntegrityError` 둘 다 `_bad('같은 번호가 방금 사용되었습니다. 다시 시도하세요.', 'code')`로 바꾼다(자동 번호일 때만; 직접 입력의 중복 오류는 지금처럼). `NumberingError`는 `_bad(str(e))`. URL 이름은 `numbering-item-options`, `numbering-item-preview`.
+- [ ] **Step 3: 구현** — `auto`의 모든 값은 문자열이어야 하고(아니면 `_bad`), 키 묶음으로 완제품형/원자재형/도면 품번/표준품을 고른다(`std`만 불리언 `true`, 나머지는 문자열). 묶음에 안 맞으면 `_bad`. 저장은 `with transaction.atomic():` 안에서 `next_*` → `item.full_clean()` → `item.save()`. `full_clean`의 품번 중복 `ValidationError`와 `IntegrityError` 둘 다 `_bad('같은 번호가 방금 사용되었습니다. 다시 시도하세요.', 'code')`로 바꾼다(자동 번호일 때만; 직접 입력의 중복 오류는 지금처럼). `NumberingError`는 `_bad(str(e))`. URL 이름은 `numbering-item-options`, `numbering-item-preview`.
 
 - [ ] **Step 4: 통과 확인** — `./.venv/Scripts/python manage.py test core.api` PASS.
 
@@ -210,15 +220,22 @@ SMALL = {'000': NONE, '111': SIZE_A, '112': NONE, '113': NONE, '120': NONE, '131
 - Consumes: Task 3의 두 GET 경로와 POST `auto` 본문, `code_parts`.
 - Produces: 없음(화면).
 
-- [ ] **Step 1: 타입** — `ItemNumberOptions = { category: {code:string; name:string; item_type:string}[]; industry: Code[]; customer: Code[]; material: CodeNode[] }`, `Code = {code:string; name:string}`, `CodeNode = Code & { children?: CodeNode[] }`.
+- [ ] **Step 1: 타입** — `ItemNumberOptions = { category: {code:string; name:string; item_type:string}[]; industry: Code[]; customer: Code[]; material: CodeNode[]; drawing_codes: {code:string; name:string; item_type:string}[]; products: Code[] }`, `Code = {code:string; name:string}`, `CodeNode = Code & { children?: CodeNode[] }`.
 
-- [ ] **Step 2: 등록 창** — `NewItem`에 antd `Switch` "자동 번호"(기본 켬). 켜면 창을 열 때 `item-options`를 한 번 받아 품목분류 `Select`를 보이고, 고른 분류의 `item_type`이 `RAW`면 자재분류→대→중→소 `Select` 4개(앞 값을 바꾸면 뒤 값 초기화), 아니면 산업·고객사 `Select` 2개. 옵션 라벨은 `` `${code} ${name}` ``. 값이 다 차면 `item-preview`를 불러 "다음 번호: 1VDC001 (저장할 때 확정)"을 보여 준다. 자동일 때 품번 입력과 구분 선택은 숨기고 `{name, auto}`를 POST. 끄면 지금 폼 그대로.
+- [ ] **Step 2: 등록 창** — `NewItem`에 antd `Switch` "자동 번호"(기본 켬). 켜면 창을 열 때 `item-options`를 한 번 받고, antd `Segmented`로 번호 종류를 고른다: 제품코드 / 원자재 / 도면 품번 / 표준품.
+  - 제품코드: 품목분류 `Select`(`item_type`이 `RAW`가 아닌 것) + 산업·고객사 `Select` 2개.
+  - 원자재: 품목분류 `Select`(`RAW`인 것) + 자재분류→대→중→소 `Select` 4개(앞 값을 바꾸면 뒤 값 초기화).
+  - 도면 품번: 기준 제품 `Select`(`products`, 검색 가능) + 도면코드 `Select`(`drawing_codes`) + 구분 `Select`(도면코드를 고르면 그 `item_type`으로 채움, 바꿀 수 있음).
+  - 표준품: 기준 제품 `Select`만.
+  - 옵션 라벨은 `` `${code} ${name}` ``. 값이 다 차면 `item-preview`를 불러 "다음 번호: 1VDC001 (저장할 때 확정)"을 보여 준다. 자동일 때 품번 입력은 숨기고 `{name, auto}`(도면 품번은 `item_type`도)를 POST.
+  - 미리보기 옆 "직접 고치기" 버튼: 자동을 끄고 품번 칸에 미리보기 번호를, 구분에 현재 `item_type`을 채운다(백 단위 묶음 `AS100` 등을 손으로 고치는 용도). 서버 변경 없음 — 기존 직접 입력 경로.
+  - 끄면 지금 폼 그대로.
 
 - [ ] **Step 3: 풀이 표시** — 목록 품번 열 `render`: `code_parts`가 있으면 antd `Tooltip title={code_parts}`로 감싼다. `ItemPage` 품번 입력 아래 `Typography.Text type="secondary"`로 `code_parts`(빈 값이면 표시 안 함).
 
 - [ ] **Step 4: 빌드** — `cd frontend && npm run build` 성공(tsc 오류 0).
 
-- [ ] **Step 5: e2e 추가** — `scripts/e2e_browser.py`의 기준정보(품번) 확인 근처에: 품번 목록에서 새 품번 → 자동 번호 켬 → 품목분류 `1`, 산업 `V`, 고객사 `DC` 선택 → 미리보기 텍스트가 `1VDC\d{3}` → 품명 입력 후 만들기 → 상세 품번 입력값이 미리보기 번호와 같고 풀이에 `디피코`가 보인다.
+- [ ] **Step 5: e2e 추가** — `scripts/e2e_browser.py`의 기준정보(품번) 확인 근처에: 품번 목록에서 새 품번 → 자동 번호 켬 → 품목분류 `1`, 산업 `V`, 고객사 `DC` 선택 → 미리보기 텍스트가 `1VDC\d{3}` → 품명 입력 후 만들기 → 상세 품번 입력값이 미리보기 번호와 같고 풀이에 `디피코`가 보인다. 이어서 새 품번 → 도면 품번 → 기준 제품에 방금 만든 `1VDC…` 번호, 도면코드 `AS` → 만들기 → 상세 품번이 `^1VDC\d{3}-AS\d{3}$`에 맞는다.
 
 - [ ] **Step 6: e2e 실행** — `./.venv/Scripts/python scripts/e2e_browser.py` 끝까지 통과(기존 확인 포함).
 
@@ -271,7 +288,7 @@ SMALL = {'000': NONE, '111': SIZE_A, '112': NONE, '113': NONE, '120': NONE, '131
 - Modify: `docs/architecture.md` (`core` 모듈 표에 `numbering.py` 한 줄, API 설명에 `/api/core/numbering/item-options/`·`item-preview/`)
 - Modify: `docs/testing.md` (테스트 파일 표에 `core/tests_numbering.py`, `DocumentNumberingTest`)
 
-- [ ] **Step 1: business-rules 12절** — 다섯 모양 표(설계 4절 표 그대로), 일련번호 규칙(최댓값 + 1, 빈 번호 재사용 안 함, 모양 정규식에 정확히 맞는 번호만 계산), 끝 번호 초과 오류, 사용 중지 코드 거부, 직접 입력 허용·모양 검사 없음, 개정 자동 채움 규칙, 코드 위치(`core/numbering.py`, `core/models.py` `CodeValue`, `core/api/master.py`, `qms/admin.py` `DocumentForm`, `qms/models.py` `DocumentRevision`).
+- [ ] **Step 1: business-rules 12절** — 일곱 모양 표(설계 4절 표 그대로, 6 도면 품번·7 표준품 포함, "GD-02 미정의·현장 관행" 메모), "도면 품번 = 도면 문서번호" 규칙(일련번호는 `Item.code`·`Document.number` 양쪽 최댓값 + 1, 기준 완제품이 있어야 함), 일련번호 규칙(최댓값 + 1, 빈 번호 재사용 안 함, 모양 정규식에 정확히 맞는 번호만 계산), 끝 번호 초과 오류, 사용 중지 코드 거부, 직접 입력 허용·모양 검사 없음, 개정 자동 채움 규칙, 코드 위치(`core/numbering.py`, `core/models.py` `CodeValue`, `core/api/master.py`, `qms/admin.py` `DocumentForm`, `qms/models.py` `DocumentRevision`).
 
 - [ ] **Step 2: README·architecture·testing** — 위 Files 대로. 적은 경로·명령이 실제로 있는지 `ls`·`grep`으로 확인.
 
