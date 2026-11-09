@@ -1,3 +1,5 @@
+from django.core.exceptions import ValidationError
+from django.db import IntegrityError, transaction
 from django.db.models import Count, Q
 from django.shortcuts import get_object_or_404
 from rest_framework.parsers import MultiPartParser
@@ -7,7 +9,9 @@ from rest_framework.views import APIView
 from core.api.permissions import require_perm
 from core.export import table_xlsx, xlsx_response
 from core.importer import TARGET_MODELS, preview_import, run_import
-from core.models import ImportProfile, Item, Process
+from core.models import CodeValue, ImportProfile, Item, NumberRule, Process
+from core.numbering import (NumberingError, candidates, codebook, default_item_type, describe_text, fields,
+                            next_number, parse_pattern, rulebook)
 from core.grid import table_version
 from core.rules import Stale, item_version, save_item, save_table
 
@@ -35,14 +39,16 @@ def _filtered(request):
     return qs
 
 
-def _row(i):
+def _row(i, book, rules):
     return {'id': i.pk, 'code': i.code, 'name': i.name, 'item_type': i.item_type,
-            'item_type_display': i.get_item_type_display(), 'bom_count': i.bom_count, 'routing_count': i.routing_count}
+            'item_type_display': i.get_item_type_display(), 'bom_count': i.bom_count, 'routing_count': i.routing_count,
+            'code_parts': describe_text(i.code, NumberRule.ITEM, book, rules)}
 
 
 def _detail(item, user):
     return {
         'id': item.pk, 'title': str(item), 'code': item.code, 'name': item.name, 'item_type': item.item_type,
+        'code_parts': describe_text(item.code, NumberRule.ITEM),
         'version': item_version(item),
         'editable': user.has_perm('core.change_item'),
         'can_delete_rows': {'bom': user.has_perm('core.delete_bomline'), 'routing': user.has_perm('core.delete_routingstep')},
@@ -68,22 +74,107 @@ class ItemListView(APIView):
         except ValueError:
             page = 1
         count = qs.count()
+        book, rules = codebook(), list(NumberRule.objects.all())
         start = (page - 1) * PAGE_SIZE
         return Response({'count': count, 'page': page, 'has_more': start + PAGE_SIZE < count,
-                         'results': [_row(i) for i in qs[start:start + PAGE_SIZE]]})
+                         'results': [_row(i, book, rules) for i in qs[start:start + PAGE_SIZE]]})
 
     def post(self, request):
         require_perm(request.user, 'core.add_item')
         d = request.data
         if not isinstance(d, dict):
             return _bad(BAD_BODY)
+        auto = d.get('auto')
         vals = {f: d.get(f) for f in ('code', 'name', 'item_type')}
+        if auto is not None:
+            if (not isinstance(auto, dict) or type(auto.get('rule')) is not int or not isinstance(auto.get('values'), list)
+                    or not all(isinstance(v, str) for v in auto['values'])):
+                return _bad('자동 번호 요청 형식이 올바르지 않습니다.')
+            vals['code'] = ''  # 서버가 계산한다
+            vals['item_type'] = d.get('item_type') or ''
         if not all(isinstance(v, str) for v in vals.values()):
             return _bad('품번·품명·구분을 입력하세요.')
         item = Item(**{k: v.strip() for k, v in vals.items()})
-        item.full_clean()  # 검증 오류는 API 예외 처리가 400 fields로 바꾼다
-        item.save()
+        if auto is None:
+            item.full_clean()  # 검증 오류는 API 예외 처리가 400 fields로 바꾼다
+            item.save()
+            return Response(_detail(item, request.user), status=201)
+        rule = NumberRule.objects.filter(pk=auto['rule'], target=NumberRule.ITEM).first()
+        if rule is None:
+            return _bad('번호 규칙을 찾을 수 없습니다.')
+        retry = '같은 번호가 방금 사용되었습니다. 다시 시도하세요.'
+        try:
+            with transaction.atomic():
+                item.code = next_number(rule, auto['values'])
+                item.item_type = item.item_type or default_item_type(rule, auto['values'])
+                if not item.item_type:
+                    return _bad('구분을 고르세요.', 'item_type')
+                try:
+                    item.full_clean()
+                except ValidationError as e:
+                    if 'code' in e.message_dict:
+                        return _bad(retry, 'code')
+                    raise
+                item.save()
+        except NumberingError as e:
+            return _bad(str(e))
+        except IntegrityError:
+            return _bad(retry, 'code')
         return Response(_detail(item, request.user), status=201)
+
+
+def _ref_ok(rule, rules):
+    """틀을 해석할 수 있고 참조 규칙이 모두 남아 있는 규칙만."""
+    try:
+        return all(t.kind != 'ref' or t.rule in rules for t in parse_pattern(rule.pattern))
+    except NumberingError:
+        return False
+
+
+class ItemOptionsView(APIView):
+    schema = None
+
+    def get(self, request):
+        require_perm(request.user, 'core.add_item')
+        rules, groups = rulebook(), dict(CodeValue.GROUPS)
+        codes = {}
+        for c in CodeValue.objects.filter(active=True).order_by('sort', 'code'):
+            codes.setdefault(c.group, []).append(c)
+        out = []
+        for rule in NumberRule.objects.filter(target=NumberRule.ITEM, active=True).order_by('sort', 'pk'):
+            if not _ref_ok(rule, rules):
+                continue
+            fs, prev = [], None
+            for t in fields(rule):
+                if t.kind == 'ref':
+                    nums = candidates(t, rules)
+                    names = dict(Item.objects.filter(code__in=nums).values_list('code', 'name'))
+                    fs.append({'kind': 'ref', 'label': t.rule, 'parent': None,
+                               'options': [{'code': n, 'name': names.get(n, '')} for n in nums]})
+                    continue
+                opts = [{'id': c.pk, 'code': c.code, 'name': c.name, 'item_type': c.item_type, 'parent_id': c.parent_id}
+                        for c in codes.get(t.group, []) if not t.allowed or c.code in t.allowed]
+                fs.append({'kind': 'code', 'label': groups[t.group],
+                           'parent': prev if CodeValue.PARENT_GROUP.get(t.group) else None, 'options': opts})
+                prev = len(fs) - 1
+            out.append({'id': rule.pk, 'name': rule.name, 'pattern': rule.pattern, 'fields': fs})
+        return Response({'rules': out})
+
+
+class ItemPreviewView(APIView):
+    schema = None
+
+    def get(self, request):
+        require_perm(request.user, 'core.add_item')
+        rid = request.query_params.get('rule', '')
+        rule = NumberRule.objects.filter(pk=rid, target=NumberRule.ITEM).first() if rid.isdecimal() else None
+        if rule is None:
+            return _bad('번호 규칙을 찾을 수 없습니다.')
+        values = request.query_params.getlist('v')
+        try:
+            return Response({'number': next_number(rule, values), 'item_type': default_item_type(rule, values)})
+        except NumberingError as e:
+            return _bad(str(e))
 
 
 class ItemDetailView(APIView):

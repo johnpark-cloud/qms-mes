@@ -13,6 +13,8 @@ urlpatterns = [
     path('items/', views.ItemLookupView.as_view()),
     path('core/items/', master.ItemListView.as_view()),
     path('core/items/<int:pk>/', master.ItemDetailView.as_view()),
+    path('core/numbering/item-options/', master.ItemOptionsView.as_view(), name='numbering-item-options'),
+    path('core/numbering/item-preview/', master.ItemPreviewView.as_view(), name='numbering-item-preview'),
     path('core/processes/', master.ProcessTableView.as_view()),
     path('core/import/profiles/', master.ImportProfileListView.as_view()),
     path('core/import/', master.ImportView.as_view()),

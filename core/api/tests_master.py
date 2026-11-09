@@ -1,4 +1,5 @@
 import io
+from unittest import mock
 
 from django.contrib.auth.models import Permission, User
 from django.core.files.uploadedfile import SimpleUploadedFile
@@ -6,7 +7,7 @@ from django.test import TestCase
 from openpyxl import load_workbook
 from rest_framework.test import APIClient
 
-from core.models import BomLine, ImportProfile, Item, Process, RoutingStep
+from core.models import BomLine, CodeValue, ImportProfile, Item, NumberRule, Process, RoutingStep
 
 
 def grant(user, *codes):
@@ -97,6 +98,115 @@ class ItemApiTest(TestCase):
         r = self.put(self.fin, bom=[{'component': self.raw.pk, 'qty': '1'}])
         self.assertEqual(r.status_code, 403)
         self.assertEqual(BomLine.objects.count(), 0)
+
+    # ---- 규칙 기반 품번 자동 번호 ----
+    def rule(self, name):
+        return NumberRule.objects.get(name=name)
+
+    def options(self):
+        return self.client.get('/api/core/numbering/item-options/').json()['rules']
+
+    def auto(self, name, values, **extra):
+        body = {'name': '자동', 'item_type': '', 'code': 'IGNORED', **extra,
+                'auto': {'rule': self.rule(name).pk, 'values': values}}
+        return self.client.post('/api/core/items/', body, format='json')
+
+    def test_item_options(self):
+        rules = self.options()
+        self.assertEqual([r['name'] for r in rules], ['제품코드', '원자재', '도면 품번', '표준품'])
+        self.assertEqual([o['code'] for o in rules[0]['fields'][0]['options']], ['1', '2'])
+        self.assertEqual(rules[1]['fields'][2]['label'], '자재 대분류')
+        self.assertEqual(rules[1]['fields'][2]['parent'], 1)
+        self.assertIsNone(rules[0]['fields'][0]['parent'])
+        CodeValue.objects.filter(group='customer', code='DC').update(active=False)
+        self.assertNotIn('DC', [o['code'] for o in self.options()[0]['fields'][2]['options']])
+        NumberRule.objects.filter(name='표준품').update(active=False)
+        self.assertNotIn('표준품', [r['name'] for r in self.options()])
+
+    def test_item_options_skip_broken_rule(self):
+        NumberRule.objects.create(name='깨짐', target='ITEM', pattern='{품번:없는규칙}{일련3}', sort=99)
+        NumberRule.objects.create(name='문법', target='ITEM', pattern='{일련', sort=98)
+        self.assertEqual([r['name'] for r in self.options()], ['제품코드', '원자재', '도면 품번', '표준품'])
+
+    def test_item_preview(self):
+        url = f'/api/core/numbering/item-preview/?rule={self.rule("제품코드").pk}'
+        self.assertEqual(self.client.get(url + '&v=1&v=V&v=DC').json(), {'number': '1VDC001', 'item_type': 'FIN'})
+        self.assertEqual(self.client.get(url + '&v=3&v=V&v=DC').status_code, 400)
+        doc = self.rule('관리표준').pk
+        self.assertEqual(self.client.get(f'/api/core/numbering/item-preview/?rule={doc}&v=M&v=A').status_code, 400)
+        self.assertEqual(self.client.get('/api/core/numbering/item-preview/?rule=abc').status_code, 400)
+
+    def test_auto_code_recomputed_on_save(self):
+        Item.objects.create(code='1VDC001', name='먼저', item_type='FIN')
+        r = self.auto('제품코드', ['1', 'V', 'DC'])
+        self.assertEqual(r.status_code, 201, r.content)
+        self.assertEqual((r.json()['code'], r.json()['item_type']), ('1VDC002', 'FIN'))
+
+    def test_auto_raw(self):
+        r = self.auto('원자재', ['3', '1', '1', '1', '1'])
+        self.assertEqual(r.status_code, 201, r.content)
+        self.assertEqual((r.json()['code'], r.json()['item_type']), ('31111-00001', 'RAW'))
+
+    def test_auto_drawing_part(self):
+        Item.objects.create(code='1TRT038', name='모체', item_type='FIN')
+        r = self.auto('도면 품번', ['1TRT038', 'AS'])
+        self.assertEqual((r.status_code, r.json()['code'], r.json()['item_type']), (201, '1TRT038-AS001', 'SEMI'))
+        r = self.auto('도면 품번', ['1TRT038', 'AS'], item_type='RAW')
+        self.assertEqual((r.json()['code'], r.json()['item_type']), ('1TRT038-AS002', 'RAW'))
+        self.assertEqual(self.auto('도면 품번', ['1TRT038', 'BM']).status_code, 400)
+        ref = next(r for r in self.options() if r['name'] == '도면 품번')['fields'][0]
+        self.assertIn('1TRT038', [o['code'] for o in ref['options']])
+
+    def test_auto_std_part(self):
+        Item.objects.create(code='1TRT038', name='모체', item_type='FIN')
+        r = self.auto('표준품', ['3', '1TRT038'])
+        self.assertEqual((r.status_code, r.json()['code'], r.json()['item_type']), (201, '3TRT038-0001', 'RAW'))
+
+    def test_auto_inactive_rejected(self):
+        CodeValue.objects.filter(group='industry', code='V').update(active=False)
+        r = self.auto('제품코드', ['1', 'V', 'DC'])
+        self.assertEqual(r.status_code, 400)
+        self.assertIn('사용 중지', r.json()['detail'])
+
+    def test_auto_missing_type(self):
+        Item.objects.create(code='1TRT038', name='모체', item_type='FIN')
+        CodeValue.objects.filter(group='design', code='AS').update(item_type='')
+        r = self.auto('도면 품번', ['1TRT038', 'AS'])
+        self.assertEqual(r.status_code, 400)
+        self.assertEqual(r.json()['detail'], '구분을 고르세요.')
+
+    def test_auto_bad_shape(self):
+        rid = self.rule('제품코드').pk
+        for auto in ({'rule': 'x', 'values': []}, {'rule': rid, 'values': 'abc'}, {'rule': rid, 'values': [1, 2, 3]}, 'x'):
+            r = self.client.post('/api/core/items/', {'name': 'n', 'item_type': 'FIN', 'auto': auto}, format='json')
+            self.assertEqual(r.status_code, 400, auto)
+
+    def test_auto_integrity_retry_message(self):
+        before = Item.objects.count()
+        with mock.patch('core.api.master.next_number', return_value='R1'):
+            r = self.auto('제품코드', ['1', 'V', 'DC'])
+        self.assertEqual(r.status_code, 400)
+        self.assertEqual(r.json()['detail'], '같은 번호가 방금 사용되었습니다. 다시 시도하세요.')
+        self.assertEqual(Item.objects.count(), before)
+
+    def test_manual_code_unchanged(self):
+        r = self.client.post('/api/core/items/', {'code': 'ABC-1', 'name': 'n', 'item_type': 'FIN'}, format='json')
+        self.assertEqual(r.status_code, 201)
+
+    def test_code_parts(self):
+        a = Item.objects.create(code='1VDC001', name='가', item_type='FIN')
+        b = Item.objects.create(code='ABC-1', name='나', item_type='FIN')
+        rows = {r['code']: r for r in self.client.get('/api/core/items/').json()['results']}
+        self.assertTrue(rows['1VDC001']['code_parts'].startswith('1 완제품 · '))
+        self.assertEqual(rows['ABC-1']['code_parts'], '')
+        self.assertTrue(self.client.get(f'/api/core/items/{a.pk}/').json()['code_parts'].startswith('1 완제품 · '))
+        self.assertEqual(self.client.get(f'/api/core/items/{b.pk}/').json()['code_parts'], '')
+
+    def test_numbering_requires_add_item(self):
+        u = User.objects.create_user('insp', password='x', is_staff=True)
+        self.client.force_login(u)
+        self.assertEqual(self.client.get('/api/core/numbering/item-options/').status_code, 403)
+        self.assertEqual(self.client.get('/api/core/numbering/item-preview/?rule=1').status_code, 403)
 
 
 
