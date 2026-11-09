@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Alert, Input, Select, message } from 'antd'
+import { Alert, Input, Select, Typography, message } from 'antd'
 import { useEffect, useMemo, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import { ApiError, api } from '../../api/client'
@@ -131,7 +131,15 @@ export default function ItemPage() {
   const otherErrors = Object.entries(errors).filter(([k]) => !isCell(k))
 
   const props = [
-    { label: '품번', node: <Input aria-label="품번" status={errors.code ? 'error' : undefined} value={code} readOnly={readOnly} onChange={(e) => setCode(e.target.value)} /> },
+    {
+      label: '품번',
+      node: (
+        <div>
+          <Input aria-label="품번" status={errors.code ? 'error' : undefined} value={code} readOnly={readOnly} onChange={(e) => setCode(e.target.value)} />
+          {d.code_parts && <Typography.Text type="secondary" data-testid="code-parts">{d.code_parts}</Typography.Text>}
+        </div>
+      ),
+    },
     { label: '품명', node: <Input aria-label="품명" status={errors.name ? 'error' : undefined} value={name} readOnly={readOnly} onChange={(e) => setName(e.target.value)} /> },
     { label: '구분', node: <Select aria-label="구분" style={{ width: 160 }} status={errors.item_type ? 'error' : undefined} disabled={readOnly} options={d.type_options} value={type} onChange={setType} /> },
   ]

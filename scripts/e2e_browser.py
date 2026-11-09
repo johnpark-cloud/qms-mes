@@ -415,6 +415,7 @@ try:
         try:
             page.goto('/app/items')
             page.get_by_role('button', name='새 품번').click()
+            page.get_by_role('dialog').get_by_role('switch', name='자동 번호').click()  # 직접 입력 경로
             page.get_by_role('dialog').get_by_label('품번').fill('E2E-B1')
             page.get_by_role('dialog').get_by_label('품명').fill('E2E 새 품번')
             page.get_by_role('dialog').get_by_label('구분').click()
@@ -432,6 +433,48 @@ try:
             check('품번 BOM 붙여넣기 저장', len(bom) == 2, f'{len(bom)}줄')
         except Exception as e:
             check('품번 BOM 붙여넣기 저장', False, str(e)[:80])
+
+        # 규칙 기반 자동 품번: 제품코드 → 도면 품번
+        import re
+
+        def pick_auto(label, text):
+            dlg = page.get_by_role('dialog')
+            dlg.get_by_label(label, exact=True).click()
+            page.locator('.ant-select-dropdown:visible .ant-select-item-option', has_text=re.compile('^' + re.escape(text) + '( |$)')).first.click()
+
+        try:
+            page.goto('/app/items')
+            page.get_by_role('button', name='새 품번').click()
+            dlg = page.get_by_role('dialog')
+            pick_auto('규칙', '제품코드')
+            pick_auto('품목분류', '1')
+            pick_auto('산업분류', 'V')
+            pick_auto('고객사', 'DC')
+            pv = dlg.get_by_test_id('number-preview')
+            pv.wait_for(timeout=5000)
+            num = re.search(r'(1VDC\d{3})', pv.inner_text()).group(1)
+            dlg.get_by_label('품명', exact=True).fill('E2E 자동 번호')
+            dlg.get_by_role('button', name='만들기').click()
+            page.wait_for_url('**/app/items/*')
+            page.get_by_label('품번', exact=True).wait_for(timeout=5000)
+            code_ok = page.get_by_label('품번', exact=True).input_value() == num
+            parts = page.get_by_test_id('code-parts').inner_text()
+            check('자동 번호 제품코드 등록·풀이', code_ok and '디피코' in parts, f'{num} {parts}')
+
+            page.goto('/app/items')
+            page.get_by_role('button', name='새 품번').click()
+            pick_auto('규칙', '도면 품번')
+            pick_auto('제품코드', num)
+            pick_auto('설계자료분류', 'AS')
+            dlg.get_by_test_id('number-preview').wait_for(timeout=5000)
+            dlg.get_by_label('품명', exact=True).fill('E2E 자동 도면')
+            dlg.get_by_role('button', name='만들기').click()
+            page.wait_for_url('**/app/items/*')
+            page.get_by_label('품번', exact=True).wait_for(timeout=5000)
+            c2 = page.get_by_label('품번', exact=True).input_value()
+            check('자동 번호 도면 품번', bool(re.match(r'^1VDC\d{3}-AS\d{3}$', c2)), c2)
+        except Exception as e:
+            check('자동 번호 품번 등록', False, str(e)[:120])
 
         try:
             page.goto('/app/processes')

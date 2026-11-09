@@ -9,12 +9,14 @@ export interface ItemRow {
   item_type_display: string
   bom_count: number
   routing_count: number
+  code_parts: string
 }
 
 export interface ItemDetail {
   id: number
   title: string
   code: string
+  code_parts: string
   name: string
   item_type: string
   version: string | number
@@ -32,4 +34,28 @@ export interface TableData {
   editable: boolean
   can_delete: boolean
   rows: ({ id: number } & Record<string, string | number | null>)[]
+}
+
+// core/api/numbering.py item-options 응답. 규칙 기반 자동 품번 등록 창이 쓴다.
+export interface NumberOption {
+  id?: number
+  code: string
+  name: string
+  item_type?: string
+  parent_id?: number | null
+}
+export interface NumberField {
+  kind: 'code' | 'ref'
+  label: string
+  parent: number | null
+  options: NumberOption[]
+}
+export interface NumberRuleOptions {
+  id: number
+  name: string
+  pattern: string
+  fields: NumberField[]
+}
+export interface ItemNumberOptions {
+  rules: NumberRuleOptions[]
 }
