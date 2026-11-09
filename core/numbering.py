@@ -84,9 +84,15 @@ def rulebook():
 
 
 def _widths(rule, rules):
-    return [len(t.text) if t.kind == 'text' else
-            (t.tail or width(rules[t.rule], rules)) if t.kind == 'ref' else t.width
-            for t in parse_pattern(rule.pattern)]
+    def one(t):
+        if t.kind != 'ref':
+            return t.width
+        if t.tail:
+            return t.tail
+        if t.rule not in rules:
+            raise NumberingError(f'참조하는 규칙 "{t.rule}"이(가) 없습니다.')
+        return width(rules[t.rule], rules)
+    return [one(t) for t in parse_pattern(rule.pattern)]
 
 
 def width(rule, rules):
@@ -120,7 +126,7 @@ def check_rule(name, target, pattern, rules=None):
                 if not re.fullmatch(fmt, v) or not CodeValue.objects.filter(group=t.group, code=v).exists():
                     raise NumberingError(f'{{{label}}}: 허용 값 "{v}"이(가) 코드표에 없습니다.')
             want = CodeValue.PARENT_GROUP.get(t.group)
-            if want and not (prev and prev.kind == 'code' and prev.group == want):
+            if want and not (prev and prev.group == want):
                 raise NumberingError(f'{{{label}}} 바로 앞에는 {{{dict(CodeValue.GROUPS)[want]}}}가 와야 합니다.')
         elif t.kind == 'ref':
             ref = rules.get(t.rule)
@@ -129,7 +135,8 @@ def check_rule(name, target, pattern, rules=None):
             if ref.target != t.target:
                 raise NumberingError(f'규칙 "{t.rule}"은(는) {ref.get_target_display()} 규칙이라 '
                                      f'{{{dict((v, k) for k, v in _TARGETS.items())[t.target]}:{t.rule}}}로 쓸 수 없습니다.')
-        prev = t
+        if t.kind == 'code':
+            prev = t
     refs = [t.rule for t in tokens if t.kind == 'ref']
     if name in refs or _reaches(name, rules, set(), name):
         raise NumberingError('규칙이 자기 자신을 되풀이해 참조합니다(순환 참조).')

@@ -147,7 +147,7 @@ class NumberRule(models.Model):
 
 
 class Process(models.Model):
-    code =models.CharField('공정 코드', max_length=50, unique=True)
+    code = models.CharField('공정 코드', max_length=50, unique=True)
     name = models.CharField('공정명', max_length=200)
     history = HistoricalRecords()
 

@@ -107,6 +107,10 @@ class NumberRuleTest(TestCase):
             check_rule('A', 'ITEM', '{품번:B}-{일련2}', rules)
         check_rule('X', 'ITEM', '{품번:제품코드:뒤5}-{일련2}')
         check_rule('X', 'ITEM', '{품번:제품코드:뒤6}-{일련2}')
+        check_rule('X', 'ITEM', '{자재분류}-{자재 대분류}{일련2}')  # 바로 앞 코드 토큰 기준(고정 글자는 건너뜀)
+        rules = {**rulebook(), 'M': NumberRule(name='M', target='ITEM', pattern='{품번:없음}-{일련2}')}
+        with self.assertRaises(NumberingError):  # 참조 규칙이 가리키는 규칙이 없어도 KeyError가 아니라 오류
+            check_rule('X', 'ITEM', '{품번:M:뒤2}-{일련2}', rules)
 
     def test_pattern_locked(self):
         msg = '저장된 규칙의 이름·대상·틀은 바꿀 수 없습니다. 새 규칙을 만드세요.'
