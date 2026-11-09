@@ -1,4 +1,5 @@
 import os
+import re
 
 from django.apps import apps
 from django.conf import settings
@@ -55,6 +56,61 @@ class Item(models.Model):
 
     def __str__(self):
         return f'{self.code} {self.name}'
+
+
+class CodeValue(models.Model):
+    """번호 부여에 쓰는 코드표. 묶음(group)마다 자릿수·형식이 다르고, 자재 분류는 대·중·소 계층이다."""
+    CATEGORY, INDUSTRY, CUSTOMER, MATERIAL = 'category', 'industry', 'customer', 'material'
+    MAT_L, MAT_M, MAT_S = 'mat_l', 'mat_m', 'mat_s'
+    DOC_KIND, DEPT, DESIGN = 'doc_kind', 'dept', 'design'
+    GROUPS = [(CATEGORY, '품목분류'), (INDUSTRY, '산업분류'), (CUSTOMER, '고객사'), (MATERIAL, '자재분류'),
+              (MAT_L, '자재 대분류'), (MAT_M, '자재 중분류'), (MAT_S, '자재 소분류'),
+              (DOC_KIND, '관리표준 문서구분'), (DEPT, '부서'), (DESIGN, '설계자료분류')]
+    PARENT_GROUP = {MAT_L: MATERIAL, MAT_M: MAT_L, MAT_S: MAT_M}
+    FORMATS = {CATEGORY: r'\d', MATERIAL: r'\d', MAT_L: r'\d', MAT_M: r'\d', MAT_S: r'\d',
+               INDUSTRY: r'[A-Z]', DOC_KIND: r'[A-Z]', DEPT: r'[A-Z]',
+               CUSTOMER: r'[A-Z]{2}', DESIGN: r'[A-Z]{2}'}
+
+    group = models.CharField('묶음', max_length=10, choices=GROUPS)
+    code = models.CharField('코드', max_length=2)
+    name = models.CharField('이름', max_length=100)
+    parent = models.ForeignKey('self', null=True, blank=True, on_delete=models.PROTECT,
+                               related_name='children', verbose_name='상위 코드')
+    item_type = models.CharField('품목 구분', max_length=4, choices=Item.TYPES, blank=True)
+    active = models.BooleanField('사용', default=True)
+    sort = models.PositiveIntegerField('정렬', default=0)
+    history = HistoricalRecords()
+
+    class Meta:
+        verbose_name = verbose_name_plural = '번호 코드값'
+        ordering = ['group', 'parent_id', 'sort', 'code']
+        constraints = [
+            models.UniqueConstraint(fields=['group', 'code'], condition=models.Q(parent__isnull=True),
+                                    name='uniq_codevalue_root'),
+            models.UniqueConstraint(fields=['parent', 'code'], condition=models.Q(parent__isnull=False),
+                                    name='uniq_codevalue_child'),
+        ]
+
+    def __str__(self):
+        return f'{self.code} {self.name}'
+
+    def clean(self):
+        errors = {}
+        fmt = self.FORMATS.get(self.group)
+        if fmt and not re.fullmatch(fmt, self.code or ''):
+            kind = '숫자' if fmt.startswith('\\d') else '영문 대문자'
+            errors['code'] = f'이 묶음의 코드는 {kind} {2 if "{2}" in fmt else 1}자리여야 합니다.'
+        want = self.PARENT_GROUP.get(self.group)
+        if want and (self.parent is None or self.parent.group != want):
+            errors['parent'] = f'상위 코드는 {dict(self.GROUPS)[want]} 묶음의 코드여야 합니다.'
+        elif not want and self.parent_id:
+            errors['parent'] = '이 묶음은 상위 코드를 둘 수 없습니다.'
+        if self.group == self.CATEGORY and not self.item_type:
+            errors['item_type'] = '품목분류는 품목 구분이 필요합니다.'
+        elif self.group not in (self.CATEGORY, self.DESIGN) and self.item_type:
+            errors['item_type'] = '이 묶음은 품목 구분을 둘 수 없습니다.'
+        if errors:
+            raise ValidationError(errors)
 
 
 class Process(models.Model):

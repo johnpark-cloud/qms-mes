@@ -62,6 +62,7 @@ NAV = [
                   ('엑셀 보고서 양식', 'admin:qms_exceltemplate_changelist', 'qms.view_exceltemplate')]),
     ('기준정보 및 시스템 관리', [('품번·BOM·라우팅', 'admin:core_item_changelist', 'core.view_item'),
                        ('공정', 'admin:core_process_changelist', 'core.view_process'),
+                       ('번호 코드값', 'admin:core_codevalue_changelist', 'core.view_codevalue'),
                        ('검사기준', 'admin:qms_inspectionspec_changelist', 'qms.view_inspectionspec'),
                        ('관리계획서', 'admin:qms_controlplan_changelist', 'qms.view_controlplan'),
                        ('고객사별 8D 기한', 'admin:qms_customerrule_changelist', 'qms.view_customerrule'),

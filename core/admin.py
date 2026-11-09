@@ -11,7 +11,7 @@ from django.utils import timezone
 from django.utils.html import format_html, format_html_join
 from simple_history.admin import SimpleHistoryAdmin
 
-from .models import (BomLine, Hold, ImportProfile, Item, Lot, LotLink, Nonconformance, NonconformancePhoto, Process,
+from .models import (BomLine, CodeValue, Hold, ImportProfile, Item, Lot, LotLink, Nonconformance, NonconformancePhoto, Process,
                      RevisionLog, RoutingStep, Shipment, WorkOrder, WorkResult)
 from .records import blockers, can_edit_locked, delete_record, is_locked
 from .rules import LOCKED_MSG, begin_edit, child_editable, finish_edit, missing_message, nc_locked_fields, sign_disposition
@@ -233,6 +233,13 @@ class ItemAdmin(BaseAdmin):
     search_fields = ['code', 'name']
     list_filter = ['item_type']
     inlines = [BomInline, RoutingInline]
+
+
+@admin.register(CodeValue)
+class CodeValueAdmin(BaseAdmin):
+    list_display = ['group', 'code', 'name', 'parent', 'item_type', 'active', 'sort']
+    list_filter = ['group', 'active']
+    search_fields = ['code', 'name']
 
 
 @admin.register(Process)
