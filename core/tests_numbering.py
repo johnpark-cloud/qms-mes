@@ -3,9 +3,11 @@ from django.core.exceptions import ValidationError
 from django.test import TestCase
 
 from core.admin import CodeValueAdmin, NumberRuleAdmin
-from core.models import CodeValue, NumberRule
-from core.numbering import NumberingError, check_rule, parse_pattern, rulebook
+from core.models import CodeValue, Item, NumberRule
+from core.numbering import (NumberingError, candidates, check_rule, default_item_type, describe, describe_text,
+                            fields, next_number, next_revision, next_serial, parse_pattern, rulebook)
 from qms.apps import ensure_roles
+from qms.models import Document
 
 
 def cv(**kw):
@@ -147,3 +149,120 @@ class NumberRuleTest(TestCase):
         self.assertEqual(r.status_code, 200)
         for f in ('name', 'target', 'pattern'):
             self.assertIn(f'name="{f}"', r.content.decode())
+
+
+def R(name):
+    return NumberRule.objects.get(name=name)
+
+
+def item(code):
+    return Item.objects.create(code=code, name='x', item_type='RAW')
+
+
+def doc(number):
+    return Document.objects.create(number=number, title='x')
+
+
+class NumberingTest(TestCase):
+    def test_next_serial(self):
+        self.assertEqual(next_serial([], 'X', 3), '001')
+        self.assertEqual(next_serial(['X001', 'X007'], 'X', 3), '008')
+        with self.assertRaisesMessage(NumberingError, '일련번호가 다 찼습니다.'):
+            next_serial(['X999'], 'X', 3)
+
+    def test_serial_ignores_other_shapes(self):
+        self.assertEqual(next_serial(['KEN-PQ-01-01', 'KEN-PQ-03'], 'KEN-PQ-', 2), '04')
+        self.assertEqual(next_serial(['1VDC001A', '1VDC002'], '1VDC', 3), '003')
+        self.assertEqual(next_serial(['1VDC1000'], '1VDC', 3), '001')
+
+    def test_item_code(self):
+        self.assertEqual(next_number(R('제품코드'), ['1', 'V', 'DC']), '1VDC001')
+        item('1VDC005')
+        self.assertEqual(next_number(R('제품코드'), ['1', 'V', 'DC']), '1VDC006')
+        with self.assertRaises(NumberingError):  # 허용 값 아님
+            next_number(R('제품코드'), ['3', 'V', 'DC'])
+        self.assertEqual(default_item_type(R('제품코드'), ['2', 'V', 'DC']), 'SEMI')
+
+    def test_parent_chain(self):
+        self.assertEqual(next_number(R('원자재'), ['3', '1', '1', '1', '1']), '31111-00001')
+        self.assertEqual(next_number(R('원자재'), ['3', '1', '3', '2', '0']), '31320-00001')
+        with self.assertRaises(NumberingError):  # 312 아래 중분류 2 없음
+            next_number(R('원자재'), ['3', '1', '2', '2', '0'])
+        self.assertEqual(default_item_type(R('원자재'), ['3', '1', '1', '1', '1']), 'RAW')
+
+    def test_doc_numbers(self):
+        doc('KEN-PQ-01')
+        doc('KEN-PQ-01-01')
+        self.assertEqual(next_number(R('관리표준'), ['P', 'Q']), 'KEN-PQ-02')
+        self.assertEqual(next_number(R('양식'), ['KEN-PQ-01']), 'KEN-PQ-01-02')
+        with self.assertRaises(NumberingError):  # 없는 문서
+            next_number(R('양식'), ['KEN-PQ-09'])
+        item('1TDS001')
+        self.assertEqual(next_number(R('기술문서'), ['1TDS001', 'BM']), '1TDS001-BM001')
+        self.assertEqual(candidates(fields(R('양식'))[0]), ['KEN-PQ-01'])
+
+    def test_drawing_part_counts_documents(self):
+        item('1TRT038')
+        item('1TRT038-AS101')
+        doc('1TRT038-AS105')
+        self.assertEqual(next_number(R('도면 품번'), ['1TRT038', 'AS']), '1TRT038-AS106')
+        self.assertEqual(next_number(R('도면 품번'), ['1TRT038', 'DT']), '1TRT038-DT001')
+        with self.assertRaises(NumberingError):
+            next_number(R('도면 품번'), ['1TRT038', 'BM'])
+        with self.assertRaises(NumberingError):  # 없는 제품
+            next_number(R('도면 품번'), ['1TRT099', 'AS'])
+        self.assertEqual(default_item_type(R('도면 품번'), ['1TRT038', 'DT']), 'RAW')
+        self.assertEqual(default_item_type(R('도면 품번'), ['1TRT038', 'AS']), 'SEMI')
+
+    def test_std_part(self):
+        item('1TRT038')
+        self.assertEqual(next_number(R('표준품'), ['3', '1TRT038']), '3TRT038-0001')
+        item('3TRT038-0014')
+        self.assertEqual(next_number(R('표준품'), ['3', '1TRT038']), '3TRT038-0015')
+        self.assertEqual(describe('3TRT038-0001'), [('3', '원자재'), ('T', 'Train/Tram, 철차/트램용 축전지'),
+                                                    ('RT', '현대로템'), ('038', '제품코드 일련번호'), ('0001', '일련번호')])
+        self.assertEqual(describe('1TRT38-DT302'), [])
+
+    def test_describe(self):
+        self.assertEqual(describe('1VZZ001')[2], ('ZZ', '미등록'))
+        self.assertEqual([n for _, n in describe('31111-00001')],
+                         ['원자재', 'PBA, 회로자재', 'Capacitor', 'Chip', 'size 1005', '일련번호'])
+        self.assertEqual(describe('1TDS001-BM001')[-2:], [('BM', 'BOM'), ('001', '일련번호')])
+        self.assertEqual(describe('KEN-PQ-01-01'),
+                         [('P', '절차서'), ('Q', '품질'), ('01', '관리표준 일련번호'), ('01', '일련번호')])
+        self.assertEqual(describe('ABC'), [])
+        d = describe('1TRT038-AS001', target='ITEM')  # 기술문서(sort 5)보다 품번 대상 도면 품번이 먼저
+        self.assertEqual(d[-1], ('001', '일련번호'))
+        self.assertEqual(d[-3], ('038', '제품코드 일련번호'))
+        self.assertEqual(d[-2], ('AS', '기구 조립도면'))
+
+    def test_inactive_rule_still_describes(self):
+        CodeValue.objects.filter(group='customer', code='DC').update(active=False)
+        with self.assertRaises(NumberingError):
+            next_number(R('제품코드'), ['1', 'V', 'DC'])
+        text = '1 완제품 · V Vehicle, 전기자동차(소형자동차 이상) · DC 디피코 · 001 일련번호'
+        self.assertEqual(describe_text('1VDC001'), text)
+        NumberRule.objects.filter(name='제품코드').update(active=False)
+        with self.assertRaisesMessage(NumberingError, '사용 중지된 규칙입니다.'):
+            next_number(R('제품코드'), ['1', 'V', 'DC'])
+        self.assertEqual(describe_text('1VDC001'), text)
+
+    def test_company_prefix_change(self):
+        doc('KEN-PQ-01')
+        r = NumberRule(name='관리표준2', target='DOC', pattern='ABC-{관리표준 문서구분}{부서}-{일련2}', sort=8)
+        r.full_clean()
+        r.save()
+        NumberRule.objects.filter(name='관리표준').update(active=False)
+        self.assertEqual(next_number(R('관리표준2'), ['P', 'Q']), 'ABC-PQ-01')
+        with self.assertRaises(NumberingError):
+            next_number(R('관리표준'), ['P', 'Q'])
+        want = [('P', '절차서'), ('Q', '품질'), ('01', '일련번호')]
+        self.assertEqual(describe('KEN-PQ-01'), want)
+        self.assertEqual(describe('ABC-PQ-01'), want)
+        NumberRule(name='양식2', target='DOC', pattern='{문서:관리표준2}-{일련2}').full_clean()
+
+    def test_next_revision(self):
+        self.assertEqual(next_revision([]), '0')
+        self.assertEqual(next_revision(['0', '1']), '2')
+        self.assertEqual(next_revision(['Rev.3', 'A', 'rev 1']), '4')
+        self.assertEqual(next_revision(['A', 'B']), '0')
