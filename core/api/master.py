@@ -11,7 +11,8 @@ from core.export import table_xlsx, xlsx_response
 from core.importer import TARGET_MODELS, preview_import, run_import
 from core.models import CodeValue, ImportProfile, Item, NumberRule, Process
 from core.numbering import (NumberingError, candidates, codebook, default_item_type, describe_text, fields,
-                            next_number, parse_pattern, rulebook)
+                            next_number, parse_pattern, rulebook, _table)
+
 from core.grid import table_version
 from core.rules import Stale, item_version, save_item, save_table
 
@@ -112,7 +113,7 @@ class ItemListView(APIView):
                 try:
                     item.full_clean()
                 except ValidationError as e:
-                    if 'code' in e.message_dict:
+                    if any(err.code == 'unique' for err in e.error_dict.get('code', [])):
                         return _bad(retry, 'code')
                     raise
                 item.save()
@@ -140,7 +141,7 @@ class ItemOptionsView(APIView):
         codes = {}
         for c in CodeValue.objects.filter(active=True).order_by('sort', 'code'):
             codes.setdefault(c.group, []).append(c)
-        out = []
+        out, names = [], {}  # names: 대상 -> {번호: 이름}, 표마다 한 번만 읽는다
         for rule in NumberRule.objects.filter(target=NumberRule.ITEM, active=True).order_by('sort', 'pk'):
             if not _ref_ok(rule, rules):
                 continue
@@ -148,9 +149,11 @@ class ItemOptionsView(APIView):
             for t in fields(rule):
                 if t.kind == 'ref':
                     nums = candidates(t, rules)
-                    names = dict(Item.objects.filter(code__in=nums).values_list('code', 'name'))
+                    if t.target not in names:
+                        model, field = _table(t.target)
+                        names[t.target] = dict(model.objects.values_list(field, 'name' if model is Item else 'title'))
                     fs.append({'kind': 'ref', 'label': t.rule, 'parent': None,
-                               'options': [{'code': n, 'name': names.get(n, '')} for n in nums]})
+                               'options': [{'code': n, 'name': names[t.target].get(n, '')} for n in nums]})
                     continue
                 opts = [{'id': c.pk, 'code': c.code, 'name': c.name, 'item_type': c.item_type, 'parent_id': c.parent_id}
                         for c in codes.get(t.group, []) if not t.allowed or c.code in t.allowed]

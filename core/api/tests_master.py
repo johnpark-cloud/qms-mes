@@ -189,6 +189,21 @@ class ItemApiTest(TestCase):
         self.assertEqual(r.json()['detail'], '같은 번호가 방금 사용되었습니다. 다시 시도하세요.')
         self.assertEqual(Item.objects.count(), before)
 
+    def test_auto_too_long_is_not_retry_message(self):
+        with mock.patch('core.api.master.next_number', return_value='X' * 51):
+            r = self.auto('제품코드', ['1', 'V', 'DC'])
+        self.assertEqual(r.status_code, 400)
+        self.assertIn('code', r.json()['fields'])
+        self.assertNotIn('다시 시도', r.json()['detail'])
+
+    def test_auto_integrity_error_on_save(self):
+        before = Item.objects.count()
+        with mock.patch('core.api.master.next_number', return_value='R1'), mock.patch.object(Item, 'validate_unique'):
+            r = self.auto('제품코드', ['1', 'V', 'DC'])
+        self.assertEqual(r.status_code, 400)
+        self.assertEqual(r.json()['detail'], '같은 번호가 방금 사용되었습니다. 다시 시도하세요.')
+        self.assertEqual(Item.objects.count(), before)
+
     def test_manual_code_unchanged(self):
         r = self.client.post('/api/core/items/', {'code': 'ABC-1', 'name': 'n', 'item_type': 'FIN'}, format='json')
         self.assertEqual(r.status_code, 201)
