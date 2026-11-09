@@ -11,7 +11,7 @@ from django.utils import timezone
 from django.utils.html import format_html, format_html_join
 from simple_history.admin import SimpleHistoryAdmin
 
-from .models import (BomLine, CodeValue, Hold, ImportProfile, Item, Lot, LotLink, Nonconformance, NonconformancePhoto, Process,
+from .models import (BomLine, CodeValue, Hold, ImportProfile, Item, Lot, LotLink, Nonconformance, NonconformancePhoto, NumberRule, Process,
                      RevisionLog, RoutingStep, Shipment, WorkOrder, WorkResult)
 from .records import blockers, can_edit_locked, delete_record, is_locked
 from .rules import LOCKED_MSG, begin_edit, child_editable, finish_edit, missing_message, nc_locked_fields, sign_disposition
@@ -240,6 +240,24 @@ class CodeValueAdmin(BaseAdmin):
     list_display = ['group', 'code', 'name', 'parent', 'item_type', 'active', 'sort']
     list_filter = ['group', 'active']
     search_fields = ['code', 'name']
+
+
+@admin.register(NumberRule)
+class NumberRuleAdmin(BaseAdmin):
+    list_display = ['sort', 'name', 'target', 'pattern', 'active']
+    list_filter = ['target', 'active']
+
+    def get_readonly_fields(self, request, obj=None):
+        fields = list(super().get_readonly_fields(request, obj))
+        return fields + ['name', 'target', 'pattern'] if obj else fields
+
+    def get_form(self, request, obj=None, **kwargs):
+        form = super().get_form(request, obj, **kwargs)
+        if 'pattern' in form.base_fields:
+            form.base_fields['pattern'].help_text = (
+                '예: KEN-{관리표준 문서구분}{부서}-{일련2}. 코드 {묶음}, 허용 값 {묶음:A,B}, 기존 번호 {품번:규칙}/{문서:규칙}, '
+                '뒤 N자리 {품번:규칙:뒤N}, 일련번호 {일련N}(맨 끝 1개).')
+        return form
 
 
 @admin.register(Process)

@@ -113,8 +113,41 @@ class CodeValue(models.Model):
             raise ValidationError(errors)
 
 
+class NumberRule(models.Model):
+    """번호 틀. 문법·검사는 core/numbering.py. 저장 뒤 이름·대상·틀은 바꿀 수 없다(옛 번호 풀이·참조 보존)."""
+    ITEM, DOC = 'ITEM', 'DOC'
+    TARGETS = [(ITEM, '품번'), (DOC, '문서')]
+
+    name = models.CharField('규칙 이름', max_length=50, unique=True)
+    target = models.CharField('대상', max_length=4, choices=TARGETS)
+    pattern = models.CharField('틀', max_length=200)
+    active = models.BooleanField('사용', default=True)
+    sort = models.PositiveIntegerField('정렬', default=0)
+    history = HistoricalRecords()
+
+    class Meta:
+        verbose_name = verbose_name_plural = '번호 규칙'
+        ordering = ['sort', 'id']
+
+    def __str__(self):
+        return self.name
+
+    def clean(self):
+        from .numbering import NumberingError, check_rule  # numbering이 이 모듈을 가져오므로 늦게 가져온다
+        old = NumberRule.objects.filter(pk=self.pk).first() if self.pk else None
+        if old:
+            locked = {f: '저장된 규칙의 이름·대상·틀은 바꿀 수 없습니다. 새 규칙을 만드세요.'
+                      for f in ('name', 'target', 'pattern') if getattr(old, f) != getattr(self, f)}
+            if locked:
+                raise ValidationError(locked)
+        try:
+            check_rule(self.name, self.target, self.pattern)
+        except NumberingError as e:
+            raise ValidationError({'pattern': str(e)})
+
+
 class Process(models.Model):
-    code = models.CharField('공정 코드', max_length=50, unique=True)
+    code =models.CharField('공정 코드', max_length=50, unique=True)
     name = models.CharField('공정명', max_length=200)
     history = HistoricalRecords()
 
