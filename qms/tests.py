@@ -20,7 +20,7 @@ from openpyxl import Workbook, load_workbook
 
 from core.export import DRAFT_MARK, document_xlsx, table_xlsx
 from core.importer import run_import
-from core.models import APPROVER_GROUP, ImportProfile, Item, Lot, LotLink, Nonconformance, Shipment, WorkOrder
+from core.models import APPROVER_GROUP, CodeValue, ImportProfile, Item, Lot, LotLink, Nonconformance, NumberRule, Shipment, WorkOrder
 
 from core.rules import confirm_revision_log, request_revision_log
 
@@ -28,7 +28,7 @@ from . import kpi, spc
 from .management.commands.collect import ingest
 from .models import (AuditChecklist, AuditFinding, AuditItem, Capa, ChangeRequest, Characteristic, ControlPlan, ControlPlanLine, CustomerClaim,
                      DashboardLayout,
-                     Document, Evidence, ExcelTemplate, Gauge, Inspection, InspectionSpec, InternalAudit, Measurement, PpapElement, PpapSubmission,
+                     Document, DocumentRevision, Evidence, ExcelTemplate, Gauge, Inspection, InspectionSpec, InternalAudit, Measurement, PpapElement, PpapSubmission,
                      Qualification, Scar)
 from .rules import open_or_new_revision
 from .similar import similar
@@ -1412,3 +1412,78 @@ class GaugeAdminDaysLeftTest(TestCase):
         body = self.client.get('/admin/qms/gauge/').content.decode()
         for text in ('남은 일수', 'D-30', '오늘까지', '기한 지남 3일'):
             self.assertIn(text, body)
+
+
+class DocumentNumberingTest(TestCase):
+    ADD = '/admin/qms/document/add/'
+
+    def setUp(self):
+        self.client.force_login(User.objects.create_superuser('root', password='pw'))
+        self.rule = {r.name: r for r in NumberRule.objects.all()}
+
+    def post(self, rule=None, **data):
+        body = {'number': '', 'title': 'x', 'doc_type': '', 'number_rule': rule.pk if rule else '',
+                'revisions-TOTAL_FORMS': 0, 'revisions-INITIAL_FORMS': 0, 'revisions-MIN_NUM_FORMS': 0,
+                'revisions-MAX_NUM_FORMS': 1000, **data}
+        return self.client.post(f'{self.ADD}?rule={rule.pk}' if rule else self.ADD, body)
+
+    def test_std_doc_auto(self):
+        r = self.post(self.rule['관리표준'], v0='P', v1='Q')
+        self.assertEqual(r.status_code, 302)
+        self.assertEqual(Document.objects.get(title='x').number, 'KEN-PQ-01')
+
+    def test_form_auto(self):
+        Document.objects.create(number='KEN-PQ-01', title='표준')
+        self.post(self.rule['양식'], v0='KEN-PQ-01')
+        self.assertEqual(Document.objects.get(title='x').number, 'KEN-PQ-01-01')
+
+    def test_tech_auto(self):
+        Item.objects.create(code='1TDS001', name='제품', item_type='FIN')
+        self.post(self.rule['기술문서'], v0='1TDS001', v1='BM')
+        self.assertEqual(Document.objects.get(title='x').number, '1TDS001-BM001')
+
+    def test_blank_number_needs_rule(self):
+        r = self.post()
+        self.assertEqual(r.status_code, 200)
+        self.assertContains(r, '문서번호를 입력하거나 번호 규칙을 고르세요.')
+
+    def test_manual_number_kept(self):
+        self.assertEqual(self.post(number='OLD-001').status_code, 302)
+        self.assertTrue(Document.objects.filter(number='OLD-001').exists())
+
+    def test_rule_fields_rendered(self):
+        Document.objects.create(number='KEN-PQ-01', title='표준')
+        Document.objects.create(number='KEN-PQ-01-01', title='양식')
+        r = self.client.get(f'{self.ADD}?rule={self.rule["양식"].pk}')
+        self.assertContains(r, 'name="v0"')
+        self.assertContains(r, '>KEN-PQ-01</option>')
+        self.assertNotContains(r, '>KEN-PQ-01-01</option>')
+        self.assertContains(r, 'number_rule.js')
+        html = self.client.get(self.ADD).content.decode()
+        sel = html[html.index('name="number_rule"'):]
+        sel = sel[:sel.index('</select>')]
+        self.assertIn('관리표준', sel)
+        self.assertIn('기술문서', sel)
+        self.assertNotIn('제품코드', sel)
+        CodeValue.objects.filter(group='dept', code='Q').update(active=False)
+        r = self.client.get(f'{self.ADD}?rule={self.rule["관리표준"].pk}')
+        self.assertNotContains(r, '>Q 품질</option>')
+        self.assertContains(r, '>P 생산</option>')
+
+    def test_blank_revision_filled(self):
+        d = Document.objects.create(number='D-1', title='d')
+        self.assertEqual(self.new_rev(d), '0')
+        for rev in ('Rev.1', 'A'):
+            DocumentRevision.objects.create(document=d, revision=rev, change_note='n')
+        self.assertEqual(self.new_rev(d), '2')
+
+    def new_rev(self, d):
+        rev = DocumentRevision(document=d, revision='', change_note='n', file='a.pdf')
+        rev.full_clean()
+        rev.save()
+        return rev.revision
+
+    def test_list_shows_parts(self):
+        Document.objects.create(number='KEN-PQ-01', title='표준')
+        r = self.client.get('/admin/qms/document/')
+        self.assertContains(r, 'title="P 절차서 · Q 품질 · 01 일련번호"')

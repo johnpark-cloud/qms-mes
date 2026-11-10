@@ -9,6 +9,7 @@ from django.db import models, transaction
 from django.utils import timezone
 from simple_history.models import HistoricalRecords
 
+from core.numbering import next_revision
 from core.models import Approvable, Item, Lot, Nonconformance, validate_photo
 
 
@@ -587,7 +588,8 @@ class Document(models.Model):
 
 class DocumentRevision(Approvable):
     document = models.ForeignKey(Document, on_delete=models.PROTECT, related_name='revisions', verbose_name='문서')
-    revision = models.CharField('개정', max_length=20)
+    revision = models.CharField('개정', max_length=20, blank=True,
+                                help_text='비워 두면 마지막 숫자 개정 + 1로 채웁니다.')
     file = models.FileField('원본 파일', upload_to='documents/%Y/')
     change_note = models.TextField('개정 내용')
     created_at = models.DateTimeField('등록 일시', default=timezone.now)
@@ -599,6 +601,19 @@ class DocumentRevision(Approvable):
 
     def __str__(self):
         return f'{self.document.number} Rev.{self.revision}'
+
+    def fill_revision(self):
+        if not self.revision.strip() and self.document_id:
+            others = self.document.revisions.exclude(pk=self.pk).values_list('revision', flat=True)
+            self.revision = next_revision(others)
+
+    def clean(self):
+        super().clean()
+        self.fill_revision()  # 고유 검사(uniq_doc_rev)가 채운 값으로 돌도록 clean에서 먼저 채운다
+
+    def save(self, *args, **kwargs):
+        self.fill_revision()
+        super().save(*args, **kwargs)
 
 
 class AuditChecklist(models.Model):

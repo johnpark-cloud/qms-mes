@@ -4,14 +4,16 @@ from urllib.parse import urlencode
 from django.contrib import admin, messages
 from django.contrib.contenttypes.models import ContentType
 from django.core.exceptions import ValidationError
-from django.db import transaction
+from django import forms
+from django.db import IntegrityError, transaction
 from django.shortcuts import redirect
 from django.urls import reverse
 from django.utils import timezone
 from django.utils.html import format_html, format_html_join
 
 from core.admin import ApprovalAdminMixin, BaseAdmin, ReportLinksMixin
-from core.models import Nonconformance
+from core import numbering
+from core.models import CodeValue, Nonconformance, NumberRule
 from core.records import can_edit_locked
 from core.rules import child_editable
 
@@ -432,10 +434,97 @@ class RevisionInline(admin.TabularInline):
 
 @admin.register(Document)
 class DocumentAdmin(BaseAdmin):
-    list_display = ['number', 'title', 'doc_type', 'current_revision']
+    list_display = ['number_display', 'title', 'doc_type', 'current_revision']
+    list_display_links = ['number_display']
     search_fields = ['number', 'title']
     list_filter = ['doc_type']
     inlines = [RevisionInline]
+
+    class Media:
+        js = ['qms/number_rule.js']
+
+    def changelist_view(self, request, extra_context=None):
+        # 행마다 쿼리하지 않도록 코드표·규칙을 요청마다 한 번만 읽는다
+        self._book, self._rules = numbering.codebook(), list(NumberRule.objects.all())
+        return super().changelist_view(request, extra_context)
+
+    @admin.display(description='문서번호', ordering='number')
+    def number_display(self, obj):
+        text = numbering.describe_text(obj.number, NumberRule.DOC, self._book, self._rules)
+        return format_html('<span title="{}">{}</span>', text, obj.number)
+
+    def _rule(self, request):
+        pk = request.POST.get('number_rule') or request.GET.get('rule')
+        if not (pk and pk.isdigit()):
+            return None
+        return NumberRule.objects.filter(pk=pk, target=NumberRule.DOC, active=True).first()
+
+    def get_form(self, request, obj=None, change=False, **kwargs):
+        if obj is not None:
+            return super().get_form(request, obj, change=change, **kwargs)
+        rule = self._rule(request)
+        tokens = numbering.fields(rule) if rule else []
+        labels, rules = dict(CodeValue.GROUPS), numbering.rulebook()
+        attrs = {'number_rule': forms.ChoiceField(
+            label='번호 규칙', required=False, initial=rule.pk if rule else '',
+            choices=[('', '직접 입력'), *NumberRule.objects.filter(target=NumberRule.DOC, active=True).values_list('pk', 'name')],
+            help_text='먼저 고르면 화면이 그 규칙의 칸으로 다시 열립니다.')}
+        for i, t in enumerate(tokens):
+            if t.kind == 'code':
+                rows = CodeValue.objects.filter(group=t.group, active=True).select_related('parent')
+                if t.allowed:
+                    rows = rows.filter(code__in=t.allowed)
+                choices = [(c.code, f'{c.code} {c.name}' + (f' ({c.parent.code})' if c.parent_id else '')) for c in rows]
+                label = labels[t.group]
+            else:
+                choices = [(n, n) for n in numbering.candidates(t, rules)]
+                label = t.rule
+            attrs[f'v{i}'] = forms.ChoiceField(label=label, required=False, choices=[('', '---------'), *choices])
+
+        class AddForm(self.form):
+            auto_rule = None
+
+            def clean(self):
+                data = super().clean()
+                if data.get('number'):
+                    return data
+                if rule is None:
+                    raise ValidationError('문서번호를 입력하거나 번호 규칙을 고르세요.')
+                self.auto_values = [data.get(f'v{i}', '') for i in range(len(tokens))]
+                try:
+                    data['number'] = self.instance.number = numbering.next_number(rule, self.auto_values)
+                except numbering.NumberingError as e:
+                    raise ValidationError(str(e))
+                self.auto_rule = rule
+                return data
+
+        for name, field in attrs.items():
+            AddForm.base_fields[name] = field
+            AddForm.declared_fields[name] = field
+        kwargs['form'] = AddForm
+        form = super().get_form(request, obj, change=change, **kwargs)
+        form.base_fields['number'].required = False
+        return form
+
+    def get_fieldsets(self, request, obj=None):
+        sets = super().get_fieldsets(request, obj)
+        if obj is not None:
+            return sets
+        rule = self._rule(request)
+        names = ['number_rule', *(f'v{i}' for i in range(len(numbering.fields(rule) if rule else [])))]
+        return [*sets, ('자동 번호', {'fields': names})]
+
+    def save_model(self, request, obj, form, change):
+        auto = getattr(form, 'auto_rule', None)
+        if not auto:
+            return super().save_model(request, obj, form, change)
+        try:
+            with transaction.atomic():
+                super().save_model(request, obj, form, change)
+        except IntegrityError:  # 같은 순간 다른 사용자가 같은 번호를 받았다
+            obj.number = numbering.next_number(auto, form.auto_values)
+            # shortcut: 두 번 연속 충돌은 500, 사용자가 몇 명뿐이라 충분. 사용자가 늘면 폼 오류로 돌린다.
+            super().save_model(request, obj, form, change)
 
 
 @admin.register(DocumentRevision)
