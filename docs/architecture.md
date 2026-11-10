@@ -43,8 +43,9 @@ docs/        구조·업무 규칙·테스트 문서, superpowers/ 설계·계�
 | `export.py` | 문서 구조(dict)·표를 A4 `.xlsx`로 내보낸다(`document_xlsx`, `table_xlsx`, `xlsx_response`). React 인쇄 화면도 같은 문서 구조를 쓴다 |
 | `audit.py` | simple-history 이력을 감사 기록 화면용으로 읽는다(`audited_models`는 `PRIVATE_APPS` 제외, `row_payload`는 `password` 변경 제외) |
 | `rules.py` | admin·기존 뷰·API가 함께 쓰는 업무 규칙(잠금·삭제·승인 등). 규칙 본문은 한 곳에만 둔다 |
+| `numbering.py` | 번호 규칙(`NumberRule` 틀 문자열) 해석: 틀 검사(`check_rule`), 다음 번호 계산(`next_number`), 긴 번호 풀이(`describe`), 개정 자동 채움(`next_revision`). 코드값은 `CodeValue` |
 | `api/` | DRF 기반 JSON API: 로그인·`/api/auth/me/`, 오류 응답 형식(`exceptions.py`), 모델 권한(`permissions.py`). 업무 규칙은 `core/rules.py`·모델 `save()`를 그대로 쓴다 |
-| `api/master.py` | 품번·BOM·라우팅 `/api/core/items/`(목록·`?export=xlsx`·생성·`<id>/` 조회·저장), 공정 `/api/core/processes/` 표 조회·저장, 엑셀 일괄 등록 `/api/core/import/profiles/`·`/api/core/import/`(`commit=0` 미리보기, `1` 확정). 저장 규칙은 `core/rules.py`(`save_item`·`save_table`)를 쓴다 |
+| `api/master.py` | 품번·BOM·라우팅 `/api/core/items/`(목록·`?export=xlsx`·생성·`<id>/` 조회·저장), 공정 `/api/core/processes/` 표 조회·저장, 번호 자동 부여 `/api/core/numbering/item-options/`(규칙·토큰별 선택지)·`/api/core/numbering/item-preview/`(다음 번호 미리보기), 엑셀 일괄 등록 `/api/core/import/profiles/`·`/api/core/import/`(`commit=0` 미리보기, `1` 확정). 저장 규칙은 `core/rules.py`(`save_item`·`save_table`)를 쓴다 |
 | `management/commands/` | `backup`, `restore` |
 | `static/qms/` | `fiori.css`(디자인 토큰, `DESIGN.md`), `shell.js`, `dashboard.js`, `nc_form.js`, `copy_mail.js` |
 
