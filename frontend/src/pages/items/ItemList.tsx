@@ -43,6 +43,8 @@ function NewItem({ open, onClose }: { open: boolean; onClose: () => void }) {
 
   useEffect(() => {
     if (!open) return
+    setErr('')
+    form.resetFields()
     setAuto(true)
     setValues([])
     setPreview('')
@@ -104,7 +106,7 @@ function NewItem({ open, onClose }: { open: boolean; onClose: () => void }) {
   }
 
   return (
-    <Modal open={open} onCancel={onClose} title="새 품번" footer={null} destroyOnHidden afterOpenChange={() => setErr('')}>
+    <Modal open={open} onCancel={onClose} title="새 품번" footer={null} destroyOnHidden>
       <Form form={form} layout="vertical" onFinish={submit}>
         <Form.Item label="자동 번호">
           <Switch checked={auto} onChange={setAuto} aria-label="자동 번호" />
