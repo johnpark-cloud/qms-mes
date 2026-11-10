@@ -476,6 +476,27 @@ try:
         except Exception as e:
             check('자동 번호 품번 등록', False, str(e)[:120])
 
+        try:  # 원자재 Connector 경로: 중분류 코드가 Capacitor 것으로 섞이지 않아야 한다
+            page.goto('/app/items')
+            page.get_by_role('button', name='새 품번').click()
+            dlg = page.get_by_role('dialog')
+            pick_auto('규칙', '원자재')
+            pick_auto('품목분류', '3')
+            pick_auto('자재분류', '2')
+            page.wait_for_timeout(500)  # 앞 목록이 닫히는 동안 같은 코드 옵션이 겹쳐 잡힌다
+            pick_auto('자재 대분류', '1')
+            page.wait_for_timeout(500)
+            dlg.get_by_label('자재 중분류', exact=True).click()
+            page.wait_for_timeout(500)
+            mids = page.locator('.ant-select-dropdown:visible .ant-select-item-option').all_inner_texts()
+            page.locator('.ant-select-dropdown:visible .ant-select-item-option', has_text=re.compile('^0( |$)')).first.click()
+            page.wait_for_timeout(500)
+            pick_auto('자재 소분류', '0')
+            dlg.get_by_test_id('number-preview').wait_for(timeout=5000)
+            check('자동 번호 원자재 Connector 경로', any(t.startswith('0 ') for t in mids), f'{mids} {dlg.get_by_test_id("number-preview").inner_text()}')
+        except Exception as e:
+            check('자동 번호 원자재 Connector 경로', False, str(e)[:400])
+
         try:
             page.goto('/app/processes')
             page.locator('[data-grid] [data-grid-row]').first.wait_for(timeout=5000)

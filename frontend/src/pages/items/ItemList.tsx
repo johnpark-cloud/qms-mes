@@ -3,7 +3,7 @@ import type { ColumnsType } from 'antd/es/table'
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { api } from '../../api/client'
-import type { ItemDetail, ItemNumberOptions, ItemRow, NumberRuleOptions } from '../../api/master'
+import type { ItemDetail, ItemNumberOptions, ItemRow, NumberOption, NumberRuleOptions } from '../../api/master'
 import type { Page } from '../../api/specs'
 import DataList from '../../components/DataList'
 import { addRecent } from '../../lib/recent'
@@ -77,9 +77,15 @@ function NewItem({ open, onClose }: { open: boolean; onClose: () => void }) {
     }
   }, [auto, rule, full, values]) // eslint-disable-line react-hooks/exhaustive-deps
 
+  // 코드가 부모마다 되풀이되므로 고른 옵션은 부모 사슬을 따라 찾는다
+  const chosen = (i: number): NumberOption | undefined => {
+    const f = rule!.fields[i]
+    const p = f.parent == null ? undefined : chosen(f.parent)
+    return f.options.find((o) => o.code === values[i] && (f.parent == null || o.parent_id === p?.id))
+  }
   const optionsOf = (i: number) => {
     const f = rule!.fields[i]
-    const parent = f.parent == null ? undefined : rule!.fields[f.parent].options.find((o) => o.code === values[f.parent!])
+    const parent = f.parent == null ? undefined : chosen(f.parent)
     return f.options
       .filter((o) => f.parent == null || (parent !== undefined && o.parent_id === parent.id))
       .map((o) => ({ value: o.code, label: `${o.code} ${o.name}` }))
