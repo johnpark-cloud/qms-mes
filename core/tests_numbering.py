@@ -174,6 +174,7 @@ class NumberingTest(TestCase):
         self.assertEqual(next_serial(['KEN-PQ-01-01', 'KEN-PQ-03'], 'KEN-PQ-', 2), '04')
         self.assertEqual(next_serial(['1VDC001A', '1VDC002'], '1VDC', 3), '003')
         self.assertEqual(next_serial(['1VDC1000'], '1VDC', 3), '001')
+        self.assertEqual(next_serial(['1VDC١٢٣'], '1VDC', 3), '001')  # 아랍-인도 숫자는 세지 않는다
 
     def test_item_code(self):
         self.assertEqual(next_number(R('제품코드'), ['1', 'V', 'DC']), '1VDC001')

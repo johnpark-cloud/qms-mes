@@ -7,7 +7,7 @@ from django.apps import apps
 from .models import CodeValue, Item, NumberRule
 
 _LABELS = {label: key for key, label in CodeValue.GROUPS}
-_TAIL = re.compile(r'뒤(\d+)')
+_TAIL = re.compile(r'뒤([0-9]+)')
 _TARGETS = {'품번': NumberRule.ITEM, '문서': NumberRule.DOC}
 
 
@@ -157,7 +157,7 @@ def check_rule(name, target, pattern, rules=None):
 
 def next_serial(numbers, prefix, width):
     """prefix 뒤에 width자리 숫자만 붙은 번호의 최댓값 + 1."""
-    shape = re.compile(rf'{re.escape(prefix)}(\d{{{width}}})')
+    shape = re.compile(rf'{re.escape(prefix)}([0-9]{{{width}}})')
     used = [int(m.group(1)) for n in numbers if (m := shape.fullmatch(n))]
     nxt = max(used, default=0) + 1
     if nxt > 10 ** width - 1:
@@ -264,9 +264,10 @@ def next_number(rule, values):
                 raise NumberingError(f'{label} {v}: 없거나 규칙 "{t.rule}" 모양이 아닙니다.')
             prefix += v[-t.tail:] if t.tail else v
         else:
-            Document = apps.get_model('qms', 'Document')
-            numbers = [*Item.objects.filter(code__startswith=prefix).values_list('code', flat=True),
-                       *Document.objects.filter(number__startswith=prefix).values_list('number', flat=True)]
+            numbers = []
+            for target in (NumberRule.ITEM, NumberRule.DOC):
+                model, field = _table(target)
+                numbers += model.objects.filter(**{f'{field}__startswith': prefix}).values_list(field, flat=True)
             return prefix + next_serial(numbers, prefix, t.width)
 
 
@@ -326,5 +327,5 @@ def describe_text(number, target=None, book=None, rules=None):
 
 def next_revision(values):
     """앞의 Rev./Rev를 뗀 숫자 개정의 최댓값 + 1. 없으면 '0'."""
-    nums = [int(m.group(1)) for v in values if (m := re.fullmatch(r'(?:rev\.?\s*)?(\d+)', v.strip(), re.I))]
+    nums = [int(m.group(1)) for v in values if (m := re.fullmatch(r'(?:rev\.?\s*)?([0-9]+)', v.strip(), re.I))]
     return str(max(nums) + 1) if nums else '0'

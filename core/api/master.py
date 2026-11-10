@@ -12,7 +12,6 @@ from core.importer import TARGET_MODELS, preview_import, run_import
 from core.models import CodeValue, ImportProfile, Item, NumberRule, Process
 from core.numbering import (NumberingError, candidates, codebook, default_item_type, describe_text, fields,
                             next_number, parse_pattern, rulebook, _table)
-
 from core.grid import table_version
 from core.rules import Stale, item_version, save_item, save_table
 
