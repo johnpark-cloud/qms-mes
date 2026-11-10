@@ -1470,6 +1470,14 @@ class DocumentNumberingTest(TestCase):
         self.assertNotContains(r, '>Q 품질</option>')
         self.assertContains(r, '>P 생산</option>')
 
+    def test_rule_fields_rendered_once(self):
+        html = self.client.get(f'{self.ADD}?rule={self.rule["관리표준"].pk}').content.decode()
+        self.assertEqual(html.count('name="v0"'), 1)
+        self.assertEqual(html.count('name="number_rule"'), 1)
+
+    def test_rule_param_not_decimal(self):
+        self.assertEqual(self.client.get(f'{self.ADD}?rule=²').status_code, 200)
+
     def test_blank_revision_filled(self):
         d = Document.objects.create(number='D-1', title='d')
         self.assertEqual(self.new_rev(d), '0')

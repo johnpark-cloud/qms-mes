@@ -444,6 +444,7 @@ class DocumentAdmin(BaseAdmin):
         js = ['qms/number_rule.js']
 
     def changelist_view(self, request, extra_context=None):
+        # shortcut: ModelAdmin 인스턴스에 둠 — 스레드 간 값이 같아 무해, 요청별 값이 필요해지면 옮긴다.
         # 행마다 쿼리하지 않도록 코드표·규칙을 요청마다 한 번만 읽는다
         self._book, self._rules = numbering.codebook(), list(NumberRule.objects.all())
         return super().changelist_view(request, extra_context)
@@ -455,7 +456,7 @@ class DocumentAdmin(BaseAdmin):
 
     def _rule(self, request):
         pk = request.POST.get('number_rule') or request.GET.get('rule')
-        if not (pk and pk.isdigit()):
+        if not (pk and pk.isdecimal()):
             return None
         return NumberRule.objects.filter(pk=pk, target=NumberRule.DOC, active=True).first()
 
@@ -512,6 +513,7 @@ class DocumentAdmin(BaseAdmin):
             return sets
         rule = self._rule(request)
         names = ['number_rule', *(f'v{i}' for i in range(len(numbering.fields(rule) if rule else [])))]
+        sets = [(t, {**o, 'fields': [f for f in o['fields'] if f not in names]}) for t, o in sets]  # 기본 묶음에 든 같은 칸을 뺀다
         return [*sets, ('자동 번호', {'fields': names})]
 
     def save_model(self, request, obj, form, change):
