@@ -18,6 +18,7 @@ from django.test import TestCase, override_settings
 from django.utils import timezone
 from openpyxl import Workbook, load_workbook
 
+from core import numbering
 from core.export import DRAFT_MARK, document_xlsx, table_xlsx
 from core.importer import run_import
 from core.models import APPROVER_GROUP, CodeValue, ImportProfile, Item, Lot, LotLink, Nonconformance, NumberRule, Shipment, WorkOrder
@@ -1431,6 +1432,18 @@ class DocumentNumberingTest(TestCase):
         r = self.post(self.rule['관리표준'], v0='P', v1='Q')
         self.assertEqual(r.status_code, 302)
         self.assertEqual(Document.objects.get(title='x').number, 'KEN-PQ-01')
+
+    def test_number_taken_twice_retries(self):
+        """저장 순간 다른 사람이 같은 번호를 두 번 연달아 가져가도 500 없이 다음 빈 번호로 저장된다."""
+        Document.objects.create(number='KEN-PQ-01', title='a')
+        Document.objects.create(number='KEN-PQ-02', title='b')
+        real, stale = numbering.next_number, ['KEN-PQ-01', 'KEN-PQ-02']
+        # 폼 검증을 통과한 뒤에 다른 사람이 번호를 가져간 상황: 폼 단계 중복 검사는 끈다
+        with mock.patch.object(numbering, 'next_number', lambda *a: stale.pop(0) if stale else real(*a)), \
+                mock.patch.object(Document, 'validate_unique'):
+            r = self.post(self.rule['관리표준'], v0='P', v1='Q')
+        self.assertEqual(r.status_code, 302)
+        self.assertEqual(Document.objects.get(title='x').number, 'KEN-PQ-03')
 
     def test_form_auto(self):
         Document.objects.create(number='KEN-PQ-01', title='표준')

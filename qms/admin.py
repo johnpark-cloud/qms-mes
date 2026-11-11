@@ -520,13 +520,15 @@ class DocumentAdmin(BaseAdmin):
         auto = getattr(form, 'auto_rule', None)
         if not auto:
             return super().save_model(request, obj, form, change)
-        try:
-            with transaction.atomic():
-                super().save_model(request, obj, form, change)
-        except IntegrityError:  # 같은 순간 다른 사용자가 같은 번호를 받았다
-            obj.number = numbering.next_number(auto, form.auto_values)
-            # shortcut: 두 번 연속 충돌은 500, 사용자가 몇 명뿐이라 충분. 사용자가 늘면 폼 오류로 돌린다.
-            super().save_model(request, obj, form, change)
+        for _ in range(20):  # 같은 순간 다른 사용자가 같은 번호를 받았으면 그다음 번호로 다시 저장한다
+            try:
+                with transaction.atomic():
+                    return super().save_model(request, obj, form, change)
+            except IntegrityError:
+                if not Document.objects.filter(number=obj.number).exists():
+                    raise  # 번호 겹침이 아닌 다른 제약 위반은 그대로 알린다
+                obj.number = numbering.next_number(auto, form.auto_values)
+        super().save_model(request, obj, form, change)  # 스무 번 연속 겹침은 사실상 없다
 
 
 @admin.register(DocumentRevision)
