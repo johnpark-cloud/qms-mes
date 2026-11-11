@@ -1,6 +1,6 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Alert, Button, Input, Select, Space, Spin, Tag, Typography } from 'antd'
-import { useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { ApiError, api } from '../api/client'
 
 interface Memo {
@@ -31,7 +31,10 @@ function MemoForm({ url, init, speakers, onDone, onCancel }: { url: string; init
   const [kind, setKind] = useState(init?.speaker_kind ?? 'INTERNAL')
   const [name, setName] = useState(init?.speaker_name ?? '')
   const [files, setFiles] = useState<File[]>([])
-  const [fileKey, setFileKey] = useState(0)
+  const picker = useRef<HTMLInputElement>(null)
+  const previews = useMemo(() => files.map((f) => URL.createObjectURL(f)), [files])
+  useEffect(() => () => previews.forEach((u) => URL.revokeObjectURL(u)), [previews])
+  const addFiles = (list: Iterable<File>) => setFiles((cur) => [...cur, ...[...list].filter((f) => f.type.startsWith('image/'))])
   const [saving, setSaving] = useState(false)
   const [err, setErr] = useState('')
 
@@ -49,7 +52,6 @@ function MemoForm({ url, init, speakers, onDone, onCancel }: { url: string; init
       if (!init) {
         setBody('')
         setFiles([])
-        setFileKey(fileKey + 1)
       }
       onDone()
     } catch (e) {
@@ -63,10 +65,12 @@ function MemoForm({ url, init, speakers, onDone, onCancel }: { url: string; init
     <div style={{ display: 'grid', gap: 8 }}>
       <Input.TextArea
         aria-label="메모 내용"
-        placeholder="메모를 적고 Ctrl+Enter로 저장"
-        autoSize={{ minRows: 2, maxRows: 8 }}
+        placeholder="메모를 적고 Ctrl+Enter로 저장 · 사진은 Ctrl+V로 붙여넣어도 됩니다"
+        rows={4}
+        style={{ resize: 'none' }}
         value={body}
         onChange={(e) => setBody(e.target.value)}
+        onPaste={(e) => addFiles(e.clipboardData.files)}
         onKeyDown={(e) => {
           if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) void save()
         }}
@@ -74,8 +78,38 @@ function MemoForm({ url, init, speakers, onDone, onCancel }: { url: string; init
       <Space wrap>
         <Select aria-label="말한 사람" style={{ width: 110 }} options={speakers} value={kind} onChange={setKind} />
         <Input aria-label="이름" placeholder="이름(선택)" style={{ width: 140 }} value={name} onChange={(e) => setName(e.target.value)} />
-        <input key={fileKey} type="file" accept="image/*" multiple aria-label="사진" onChange={(e) => setFiles([...(e.target.files ?? [])])} />
+        <Button onClick={() => picker.current?.click()}>사진 첨부</Button>
+        <input
+          ref={picker}
+          hidden
+          type="file"
+          accept="image/*"
+          multiple
+          aria-label="사진"
+          onChange={(e) => {
+            addFiles(e.target.files ?? [])
+            e.target.value = ''
+          }}
+        />
       </Space>
+      {files.length > 0 && (
+        <Space wrap>
+          {previews.map((u, i) => (
+            <div key={u} style={{ position: 'relative' }}>
+              <img src={u} alt={`첨부할 사진 ${i + 1}`} style={{ width: 72, height: 72, objectFit: 'cover', borderRadius: 6, display: 'block' }} />
+              <Button
+                size="small"
+                shape="circle"
+                aria-label={`사진 ${i + 1} 빼기`}
+                style={{ position: 'absolute', top: -8, right: -8 }}
+                onClick={() => setFiles(files.filter((_, j) => j !== i))}
+              >
+                ×
+              </Button>
+            </div>
+          ))}
+        </Space>
+      )}
       {err && <Alert type="error" message={err} role="alert" />}
       <Space>
         <Button type="primary" loading={saving} disabled={!body.trim()} onClick={() => void save()}>

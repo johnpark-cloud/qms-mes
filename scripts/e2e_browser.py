@@ -359,6 +359,25 @@ try:
             ok, why = False, str(e)[:80]
         check('검사 목록 요약·메뉴 강조', ok, why)
 
+        try:  # 메모 칸은 크기 고정, 사진 첨부 → 미리보기 → 저장하면 메모에 사진
+            import base64
+            png = base64.b64decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==')
+            page.goto('/app/memos')
+            box = page.get_by_label('메모 내용')
+            box.wait_for(timeout=5000)
+            resize = box.evaluate('e => getComputedStyle(e).resize')
+            page.get_by_label('사진').set_input_files({'name': 'e2e.png', 'mimeType': 'image/png', 'buffer': png})
+            preview = page.get_by_alt_text('첨부할 사진 1').count()
+            box.fill('E2E 사진 메모')
+            page.get_by_role('button', name='메모 저장').click()
+            item = page.locator('.memo-item', has_text='E2E 사진 메모')
+            item.wait_for(timeout=5000)
+            shown = item.get_by_alt_text('메모 사진').count()
+            ok, why = resize == 'none' and preview == 1 and shown == 1, f'resize={resize}, 미리보기 {preview}, 저장 후 {shown}'
+        except Exception as e:
+            ok, why = False, str(e)[:80]
+        check('메모: 크기 고정·사진 첨부 저장', ok, why)
+
         try:
             page.goto(f'/app/inspections/{insp_id}/print')
             page.locator('.doc-page').wait_for(timeout=5000)
