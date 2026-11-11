@@ -100,7 +100,7 @@ class ItemListView(APIView):
             item.save()
             return Response(_detail(item, request.user), status=201)
         rule = NumberRule.objects.filter(pk=auto['rule'], target=NumberRule.ITEM).first()
-        if rule is None:
+        if rule is None or _hides_docs(rule, request.user):
             return _bad('번호 규칙을 찾을 수 없습니다.')
         retry = '같은 번호가 방금 사용되었습니다. 다시 시도하세요.'
         try:
@@ -123,6 +123,16 @@ class ItemListView(APIView):
         return Response(_detail(item, request.user), status=201)
 
 
+def _hides_docs(rule, user):
+    """문서 열람 권한이 없으면 문서 참조 규칙을 숨긴다(문서번호·제목 노출 방지)."""
+    if user.has_perm('qms.view_document'):
+        return False
+    try:
+        return any(t.kind == 'ref' and t.target == NumberRule.DOC for t in parse_pattern(rule.pattern))
+    except NumberingError:
+        return False
+
+
 def _ref_ok(rule, rules):
     """틀을 해석할 수 있고 참조 규칙이 모두 남아 있는 규칙만."""
     try:
@@ -141,12 +151,11 @@ class ItemOptionsView(APIView):
         for c in CodeValue.objects.filter(active=True).order_by('sort', 'code'):
             codes.setdefault(c.group, []).append(c)
         out, names = [], {}  # names: 대상 -> {번호: 이름}, 표마다 한 번만 읽는다
-        see_docs = request.user.has_perm('qms.view_document')
         for rule in NumberRule.objects.filter(target=NumberRule.ITEM, active=True).order_by('sort', 'pk'):
             if not _ref_ok(rule, rules):
                 continue
-            if not see_docs and any(t.kind == 'ref' and t.target == NumberRule.DOC for t in fields(rule)):
-                continue  # 문서 열람 권한이 없으면 문서번호·제목을 보여 주지 않는다
+            if _hides_docs(rule, request.user):
+                continue
             fs, prev = [], None
             for t in fields(rule):
                 if t.kind == 'ref':
@@ -173,7 +182,7 @@ class ItemPreviewView(APIView):
         require_perm(request.user, 'core.add_item')
         rid = request.query_params.get('rule', '')
         rule = NumberRule.objects.filter(pk=rid, target=NumberRule.ITEM).first() if rid.isdecimal() else None
-        if rule is None:
+        if rule is None or _hides_docs(rule, request.user):
             return _bad('번호 규칙을 찾을 수 없습니다.')
         values = request.query_params.getlist('v')
         try:
