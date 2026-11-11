@@ -18,6 +18,8 @@ const MOVED: Record<string, string> = {
   '/admin/qms/controlplan/': '/app/plans',
   '/admin/qms/customerrule/': '/app/customer-rules',
   '/import/': '/app/import',
+  '/trace/': '/app/trace',
+  '/memo/inbox/': '/app/memos',
   '/admin/qms/inspection/?spec__inspection_type__exact=INCOMING': '/app/inspections?tab=INCOMING',
   '/admin/qms/inspection/?spec__inspection_type__exact=PROCESS': '/app/inspections?tab=PROCESS',
   '/admin/qms/inspection/?spec__inspection_type__exact=OUTGOING': '/app/inspections?tab=OUTGOING',

@@ -87,6 +87,11 @@ export default function EditGrid({ columns, rows, onChange, readOnly, errors, di
 
   return (
     <div style={{ overflowX: 'auto' }}>
+      {columns.filter((c) => c.kind === 'text' && c.options).map((c) => (
+        <datalist key={c.key} id={`dl-${c.key}`}>
+          {c.options!.map((o) => <option key={o.value} value={o.label} />)}
+        </datalist>
+      ))}
       <table className="grid-table" data-grid>
         <thead>
           <tr>
@@ -129,6 +134,8 @@ export default function EditGrid({ columns, rows, onChange, readOnly, errors, di
                     body = (
                       <input
                         aria-label={c.label}
+                        // 글자 칸에 options 가 있으면 고르는 목록을 띄운다. 목록에 없는 값도 그대로 칠 수 있다.
+                        list={c.options ? `dl-${c.key}` : undefined}
                         style={{ width: '100%', border: 'none', background: 'transparent', color: 'inherit', font: 'inherit', padding: 0 }}
                         inputMode={c.kind === 'number' ? 'decimal' : undefined}
                         readOnly={readOnly || r.delete}

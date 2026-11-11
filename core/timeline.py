@@ -11,7 +11,7 @@ def lot_timeline(lot):
     for i in lot.inspections.select_related('spec').order_by('inspected_at'):
         bad = i.result == Inspection.FAIL
         label = f'검사 {i.spec.get_inspection_type_display()} {i.get_result_display() or "진행"}'
-        ev.append((i.inspected_at, 'inspection', label, reverse('admin:qms_inspection_change', args=[i.pk]), bad, None))
+        ev.append((i.inspected_at, 'inspection', label, f'/app/inspections/{i.pk}', bad, None))
     for w in lot.work_results.select_related('step__process'):
         ev.append((w.started_at, 'work', f'공정 {w.step.process.name}', reverse('admin:core_workresult_change', args=[w.pk]), False, None))
     for nc in lot.nonconformances.prefetch_related('photos'):

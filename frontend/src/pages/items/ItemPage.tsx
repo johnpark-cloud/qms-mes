@@ -5,6 +5,7 @@ import { useParams } from 'react-router-dom'
 import { ApiError, api } from '../../api/client'
 import type { ItemDetail } from '../../api/master'
 import EditGrid, { isBlank, withTail, type GridColumn, type GridRow } from '../../components/EditGrid'
+import MemoPanel from '../../components/MemoPanel'
 import RecordPage from '../../components/RecordPage'
 import SaveBar from '../../components/SaveBar'
 import { addRecent } from '../../lib/recent'
@@ -146,7 +147,7 @@ export default function ItemPage() {
 
   return (
     <>
-      <RecordPage title={d.title} actions={null} props={props} side={[{ key: 'memo', label: '메모', node: <a href="/memo/inbox/">메모 수신함 열기</a> }]}>
+      <RecordPage title={d.title} actions={null} props={props} side={[{ key: 'memo', label: '메모', node: <MemoPanel ct="core.item" id={id} /> }]}>
         {(saveErr || otherErrors.length > 0) && (
           <Alert
             style={{ marginBottom: 12 }}

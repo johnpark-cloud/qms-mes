@@ -243,3 +243,48 @@ class CommonApiTest(TestCase):
         self.assertEqual(self.c(self.eng).post(url, {'password': 'x'}, format='json').status_code, 403)
         self.assertEqual(self.c(self.lead).post(url, {'password': 'bad'}, format='json').status_code, 400)
         self.assertEqual(self.c(self.lead).post('/api/revision-log/99999/approve/', {}, format='json').status_code, 404)
+
+
+class LotTraceApiTest(TestCase):
+    def setUp(self):
+        from core.models import LotLink, Nonconformance
+        self.eng = User.objects.create_user('eng', password='x', is_staff=True)
+        self.eng.groups.add(Group.objects.get(name='품질엔지니어'))
+        self.plain = User.objects.create_user('plain', password='x', is_staff=True)
+        raw = Item.objects.create(code='R1', name='양극재', item_type=Item.RAW)
+        fg = Item.objects.create(code='F1', name='셀', item_type=Item.FINISHED)
+        self.raw = Lot.objects.create(number='RAW-1', item=raw, supplier='가협력', qty=5)
+        self.fg = Lot.objects.create(number='FG-1', item=fg, supplier='', qty=1)
+        Lot.objects.create(number='OTHER-1', item=raw, supplier='나협력', qty=1)
+        LotLink.objects.create(parent=self.raw, child=self.fg)
+        Nonconformance.objects.create(lot=self.raw, description='찍힘')  # RAW-1과 하위 FG-1 보류
+
+    def c(self, user):
+        c = APIClient()
+        c.force_login(user)
+        return c
+
+    def test_lot_search_filters_and_hold(self):
+        rows = self.c(self.eng).get('/api/core/lots/?q=가협력').json()['results']
+        self.assertEqual([r['number'] for r in rows], ['RAW-1'])
+        self.assertTrue(rows[0]['on_hold'])
+        self.assertEqual(rows[0]['item_name'], '양극재')
+        self.assertEqual(len(self.c(self.eng).get('/api/core/lots/').json()['results']), 3)
+
+    def test_lot_search_needs_perm(self):
+        self.assertEqual(self.c(self.plain).get('/api/core/lots/?q=RAW').status_code, 403)
+
+    def test_trace_payload(self):
+        d = self.c(self.eng).get('/api/core/trace/?lot=FG-1').json()
+        self.assertEqual(d['lot']['number'], 'FG-1')
+        self.assertTrue(d['lot']['on_hold'])
+        self.assertEqual([x['number'] for x in d['ancestors']], ['RAW-1'])
+        self.assertEqual(d['descendants'], [])
+        up = self.c(self.eng).get('/api/core/trace/?lot=RAW-1').json()
+        self.assertEqual([x['number'] for x in up['descendants']], ['FG-1'])
+        self.assertTrue(any(e['bad'] for e in up['timeline']))
+
+    def test_trace_404_and_perm(self):
+        r = self.c(self.eng).get('/api/core/trace/?lot=NOPE')
+        self.assertEqual((r.status_code, r.json()['detail']), (404, '등록되지 않은 LOT입니다.'))
+        self.assertEqual(self.c(self.plain).get('/api/core/trace/?lot=FG-1').status_code, 403)

@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Alert, Button, Dropdown, Form, Input, Modal, Space, Tooltip, message } from 'antd'
+import { Alert, AutoComplete, Button, Dropdown, Form, Input, Modal, Space, Tooltip, message } from 'antd'
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { fetchMe } from '../../api/auth'
@@ -10,6 +10,7 @@ import RecordPage from '../../components/RecordPage'
 import SaveBar from '../../components/SaveBar'
 import SignModal from '../../components/SignModal'
 import { addRecent } from '../../lib/recent'
+import { SAMPLING } from '../../lib/sampling'
 
 const FIELDS = ['name', 'lsl', 'usl', 'unit', 'special', 'plan_line'] as const
 const norm = (v: unknown) => String(v ?? '')
@@ -191,7 +192,7 @@ export default function SpecPage() {
     { label: '검사 구분', node: d.inspection_type_display },
     { label: '개정', node: `Rev.${d.revision}` },
     { label: '승인', node: approved ? `승인됨 · ${d.approved_by} · ${(d.approved_at ?? '').slice(0, 10)}` : '초안 — 승인 전' },
-    { label: '샘플링', node: <Input aria-label="샘플링" value={sampling} readOnly={readOnly} onChange={(e) => setSampling(e.target.value)} /> },
+    { label: '샘플링', node: <AutoComplete aria-label="샘플링" style={{ width: '100%' }} options={SAMPLING} placeholder="고르거나 직접 입력" value={sampling} disabled={readOnly} onChange={setSampling} /> },
     { label: '비고', node: <Input.TextArea aria-label="비고" autoSize={{ minRows: 1, maxRows: 6 }} value={note} readOnly={readOnly} onChange={(e) => setNote(e.target.value)} /> },
   ]
 
@@ -227,7 +228,7 @@ export default function SpecPage() {
         props={props}
         side={[
           { key: 'log', label: '개정 이력', node: history },
-          { key: 'memo', label: '메모', node: <a href="/memo/inbox/">메모 수신함 열기</a> },
+          { key: 'memo', label: '메모', node: <a href="/app/memos">미분류 메모 열기</a> },
         ]}
       >
         {(saveErr || otherErrors.length > 0) && (

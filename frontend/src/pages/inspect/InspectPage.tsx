@@ -5,6 +5,7 @@ import { useNavigate } from 'react-router-dom'
 import { ApiError } from '../../api/client'
 import { fetchQueue, lookupLot, receiveLot, type LotResult, type Opt, type QueueRow } from '../../api/inspect'
 import DataList from '../../components/DataList'
+import { useLotOptions } from '../../components/lotOptions'
 
 const TABS = [
   { key: 'INCOMING', label: '수입' },
@@ -94,12 +95,15 @@ export default function InspectPage() {
   const [notice, setNotice] = useState('')
   const [err, setErr] = useState('')
   const [receive, setReceive] = useState<Receive | null>(null)
+  const [open, setOpen] = useState(false) // 조회 뒤 다시 포커스해도 목록이 저절로 열려 입고 창을 가리지 않게 직접 연다
 
   useEffect(() => scan.current?.focus(), [])
 
-  const find = async () => {
-    const number = text.trim()
+  const lotOptions = useLotOptions(text)
+
+  const find = async (number = text.trim()) => {
     if (!number || busy.current) return
+    setOpen(false)
     busy.current = true
     setLoading(true)
     setErr('')
@@ -132,19 +136,33 @@ export default function InspectPage() {
   return (
     <div>
       <h1 className="page-title">검사 입력</h1>
-      <Input
-        ref={scan}
-        size="large"
-        style={{ maxWidth: 420 }}
-        placeholder="LOT 번호를 스캔하거나 입력하고 Enter"
+      {/* 스캐너는 그대로 번호 + Enter. 손으로 찾을 때는 번호·품번·품명·협력사 일부를 치고 목록에서 고른다. */}
+      <AutoComplete
+        style={{ width: '100%', maxWidth: 480 }}
+        options={lotOptions}
         value={text}
-        onChange={(e) => setText(e.target.value)}
-        onKeyDown={(e) => {
-          if (e.key !== 'Enter' || e.nativeEvent.isComposing || e.keyCode === 229) return
-          e.preventDefault()
-          void find()
+        open={open && !receive}
+        onOpenChange={setOpen}
+        onChange={(v) => {
+          setText(v)
+          setOpen(true)
         }}
-      />
+        onSelect={(v) => void find(v)}
+        defaultActiveFirstOption={false}
+      >
+        <Input
+          ref={scan}
+          size="large"
+          placeholder="LOT 번호를 스캔하거나 입력하고 Enter"
+          onKeyDown={(e) => {
+            if (e.key !== 'Enter' || e.nativeEvent.isComposing || e.keyCode === 229) return
+            e.preventDefault()
+            // 목록에서 화살표로 고른 뒤 Enter 면 고른 LOT(onSelect)이 먼저 조회되게 한 박자 늦춘다.
+            setTimeout(() => void find(), 0)
+          }}
+        />
+      </AutoComplete>
+      <div className="palette-sub" style={{ marginTop: 4 }}>번호를 몰라도 품번·품명·협력사 일부를 치면 목록에서 고를 수 있습니다.</div>
       {err && <Alert style={{ marginTop: 12 }} type="error" message={err} role="alert" />}
       {notice && <Alert style={{ marginTop: 12 }} type="info" message={notice} />}
       {result && (

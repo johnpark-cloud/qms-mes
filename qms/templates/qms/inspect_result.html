@@ -9,7 +9,7 @@
 {% endif %}
 {% if insp %}<nav class="links" aria-label="관련 화면">
   <a href="{% url 'print' 'qms' 'inspection' insp.pk %}" target="_blank">성적서 인쇄</a>
-  <a href="{% url 'admin:qms_inspection_change' insp.pk %}">검사 기록 보기</a>
+  <a href="/app/inspections/{{ insp.pk }}">검사 기록 보기</a>
   {% if insp.nonconformance %}<a href="{% url 'admin:core_nonconformance_change' insp.nonconformance.pk %}">부적합 보기</a>{% endif %}
 </nav>{% endif %}
 <script>document.getElementById('lot').value = ''; document.getElementById('lot').focus();</script>

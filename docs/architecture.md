@@ -58,6 +58,7 @@ docs/        구조·업무 규칙·테스트 문서, superpowers/ 설계·계�
 | `views.py` | 내 할 일·대시보드, 공장 종합현황, KPI, 협력사 성적표, 검사 입력, SPC, 현장 메모, 심사 자료 출력, 엑셀 양식 출력 |
 | `rules.py` | 검사 판정·입고 업무 규칙(기존 `views.py`에서 옮김). 화면과 API가 함께 쓴다 |
 | `api/` | 공장 종합현황 `GET /api/qms/overview/`, 내 할 일 `GET /api/qms/todo/`, 위젯 배치 저장 `POST /api/qms/dashboard/` |
+| `api/memos.py` | 현장 메모 `/api/qms/memos/`(`?ct=앱.모델&id=` 기록에 붙은 메모, 없으면 미분류 메모·추가), `<id>/`(작성자가 고치기), `<id>/link/`(미분류 메모를 종류+번호로 기록에 붙이기). 연결 대상과 권한은 `qms/memo.py`(`TARGETS`·`ATTACHABLE`)를 쓴다 |
 | `api/inspections.py` | 검사 입력·검사 목록 API. `/api/qms/inspect/`의 `queue/`(검사 대기, `?export=xlsx`)·`lot/`(LOT 조회)·`receive/`(입고 등록)·`form/<lot>/<spec>/`(측정 양식)·`check/`(입력 즉시 판정)·`submit/`(판정 저장), `/api/qms/inspections/`(목록·`?export=xlsx`)·`<id>/`(조회)·`<id>/document/`(성적서, `?export=xlsx`). 판정 규칙은 기존 `/inspect/` 화면과 같은 공용 함수를 쓰고, 성적서 내용은 `Inspection.document()`가 만든다 |
 | `api/specs.py` | 검사기준서 API `/api/qms/specs/`(목록·`?export=xlsx`·생성), `<id>/`(조회·저장), `new-revision/`, `approve/`, `revision-log/`, `document/`(`?export=xlsx`). 규칙은 `qms/rules.py`(`save_spec`·`spec_version`·`compare_specs`)를 쓴다. 다운로드 형식은 DRF가 `?format=`을 가로채므로 `?export=`로 고른다 |
 | `api/plans.py` | 관리계획서 API `/api/qms/plans/`(목록·`?export=xlsx`·생성), `<id>/`(조회·저장), `new-revision/`, `approve/`, `revision-log/`, `make-specs/`(검사기준 초안), `document/`. 고객사별 8D 기한 표는 `qms/api/views.py`의 `/api/qms/customer-rules/` |
@@ -69,15 +70,15 @@ docs/        구조·업무 규칙·테스트 문서, superpowers/ 설계·계�
 
 ### frontend (`frontend/`)
 
-React 19·TypeScript·Vite·Ant Design 새 화면. 개발 PC에서 `npm run build`로 `frontend/dist/`를 만들고 그 결과를 저장소에 함께 넣는다. Django는 `/app/` 아래 모든 주소에 `dist/index.html`을 내려 주고(`core/views.py` `spa`), JS·CSS는 whitenoise가 `/static/app/`에서 제공하므로 운영 PC에는 Node가 필요 없다. 지금은 `/app/overview`·`/app/todo`·`/app/specs`(목록·`:id` 기록 페이지·`:id/print` 인쇄)·`/app/inspect`(스캔·`:lot/:spec` 측정)·`/app/inspections`(목록·`:id` 기록 페이지·`:id/print` 성적서 인쇄)·`/app/items`(목록·`:id` 속성·BOM·라우팅)·`/app/processes`·`/app/customer-rules`(표 편집)·`/app/plans`(목록·`:id` 기록 페이지·`:id/print` 가로 인쇄)·`/app/import`(엑셀 일괄 등록 미리보기·확정)·`/app/audit`가 있고 데이터는 API로만 받는다. `core/api/views.py`에는 통합 검색(`/api/search/`)·품번 조회(`/api/items/`)·감사 기록(`/api/audit-log/`, 승인자만)·개정 이력 확정(`/api/revision-log/<id>/approve/`)이 있다.
+React 19·TypeScript·Vite·Ant Design 새 화면. 개발 PC에서 `npm run build`로 `frontend/dist/`를 만들고 그 결과를 저장소에 함께 넣는다. Django는 `/app/` 아래 모든 주소에 `dist/index.html`을 내려 주고(`core/views.py` `spa`), JS·CSS는 whitenoise가 `/static/app/`에서 제공하므로 운영 PC에는 Node가 필요 없다. 지금은 `/app/overview`·`/app/todo`·`/app/specs`(목록·`:id` 기록 페이지·`:id/print` 인쇄)·`/app/inspect`(스캔·`:lot/:spec` 측정)·`/app/inspections`(목록·`:id` 기록 페이지·`:id/print` 성적서 인쇄)·`/app/items`(목록·`:id` 속성·BOM·라우팅)·`/app/processes`·`/app/customer-rules`(표 편집)·`/app/plans`(목록·`:id` 기록 페이지·`:id/print` 가로 인쇄)·`/app/import`(엑셀 일괄 등록 미리보기·확정)·`/app/trace`(LOT 계보 그림·이력)·`/app/memos`(미분류 메모)·`/app/audit`가 있고 데이터는 API로만 받는다. `core/api/views.py`에는 LOT 찾기(`/api/core/lots/?q=`, 번호·품번·품명·협력사 일부)·LOT 계보와 이력(`/api/core/trace/?lot=`)·통합 검색(`/api/search/`)·품번 조회(`/api/items/`)·감사 기록(`/api/audit-log/`, 승인자만)·개정 이력 확정(`/api/revision-log/<id>/approve/`)이 있다.
 
 | 위치 | 역할 |
 | --- | --- |
 | `src/main.tsx` | 라우터(`basename="/app"`)·테마·쿼리 클라이언트 |
 | `src/api/` | `client.ts`(CSRF·오류 형식·세션 만료 시 로그인 이동), `auth.ts` |
 | `src/layout/AppLayout.tsx`, `src/theme.ts` | 상단 바·사이드 메뉴, Fiori 색 토큰(라이트·다크) |
-| `src/pages/`, `src/components/` | 화면(`Login`, `Overview`, `Todo`, `specs/SpecList`·`SpecPage`·`SpecPrint`, `inspect/InspectPage`·`MeasurePage`, `inspections/InspectionList`·`InspectionPage`·`InspectionPrint`, `AuditLog`)과 공통 부품(`Tile`, `DataList`, `EditGrid`, `RecordPage`, `SaveBar`, `SignModal`, `DocumentView`, `PrintPage`, `CommandPalette`) |
-| `src/api/specs.ts`, `src/api/inspect.ts`, `src/app.css`, `src/lib/` | 검사기준서·검사 입력 API 호출, 화면 스타일(`DESIGN.md`), 붙여넣기 분해(`tsv.ts`)·최근 연 기록(`recent.ts`) |
+| `src/pages/`, `src/components/` | 화면(`Login`, `Overview`, `Todo`, `specs/SpecList`·`SpecPage`·`SpecPrint`, `inspect/InspectPage`·`MeasurePage`, `inspections/InspectionList`·`InspectionPage`·`InspectionPrint`, `Trace`, `Memos`, `AuditLog`)과 공통 부품(`Tile`, `DataList`, `EditGrid`, `RecordPage`, `SaveBar`, `SignModal`, `DocumentView`, `PrintPage`, `CommandPalette`, `MemoPanel`, `lotOptions`) |
+| `src/api/specs.ts`, `src/api/inspect.ts`, `src/app.css`, `src/lib/` | 검사기준서·검사 입력 API 호출, 화면 스타일(`DESIGN.md`), 붙여넣기 분해(`tsv.ts`)·최근 연 기록(`recent.ts`)·샘플링 선택지(`sampling.ts`) |
 
 전환 검토와 단계 계획은 `docs/architecture-migration-plan.md`에 있다.
 

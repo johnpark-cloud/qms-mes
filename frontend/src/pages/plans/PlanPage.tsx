@@ -11,6 +11,7 @@ import RecordPage from '../../components/RecordPage'
 import SaveBar from '../../components/SaveBar'
 import SignModal from '../../components/SignModal'
 import { addRecent } from '../../lib/recent'
+import { SAMPLING } from '../../lib/sampling'
 
 const FIELDS = ['process', 'characteristic', 'special', 'lsl', 'usl', 'unit', 'method', 'sampling', 'inspection_type', 'reaction', 'failure_mode', 'severity', 'occurrence', 'detection'] as const
 const norm = (v: unknown) => String(v ?? '')
@@ -24,7 +25,7 @@ const makeColumns = (d: PlanDetail): GridColumn[] => [
   { key: 'usl', label: '상한', kind: 'number', width: 80 },
   { key: 'unit', label: '단위', kind: 'text', width: 70 },
   { key: 'method', label: '측정방법', kind: 'text', width: 120 },
-  { key: 'sampling', label: '샘플링', kind: 'text', width: 100 },
+  { key: 'sampling', label: '샘플링', kind: 'text', options: SAMPLING, width: 100 },
   { key: 'inspection_type', label: '검사 구분', kind: 'select', options: d.type_options, width: 110 },
   { key: 'reaction', label: '이상 시 조치', kind: 'text', width: 140 },
   { key: 'failure_mode', label: '잠재 고장모드', kind: 'text', width: 140 },
@@ -241,7 +242,7 @@ export default function PlanPage() {
         props={props}
         side={[
           { key: 'log', label: '개정 이력', node: history },
-          { key: 'memo', label: '메모', node: <a href="/memo/inbox/">메모 수신함 열기</a> },
+          { key: 'memo', label: '메모', node: <a href="/app/memos">미분류 메모 열기</a> },
         ]}
       >
         {made && (

@@ -337,7 +337,7 @@ DEFAULT_LAYOUTS = {
     'approver': _layout('held_lots', 'approvals', 'nc_open', 'capa', 'todo_lists', 'nc_mail_pending', 'kpi_ppm', 'audits',
                         'kpi_fpy'),
     'admin': _layout('held_lots', 'approvals', 'nc_open', 'edit_requests', 'todo_lists', 'nc_mail_pending', 'capa', 'kpi_ppm',
-                     'kpi_fpy', 'gauges', 'kpi_yield'),
+                     'kpi_fpy', 'gauges'),
 }
 
 

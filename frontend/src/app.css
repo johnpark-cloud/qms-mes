@@ -19,6 +19,22 @@
 .prop-grid { display: grid; grid-template-columns: minmax(120px, 200px) 1fr; gap: 8px 16px; font-size: 14px; }
 .prop-grid > dt { opacity: 0.7; margin: 0; }
 .prop-grid > dd { margin: 0; }
+/* 기록 화면 머리 정보: 이름 위·값 아래 카드를 폭에 맞춰 여러 칸으로 채운다. */
+.prop-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px 24px; margin: 0 0 20px; padding: 12px 16px; border: 1px solid var(--app-border); border-radius: 8px; font-size: 14px; }
+.prop-cards dt { opacity: 0.7; font-size: 12px; margin: 0 0 2px; }
+.prop-cards dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
+/* LOT 흐름도: 상자와 화살표를 가로로 잇고, 좁으면 줄을 바꾼다. */
+.flow { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.flow-col { display: grid; gap: 8px; align-content: start; align-self: flex-start; }
+.flow-box { display: grid; gap: 4px; justify-items: start; min-width: 150px; max-width: 240px; padding: 8px 12px; border: 1px solid var(--app-border); border-radius: 8px; color: inherit; overflow-wrap: anywhere; }
+a.flow-box:hover { border-color: currentColor; }
+.flow-here { border-width: 2px; border-color: currentColor; }
+.flow-bad { border-color: var(--app-error); }
+.flow-empty { opacity: 0.6; }
+.flow-sub { opacity: 0.7; font-size: 12px; }
+.flow-arrow { font-size: 20px; opacity: 0.5; }
+.memo-item { padding: 8px 12px; border: 1px solid var(--app-border); border-radius: 8px; }
+.memo-meta { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 4px; font-size: 12px; opacity: 0.85; }
 .grid-table { width: 100%; border-collapse: collapse; font-size: 14px; }
 .grid-table th, .grid-table td { border: 1px solid var(--app-border); padding: 4px 8px; text-align: left; }
 .diff-changed { background: var(--app-warning-bg); }

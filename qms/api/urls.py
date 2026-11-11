@@ -1,6 +1,6 @@
 from django.urls import path
 
-from . import inspections, plans, specs, views
+from . import inspections, memos, plans, specs, views
 
 urlpatterns = [
     path('overview/', views.OverviewView.as_view()),
@@ -29,4 +29,7 @@ urlpatterns = [
     path('inspect/form/<int:lot_id>/<int:spec_id>/', inspections.FormView.as_view()),
     path('inspect/check/', inspections.CheckView.as_view()),
     path('inspect/submit/', inspections.SubmitView.as_view()),
+    path('memos/', memos.MemoListView.as_view()),
+    path('memos/<int:pk>/', memos.MemoEditView.as_view()),
+    path('memos/<int:pk>/link/', memos.MemoLinkView.as_view()),
 ]

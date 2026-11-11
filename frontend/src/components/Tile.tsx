@@ -41,8 +41,9 @@ export function RowList({ rows, empty = '표시할 항목이 없습니다.' }: {
     <ul style={{ listStyle: 'none', margin: 0, padding: 0 }}>
       {rows.map((r, i) => (
         <li key={i} style={{ display: 'flex', justifyContent: 'space-between', gap: 12, padding: '6px 0', minWidth: 0 }}>
-          <span style={{ minWidth: 0, overflowWrap: 'anywhere' }}>{r.href ? <a href={r.href}>{r.label}</a> : r.label}</span>
-          <span style={{ flexShrink: 0, textAlign: 'right' }}><Meta meta={r.meta} tone={r.tone} /></span>
+          {/* 둘 다 줄어들되 번호 쪽은 40% 아래로 줄지 않는다(긴 설명 옆에서 번호가 한 글자씩 꺾이지 않게). */}
+          <span style={{ minWidth: '40%', overflowWrap: 'anywhere' }}>{r.href ? <a href={r.href}>{r.label}</a> : r.label}</span>
+          <span style={{ minWidth: 0, textAlign: 'right', overflowWrap: 'anywhere' }}><Meta meta={r.meta} tone={r.tone} /></span>
         </li>
       ))}
     </ul>

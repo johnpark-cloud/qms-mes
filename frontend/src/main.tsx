@@ -27,7 +27,9 @@ import PlanPrint from './pages/plans/PlanPrint'
 import SpecList from './pages/specs/SpecList'
 import SpecPage from './pages/specs/SpecPage'
 import SpecPrint from './pages/specs/SpecPrint'
+import Memos from './pages/Memos'
 import Todo from './pages/Todo'
+import Trace from './pages/Trace'
 import { useAppTheme } from './theme'
 
 dayjs.locale('ko')
@@ -72,6 +74,8 @@ function App() {
               <Route path="inspect/:lotId/:specId" element={<MeasurePage />} />
               <Route path="inspections" element={<InspectionList />} />
               <Route path="inspections/:id" element={<InspectionPage />} />
+              <Route path="trace" element={<Trace />} />
+              <Route path="memos" element={<Memos />} />
               <Route path="audit" element={<AuditLog />} />
             </Route>
             <Route path="*" element={<Navigate to="/todo" replace />} />

@@ -1,6 +1,6 @@
 from django.contrib.auth import authenticate, login, logout
 from django.core.exceptions import PermissionDenied
-from django.db.models import Q
+from django.db.models import Q, prefetch_related_objects
 from django.http import Http404
 from django.shortcuts import get_object_or_404
 from django.utils.decorators import method_decorator
@@ -12,10 +12,11 @@ from rest_framework.views import APIView
 
 from core import audit
 from core.api.permissions import require_perm
-from core.models import Item, RevisionLog, is_approver
+from core.models import Hold, Item, Lot, RevisionLog, is_approver
 from core.nav import visible_nav
 from core.rules import confirm_revision_log
 from core.search import search
+from core.timeline import lot_actions, lot_timeline
 
 
 def me_payload(user):
@@ -116,3 +117,55 @@ class AuditLogView(APIView):
         chunk = list(qs[start:start + self.PAGE_SIZE + 1])
         return Response({'count': qs.count(), 'page': page, 'has_more': len(chunk) > self.PAGE_SIZE,
                          'results': [audit.row_payload(h) for h in chunk[:self.PAGE_SIZE]]})
+
+
+def _lot_row(lot, held):
+    return {'id': lot.pk, 'number': lot.number, 'item_code': lot.item.code, 'item_name': lot.item.name,
+            'supplier': lot.supplier, 'qty': format(lot.qty.normalize(), 'f'), 'on_hold': held}
+
+
+class LotSearchView(APIView):
+    """LOT 고르기 목록: 번호·품번·품명·협력사 일부로 찾는다. 검색어가 없으면 최근 LOT."""
+    schema = None
+
+    def get(self, request):
+        # LOT 번호를 이미 다루는 두 화면(검사 입력, LOT 이력)의 권한 중 하나가 있으면 된다
+        if not (request.user.has_perm('qms.add_inspection') or request.user.has_perm('core.view_lot')):
+            raise PermissionDenied
+        q = request.query_params.get('q', '').strip()
+        qs = Lot.objects.select_related('item').order_by('-created_at', '-pk')
+        if q:
+            qs = qs.filter(Q(number__icontains=q) | Q(item__code__icontains=q) | Q(item__name__icontains=q)
+                           | Q(supplier__icontains=q))
+        lots = list(qs[:20])
+        held = set(Hold.objects.filter(lot__in=lots, released_at__isnull=True).values_list('lot_id', flat=True))
+        return Response({'results': [_lot_row(x, x.pk in held) for x in lots]})
+
+
+class TraceView(APIView):
+    """LOT 이력: 상태, 시간순 흐름, 상위·하위 계보. 옛 화면(core.views.trace)과 같은 함수를 쓴다."""
+    schema = None
+
+    def get(self, request):
+        require_perm(request.user, 'core.view_lot')
+        number = request.query_params.get('lot', '').strip()
+        lot = Lot.objects.filter(number=number).select_related('item').first() if number else None
+        if not lot:
+            return Response({'detail': '등록되지 않은 LOT입니다.'}, status=404)
+        ancestors, descendants = lot.ancestors(), lot.descendants()
+        # 계보 LOT마다 조회하지 않도록 출하·투입 계보·보류를 한꺼번에 읽는다
+        prefetch_related_objects([lot] + ancestors + descendants, 'shipments', 'parent_links')
+        held = set(Hold.objects.filter(lot__in=[lot] + ancestors + descendants, released_at__isnull=True)
+                   .values_list('lot_id', flat=True))
+
+        def row(x):
+            return {**_lot_row(x, x.pk in held), 'lineage_gap': x.lineage_gap,
+                    'shipments': [{'customer': str(s.customer), 'shipped_at': s.shipped_at.isoformat()}
+                                  for s in x.shipments.all()]}
+
+        return Response({
+            'lot': {**row(lot), 'created_at': lot.created_at.isoformat()},
+            'timeline': [{**e, 'at': e['at'].isoformat()} for e in lot_timeline(lot)],
+            'actions': [{'label': label, 'url': url} for label, url in lot_actions(lot, request.user)],
+            'ancestors': [row(x) for x in ancestors], 'descendants': [row(x) for x in descendants],
+        })

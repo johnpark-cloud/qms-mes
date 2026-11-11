@@ -23,9 +23,9 @@ export default function RecordPage({ title, status, actions, props, children, si
       </Space>
       <div style={{ display: 'flex', gap: 24, flexWrap: 'wrap', alignItems: 'flex-start' }}>
         <div style={{ flex: '3 1 480px', minWidth: 0 }}>
-          <dl className="prop-grid" style={{ marginBottom: 24 }}>
+          <dl className="prop-cards">
             {props.map((p) => (
-              <div key={p.label} style={{ display: 'contents' }}>
+              <div key={p.label}>
                 <dt>{p.label}</dt>
                 <dd>{p.node}</dd>
               </div>

@@ -74,6 +74,7 @@ try:
         added = False
         if pick:
             try:
+                page.get_by_role('button', name='화면 편집').click()  # 위젯 추가는 편집 중에만 보인다
                 page.get_by_label('위젯 추가').click()
                 page.locator('.ant-select-item-option', has_text=pick['title']).first.click()
                 page.wait_for_function('n => document.querySelectorAll("[data-widget]").length === n', before + 1)
@@ -320,8 +321,10 @@ try:
             page.get_by_placeholder(scan_ph).fill('E2E-NEW-1')
             page.keyboard.press('Enter')
             page.get_by_text('입고 등록').first.wait_for(timeout=5000)
-            page.locator('.ant-modal .ant-select').first.click()
-            page.locator('.ant-select-item-option', has_text='E2E-I1').click()
+            # 품목은 입고 창 안 검색칸에 쳐서 고른다(닫히는 중인 LOT 찾기 목록에도 같은 품번이 보일 수 있다).
+            page.locator('.ant-modal .ant-select input').first.fill('E2E 검사 자재')
+            page.locator('.ant-select-item-option-active', has_text='E2E-I1').wait_for(timeout=5000)
+            page.keyboard.press('Enter')
             page.get_by_label('입고수량').fill('5')
             page.get_by_role('button', name='저장').click()
             page.get_by_role('button', name='수입검사').wait_for(timeout=5000)

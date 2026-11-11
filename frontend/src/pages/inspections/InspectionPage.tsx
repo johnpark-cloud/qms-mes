@@ -4,6 +4,7 @@ import { useEffect } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { ApiError, api } from '../../api/client'
 import type { InspectionDetail } from '../../api/inspect'
+import MemoPanel from '../../components/MemoPanel'
 import RecordPage from '../../components/RecordPage'
 import { addRecent } from '../../lib/recent'
 
@@ -45,14 +46,14 @@ export default function InspectionPage() {
         </Dropdown>
       }
       props={[
-        { label: 'LOT', node: <a href={d.lot.trace_url}>{d.lot.number}</a> },
+        { label: 'LOT', node: <Link to={`/trace?lot=${encodeURIComponent(d.lot.number)}`}>{d.lot.number}</Link> },
         { label: '품번', node: `${d.item.code} · ${d.item.name}` },
         { label: '검사기준', node: <Link to={`/specs/${d.spec.id}`}>{d.spec.title}</Link> },
         { label: '검사자', node: d.inspector },
         { label: '검사 일시', node: d.inspected_at.slice(0, 16).replace('T', ' ') },
         { label: '부적합', node: d.nonconformance ? <a href={d.nonconformance.url}>{d.nonconformance.number}</a> : '없음' },
       ]}
-      side={[{ key: 'memo', label: '메모', node: <a href="/memo/inbox/">메모 수신함 열기</a> }]}
+      side={[{ key: 'memo', label: '메모', node: <MemoPanel ct="qms.inspection" id={id} /> }]}
     >
       <Table<M> size="small" columns={COLUMNS} dataSource={d.measurements} rowKey={(m) => m.name} pagination={false} locale={{ emptyText: '측정 결과가 없습니다' }} />
     </RecordPage>

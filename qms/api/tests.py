@@ -645,6 +645,11 @@ class InspectionApiTest(TestCase):
 
 
 
+    def test_trace_timeline_links_new_inspection_page(self):
+        insp = self.make(self.lots[0], InspectionSpec.INCOMING, '10.0')
+        d = self.c().get('/api/core/trace/?lot=L-1').json()
+        self.assertIn(f'/app/inspections/{insp.pk}', [e['url'] for e in d['timeline']])
+
 class CustomerRuleApiTest(TestCase):
     URL = '/api/qms/customer-rules/'
 
@@ -660,3 +665,77 @@ class CustomerRuleApiTest(TestCase):
         self.assertEqual(r.json()['rows'][0]['containment_hours'], 12)
         ws = load_workbook(BytesIO(c.get(self.URL + '?export=xlsx').content)).active
         self.assertEqual([x.value for x in ws[1]], ['고객사', '봉쇄(D3) 기한(시간)', '대책(D5) 기한(일)'])
+
+
+class MemoApiTest(TestCase):
+    URL = '/api/qms/memos/'
+
+    def setUp(self):
+        self.insp = User.objects.create_user('insp', password='x', is_staff=True)
+        self.insp.groups.add(Group.objects.get(name='검사원'))
+        self.other = User.objects.create_user('other', password='x', is_staff=True)
+        self.other.groups.add(Group.objects.get(name='검사원'))
+        self.eng = User.objects.create_user('eng', password='x', is_staff=True)
+        self.eng.groups.add(Group.objects.get(name='품질엔지니어'))
+        self.item = Item.objects.create(code='P1', name='부품', item_type=Item.RAW)
+        self.lot = Lot.objects.create(number='L-1', item=self.item, supplier='가협력')
+
+    def c(self, user):
+        c = APIClient()
+        c.force_login(user)
+        return c
+
+    def test_add_to_record_and_list(self):
+        c = self.c(self.insp)
+        r = c.post(self.URL + f'?ct=core.lot&id={self.lot.pk}', {'body': '포장 찢김', 'speaker_kind': 'CUSTOMER'})
+        self.assertEqual(r.status_code, 201)
+        self.assertEqual((r.json()['speaker'], r.json()['can_edit']), ('고객', True))
+        d = c.get(self.URL + f'?ct=core.lot&id={self.lot.pk}').json()
+        self.assertEqual([m['body'] for m in d['results']], ['포장 찢김'])
+        self.assertTrue(d['can_add'])
+        self.assertEqual(c.get(self.URL).json()['results'], [])  # 미분류 아님
+
+    def test_empty_body_400(self):
+        r = self.c(self.insp).post(self.URL, {'body': '', 'speaker_kind': 'AUDITOR'})
+        self.assertEqual(r.status_code, 400)
+        self.assertIn('body', r.json()['fields'])
+
+    def test_photo_upload(self):
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        with self.settings(MEDIA_ROOT=self._tmp()):
+            r = self.c(self.insp).post(self.URL, {'body': '사진', 'speaker_kind': 'AUDITOR',
+                                                  'photos': SimpleUploadedFile('a.png', b'0' * 50, 'image/png')})
+            self.assertEqual(r.status_code, 201, r.content)
+            self.assertEqual(len(r.json()['photos']), 1)
+
+    def _tmp(self):
+        import shutil
+        import tempfile
+        d = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, d, True)
+        return d
+
+    def test_edit_author_only(self):
+        mid = self.c(self.insp).post(self.URL, {'body': 'a', 'speaker_kind': 'AUDITOR'}).json()['id']
+        self.assertEqual(self.c(self.other).post(f'{self.URL}{mid}/', {'body': 'b', 'speaker_kind': 'AUDITOR'}).status_code, 403)
+        r = self.c(self.insp).post(f'{self.URL}{mid}/', {'body': 'b', 'speaker_kind': 'AUDITOR'})
+        self.assertEqual((r.status_code, r.json()['body']), (200, 'b'))
+
+    def test_link_unsorted(self):
+        mid = self.c(self.insp).post(self.URL, {'body': 'a', 'speaker_kind': 'AUDITOR'}).json()['id']
+        url = f'{self.URL}{mid}/link/'
+        self.assertEqual(self.c(self.other).post(url, {'kind': 'LOT', 'number': 'L-1'}, format='json').status_code, 403)
+        r = self.c(self.insp).post(url, {'kind': 'LOT', 'number': 'NOPE'}, format='json')
+        self.assertEqual((r.status_code, list(r.json()['fields'])), (400, ['number']))
+        self.assertEqual(self.c(self.eng).post(url, {'kind': 'LOT', 'number': ' L-1 '}, format='json').status_code, 200)
+        from qms.models import Memo
+        self.assertEqual(Memo.objects.get(pk=mid).target, self.lot)
+        self.assertEqual(self.c(self.insp).get(self.URL).json()['results'], [])
+
+    def test_target_rules(self):
+        c = self.c(self.insp)
+        self.assertEqual(c.get(self.URL + '?ct=auth.user&id=1').status_code, 404)
+        self.assertEqual(c.get(self.URL + '?ct=qms.capa&id=1').status_code, 403)  # 검사원은 CAPA를 못 본다
+        plain = User.objects.create_user('plain', password='x', is_staff=True)
+        self.assertEqual(self.c(plain).get(self.URL).status_code, 403)
+        self.assertEqual(self.c(plain).post(self.URL, {'body': 'a', 'speaker_kind': 'AUDITOR'}).status_code, 403)

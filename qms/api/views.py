@@ -25,7 +25,8 @@ class TodoView(APIView):
         for w in layout_for(request.user):
             widget = WIDGETS[w['key']]
             try:
-                data, error = widget_data(widget, request, d, w['size']), False
+                # React 화면은 '할 일 목록'을 크기와 상관없이 종류별 목록으로 그린다
+                data, error = widget_data(widget, request, d, 'wide' if widget.key == 'todo_lists' else w['size']), False
             except Exception:  # 위젯 하나가 깨져도 화면은 떠야 한다
                 logging.getLogger('qms').exception('위젯 불러오기 실패: %s', widget.key)
                 data, error = None, True
