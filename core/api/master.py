@@ -141,9 +141,12 @@ class ItemOptionsView(APIView):
         for c in CodeValue.objects.filter(active=True).order_by('sort', 'code'):
             codes.setdefault(c.group, []).append(c)
         out, names = [], {}  # names: 대상 -> {번호: 이름}, 표마다 한 번만 읽는다
+        see_docs = request.user.has_perm('qms.view_document')
         for rule in NumberRule.objects.filter(target=NumberRule.ITEM, active=True).order_by('sort', 'pk'):
             if not _ref_ok(rule, rules):
                 continue
+            if not see_docs and any(t.kind == 'ref' and t.target == NumberRule.DOC for t in fields(rule)):
+                continue  # 문서 열람 권한이 없으면 문서번호·제목을 보여 주지 않는다
             fs, prev = [], None
             for t in fields(rule):
                 if t.kind == 'ref':

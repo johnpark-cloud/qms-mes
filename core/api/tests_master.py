@@ -223,6 +223,20 @@ class ItemApiTest(TestCase):
         self.assertEqual(self.client.get('/api/core/numbering/item-options/').status_code, 403)
         self.assertEqual(self.client.get('/api/core/numbering/item-preview/?rule=1').status_code, 403)
 
+    def test_doc_ref_rule_needs_view_document(self):
+        from qms.models import Document
+        Document.objects.create(number='KEN-PQ-01', title='비밀 절차서')
+        NumberRule.objects.create(name='문서 기반', target='ITEM', pattern='{문서:관리표준}-{일련2}', sort=99)
+        u = User.objects.create_user('eng', password='x', is_staff=True)
+        grant(u, 'add_item')
+        self.client.force_login(u)
+        self.assertNotIn('문서 기반', [r['name'] for r in self.options()])
+        self.assertNotIn('비밀 절차서', self.client.get('/api/core/numbering/item-options/').content.decode())
+        u.user_permissions.add(Permission.objects.get(content_type__app_label='qms', codename='view_document'))
+        u = User.objects.get(pk=u.pk)  # 권한 캐시 비우기
+        self.client.force_login(u)
+        self.assertIn('문서 기반', [r['name'] for r in self.options()])
+
 
 
 class ProcessApiTest(TestCase):

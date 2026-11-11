@@ -174,6 +174,7 @@
 - **끝 번호 초과:** 끝 번호(99, 999, 99999 등)를 넘으면 "일련번호가 다 찼습니다." 오류를 낸다.
 - **사용 중지:** 사용 중지된 규칙이나 코드값으로는 새 번호를 받을 수 없다(서버 `next_number`가 거부). 풀이(`describe`)에는 계속 쓰인다.
 - **직접 입력:** 번호를 직접 적는 것은 허용하고 모양 검사는 하지 않는다(기존 번호가 규칙과 다르기 때문).
+- **문서 참조 규칙의 권한:** 품번 등록 창의 규칙 목록(`/api/core/numbering/item-options/`)은 `qms.view_document` 권한이 없는 사용자에게 `{문서:…}` 토큰이 있는 규칙을 보여 주지 않는다(문서번호·제목 노출 방지, `core/api/master.py` `ItemOptionsView`).
 - **개정 자동 채움:** 문서 개정의 `개정`을 비우면 그 문서의 기존 개정값 중 숫자만인 값(앞의 `Rev.`, `Rev`는 떼고 비교)의 최댓값 + 1로 채운다. `A` 같은 문자 개정은 무시하고, 숫자 개정이 없으면 0이다(`core/numbering.py` `next_revision`).
 
 코드 위치: `core/numbering.py`, `core/models.py`(`CodeValue`·`NumberRule`), `core/api/master.py`(`ItemOptionsView`·`ItemPreviewView`), `qms/admin.py`(`DocumentAdmin.get_form`), `qms/models.py`(`DocumentRevision`).
