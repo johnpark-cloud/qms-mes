@@ -140,6 +140,7 @@ class NumberRule(models.Model):
                       for f in ('name', 'target', 'pattern') if getattr(old, f) != getattr(self, f)}
             if locked:
                 raise ValidationError(locked)
+            return  # 틀이 그대로면 다시 검사하지 않는다(참조 규칙이 지워져도 사용 중지는 되게)
         try:
             check_rule(self.name, self.target, self.pattern)
         except NumberingError as e:

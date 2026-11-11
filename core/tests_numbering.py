@@ -130,6 +130,12 @@ class NumberRuleTest(TestCase):
         r.active = False
         r.full_clean()
 
+    def test_deactivate_rule_after_ref_deleted(self):
+        NumberRule.objects.filter(name='관리표준').delete()  # 시스템 관리자가 참조 규칙을 지운 뒤에도
+        r = NumberRule.objects.get(name='양식')
+        r.active = False
+        r.full_clean()  # 사용 중지는 할 수 있어야 한다
+
     def test_rule_admin(self):
         ensure_roles(None)
         eng = User.objects.create_user('eng', password='x', is_staff=True)
