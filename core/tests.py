@@ -28,6 +28,12 @@ class RoutingTest(TestCase):
         Nonconformance.objects.create(lot=held, description='x')
         with self.assertRaises(ValidationError):
             WorkResult.objects.create(work_order=wo, step=s20, lot=held, input_qty=1, good_qty=1)
+        free = Lot.objects.create(number='L2', item=item)
+        wr = WorkResult.objects.create(work_order=wo, step=s20, lot=free, input_qty=1, good_qty=1)
+        wr.lot = held  # 수정으로 보류 LOT에 실적을 옮길 수 없다
+        with self.assertRaises(ValidationError):
+            wr.save()
+        wr.delete()
         from qms.kpi import process_yield
         self.assertEqual([round(y['yield'], 2) for y in process_yield(1)], [round(58 / 60 * 100, 2), round(50 / 58 * 100, 2)])
 
@@ -54,6 +60,19 @@ class InterlockTest(TestCase):
             Shipment.objects.create(lot=self.cell_b, customer='A사', qty=1)
         with self.assertRaises(ValidationError):
             LotLink.objects.create(parent=self.cell_a, child=self.orphan)
+
+    def test_edit_cannot_move_record_onto_held_lot(self):
+        ship = Shipment.objects.create(lot=self.orphan, customer='A사', qty=1)
+        link = LotLink.objects.create(parent=self.orphan, child=self.cell_a)
+        Nonconformance.objects.create(lot=self.raw, description='이물')
+        ship.qty = 2  # 같은 LOT의 지난 기록 정정은 보류여도 허용
+        ship.save()
+        ship.lot = self.cell_b
+        with self.assertRaises(ValidationError):
+            ship.save()
+        link.parent = self.cell_b
+        with self.assertRaises(ValidationError):
+            link.save()
 
     def test_release_rules(self):
         nc = Nonconformance.objects.create(lot=self.raw, description='이물')

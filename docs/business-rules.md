@@ -12,6 +12,7 @@
 | 보류 중인 LOT은 다른 LOT에 투입(`LotLink`)할 수 없다. | `LotLink.clean` → `Lot.assert_usable('투입')` |
 | 보류 중인 LOT으로 작업 실적을 등록할 수 없다. | `WorkResult.clean` → `assert_usable('실적 등록')` |
 | 보류 중인 LOT은 출하할 수 없다. | `Shipment.clean` → `assert_usable('출하')` |
+| 위 세 검사(와 4M 초품 출하 차단)는 새로 만들 때뿐 아니라 기존 기록의 LOT을 바꿔 저장할 때도 한다. LOT을 바꾸지 않는 정정(수량·메모)은 LOT이 보류여도 허용한다. | `core/models.py` `lot_changed` |
 | 계보는 자기 자신 투입과 순환을 허용하지 않는다. | `LotLink.clean` |
 | 작업 실적: 라우팅에 있는 공정만, 양품+불량 ≤ 투입, 이전 공정 양품 실적이 있어야 다음 공정 등록, LOT 품번 = 작업지시 품번. | `WorkResult.clean` |
 | 고객 클레임 접수는 부적합을 자동 생성한다(→ 보류). | `qms/models.py` `CustomerClaim.save` |

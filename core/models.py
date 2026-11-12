@@ -253,7 +253,7 @@ class WorkResult(models.Model):
         if self.lot_id:
             if self.lot.item_id != wo.item_id:
                 raise ValidationError('LOT의 품번이 작업지시 품번과 다릅니다.')
-            if self._state.adding:
+            if lot_changed(self, 'lot_id'):
                 self.lot.assert_usable('실적 등록')
 
     @transaction.atomic
@@ -330,6 +330,14 @@ class Lot(models.Model):
             raise ValidationError(f'{self.number}은(는) 보류 중이라 {action}할 수 없습니다.')
 
 
+def lot_changed(obj, field):
+    """새 기록이거나 저장된 LOT과 다르면 True. 수정으로 보류·4M 인터록을 건너뛰지 못하게 한다.
+    같은 LOT의 지난 기록(수량·메모) 정정은 LOT이 보류여도 막지 않는다."""
+    if obj._state.adding:
+        return True
+    return type(obj).objects.filter(pk=obj.pk).values_list(field, flat=True).first() != getattr(obj, field)
+
+
 class LotLink(models.Model):
     """투입 계보: parent LOT이 child LOT에 투입됨 (분할·병합 = N:M)."""
     parent = models.ForeignKey(Lot, on_delete=models.PROTECT, related_name='child_links', verbose_name='투입 LOT')
@@ -349,7 +357,7 @@ class LotLink(models.Model):
             raise ValidationError('같은 LOT을 자기 자신에 투입할 수 없습니다.')
         if self.parent_id and self.child_id and self.child in self.parent.ancestors():
             raise ValidationError('계보가 순환됩니다.')
-        if self.parent_id and self._state.adding:
+        if self.parent_id and lot_changed(self, 'parent_id'):
             self.parent.assert_usable('투입')
 
     def save(self, *args, **kwargs):
@@ -590,7 +598,7 @@ class Shipment(models.Model):
     coa_rows.report_safe = True  # 엑셀 양식(ExcelTemplate.fill)이 호출해도 되는 읽기 전용 메서드
 
     def clean(self):
-        if self.lot_id and self._state.adding:
+        if self.lot_id and lot_changed(self, 'lot_id'):
             self.lot.assert_usable('출하')
             # 4M 변경 후 초품 합격 전에는 출하 금지 (qms 앱이 정의, core는 qms를 import하지 않는다)
             waiting = apps.get_model('qms', 'ChangeRequest').awaiting_first_article(self.lot.item)

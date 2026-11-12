@@ -280,6 +280,11 @@ class QmsTest(TestCase):
         self.assertTrue(cr.is_approved)
         with self.assertRaises(ValidationError):
             Shipment.objects.create(lot=self.raw, customer='A사', qty=1)
+        other = Shipment(lot=Lot.objects.create(number='OTHER-1', item=self.cell_item), customer='A사', qty=1)
+        other.save()
+        other.lot = self.raw  # 수정으로 초품 전 LOT에 출하를 옮길 수 없다
+        with self.assertRaises(ValidationError):
+            other.save()
         self.inspect('10.0')  # 초품 합격
         Shipment.objects.create(lot=self.raw, customer='A사', qty=1)
 
