@@ -70,20 +70,53 @@
 
 | # | 결정 | 정할 시점 |
 |---|------|-----------|
-| 3 | 검사 모듈이 꺼졌을 때 4M 해제 경로 | A3 전 |
-| 5 | `submit_edit_request`를 `core/rules.py`로 옮길지(승인 필요) | B2 전 |
-| 6 | 감사 기록 탭을 누구에게 보일지 | B1 전 |
+| 3 | 검사 모듈이 꺼졌을 때 4M 해제 경로 | A3 전 (Phase 3) |
+| 5 | `submit_edit_request`를 `core/rules.py`로 옮길지(승인 필요) | B2 전 (Phase 6) |
+| 6 | 감사 기록 탭을 누구에게 보일지 | B1 전 (Phase 5) |
 
 ## Traceability
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| (로드맵 작성 시 채움) | | |
+| SHELL-01 | Phase 1 | Pending |
+| SHELL-02 | Phase 1 | Pending |
+| SHELL-03 | Phase 1 | Pending |
+| SHELL-04 | Phase 1 | Pending |
+| SHELL-05 | Phase 1 | Pending |
+| SHELL-06 | Phase 1 | Pending |
+| SHELL-07 | Phase 1 | Pending |
+| MOD-01 | Phase 2 | Pending |
+| MOD-02 | Phase 2 | Pending |
+| MOD-03 | Phase 2 | Pending |
+| MOD-04 | Phase 2 | Pending |
+| MOD-05 | Phase 2 | Pending |
+| MOD-09 | Phase 2 | Pending |
+| MOD-06 | Phase 3 | Pending |
+| MOD-07 | Phase 3 | Pending |
+| MOD-08 | Phase 3 | Pending |
+| MOD-10 | Phase 4 | Pending |
+| MOD-11 | Phase 4 | Pending |
+| MOD-12 | Phase 4 | Pending |
+| MOD-13 | Phase 4 | Pending |
+| REC-01 | Phase 5 | Pending |
+| REC-02 | Phase 5 | Pending |
+| REC-03 | Phase 5 | Pending |
+| REC-04 | Phase 5 | Pending |
+| REC-07 | Phase 5 | Pending |
+| REC-12 | Phase 5 | Pending |
+| REC-13 | Phase 5 | Pending |
+| REC-05 | Phase 6 | Pending |
+| REC-06 | Phase 6 | Pending |
+| REC-08 | Phase 7 | Pending |
+| REC-09 | Phase 8 | Pending |
+| REC-10 | Phase 9 | Pending |
+| REC-11 | Phase 10 | Pending |
 
 **Coverage:**
 - v1 requirements: 33 total
-- Mapped to phases: 0
-- Unmapped: 33
+- Mapped to phases: 33
+- Unmapped: 0
 
 ---
 *Requirements defined: 2026-11-13*
+*Traceability updated: 2026-11-13 (로드맵 작성)*
