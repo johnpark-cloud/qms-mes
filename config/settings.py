@@ -107,7 +107,7 @@ DATABASES = {
         'OPTIONS': {'transaction_mode': 'IMMEDIATE', 'timeout': 20},
     }
 }
-if os.environ.get('QMS_DB_NAME'):  # 2단계: PostgreSQL 전환 (pip install psycopg 필요)
+if os.environ.get('QMS_DB_NAME'):  # PostgreSQL (README "PostgreSQL" 절)
     DATABASES['default'] = {
         'ENGINE': 'django.db.backends.postgresql',
         'NAME': os.environ['QMS_DB_NAME'],

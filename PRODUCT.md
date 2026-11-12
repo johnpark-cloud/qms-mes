@@ -61,7 +61,8 @@ web
 - **사진:** Pillow가 없어서 FileField와 확장자 검증으로 받는다.
 - **이식 단위:**
   - 운영 데이터(`data/`: DB, 첨부, 로고 `data/brand/logo.*`, 비밀키)는 Git에 올리지 않는다. backup/restore 명령으로 옮긴다.
-- **아직 정하지 않은 것:** 팀 확대 시 동시 사용 규모, PostgreSQL 전환 시점.
+- **아직 정하지 않은 것:** 팀 확대 시 동시 사용 규모.
+- **DB:** 2026-11-12 PostgreSQL 18(이 PC 전용, localhost)로 옮겼다. `QMS_DB_NAME`을 지우면 SQLite로 돌아간다(README "PostgreSQL").
 
 ## Brand Commitments
 

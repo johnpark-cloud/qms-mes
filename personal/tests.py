@@ -142,7 +142,7 @@ class OwnerOnlyTests(TestCase):
         self.assertContains(self.client.get('/me/'), '7,777,777')
         r = self.client.get(f'/me/payslip/{self.slip.pk}/file/')
         self.assertEqual(r.status_code, 200)
-        r.close()
+        r.getvalue()  # 끝까지 읽어 파일을 닫는다(close()를 직접 부르면 PostgreSQL 테스트 DB 연결이 끊긴다)
 
     def test_str_hides_personal_data(self):
         self.assertEqual(str(self.use), '연차 사용')

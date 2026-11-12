@@ -189,10 +189,11 @@ class SpecRulesTest(TestCase):
 
     def test_spec_version_sees_spec_only_change(self):
         draft, _ = open_or_new_revision(self.spec)
-        for n in range(3):  # 항목 이력 번호가 기준서 이력 번호보다 앞서게 한다
+        # 항목 이력 번호가 기준서 이력 번호보다 앞서게 한다. 표마다 번호가 따로라(PostgreSQL) 몇 줄이 필요한지 다르다
+        spec_hid, n = draft.history.latest('history_id').history_id, 0
+        while not Characteristic.history.filter(spec_id=draft.pk, history_id__gt=spec_hid).exists():
             Characteristic.objects.create(spec=draft, name=f'x{n}')
-        self.assertGreater(Characteristic.history.filter(spec_id=draft.pk).latest('history_id').history_id,
-                           draft.history.latest('history_id').history_id)
+            n += 1
         v = spec_version(draft)
         draft.sampling = 'n=99'
         draft.save()

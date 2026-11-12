@@ -55,7 +55,7 @@
 | 화면 | Django admin + 전용 템플릿. 부분 갱신은 동봉한 htmx로 한다 | `core/static/htmx.min.js`, `templates/admin/base_site.html` |
 | 자체 JS | `shell.js`, `dashboard.js`, `nc_form.js`, `copy_mail.js` | `core/static/qms/` |
 | 디자인 | `fiori.css` 토큰. 다크 모드는 `prefers-color-scheme`. 글꼴은 시스템 글꼴(`"Segoe UI", "Malgun Gothic", …`)이라 외부 로드가 없다 | `core/static/qms/fiori.css` |
-| DB | SQLite (`transaction_mode='IMMEDIATE'`, `timeout=20`). `QMS_DB_NAME`을 주면 PostgreSQL 설정을 쓴다. psycopg는 설치되어 있지 않다 | `config/settings.py` 99~112행 |
+| DB | SQLite (`transaction_mode='IMMEDIATE'`, `timeout=20`). `QMS_DB_NAME`을 주면 PostgreSQL 설정을 쓴다. psycopg는 설치되어 있지 않다(2026-11-12 4단계에서 설치·전환, 아래 4단계 "결과") | `config/settings.py` 99~112행 |
 | 서버 | 개인용은 `서버시작.bat`(runserver), 사내망은 `scripts/serve.ps1`(waitress, `QMS_DEBUG=0`, `collectstatic`) | |
 | 인증 | Django 세션. `LOGIN_URL='/admin/login/'`. 모든 전용 뷰는 `@staff_member_required`라서 `is_staff` 사용자만 들어온다 | `config/settings.py`, `core/views.py`, `qms/views.py` |
 | 첨부 | `/media/`는 `staff_member_required(serve)`로 준다. 개인 명세서는 `data/private/`(MEDIA_ROOT 밖)에 있고 소유자 전용 뷰로만 준다 | `config/urls.py`, `personal/views.py` |
@@ -103,7 +103,7 @@
 | 규칙 일부가 admin 계층에만 있다 | 잠금 해제 1회 소모, 삭제 권한, MRB 비밀번호, 종결 부적합의 읽기 전용 칸 등. 전체 목록은 9.2 | `core/admin.py` `BaseAdmin`, `NonconformanceForm`, `NonconformanceAdmin.get_readonly_fields` |
 | 집계 결과에 admin URL이 섞여 있다 | 집계 함수가 `reverse('admin:…')` 링크나 HTML을 돌려준다. React가 쓰려면 링크 대신 식별자(id·모델명)를 돌려주도록 나눠야 한다 | `qms/widgets.py`(`reverse(` 10회), `core/timeline.py`(8회), `core/search.py`(4회), `qms/similar.py` `similar_html` |
 | 필드 단위 검증은 `full_clean()`에서만 돈다 | `save()`의 `self.clean()`은 모델 `clean()`만 부른다. `choices`·`max_length`·`unique`·필수 칸 검사와 `validate_photo` 같은 필드 검사기는 `full_clean()`(폼·`core/importer.py`)에서만 돈다. `Evidence.clean`, `Payslip.clean`은 `save()`가 부르지 않는다 | `qms/models.py` 544행, `personal/models.py` 59행, `core/importer.py` 47행 |
-| 번호 생성이 SQLite에 맞춰져 있다 | `_nc_number`는 날짜별 순번이다. SQLite IMMEDIATE 트랜잭션이라야 겹치지 않는다. `shortcut:` 주석에 PostgreSQL에서는 중복될 수 있으니 전환 시 DB 시퀀스로 바꾸라고 적혀 있다. `_capa_number`는 "그날 건수 + 1" 방식이다. 동시에 만들면 저장할 때 중복 오류로 막힌다(함수 설명) | `core/models.py` 267~273행, `qms/models.py` 551행 |
+| 번호 생성이 SQLite에 맞춰져 있다 | `_nc_number`는 날짜별 순번이다. SQLite IMMEDIATE 트랜잭션이라야 겹치지 않는다. `shortcut:` 주석에 PostgreSQL에서는 중복될 수 있으니 전환 시 DB 시퀀스로 바꾸라고 적혀 있다. `_capa_number`는 "그날 건수 + 1" 방식이다. 동시에 만들면 저장할 때 중복 오류로 막힌다(함수 설명). 4단계에서 시퀀스 대신 `save_numbered`(겹치면 다음 번호로 다시 저장)로 바꿨다 | `core/models.py` 267~273행, `qms/models.py` 551행 |
 | 서버에서 그리는 화면 | SPC 관리도는 서버가 그리는 SVG(`spc.html`의 `<svg>`·`<polyline>`)다. 인쇄 화면 3종은 HTML 템플릿이다 | `qms/spc.py` `control_chart`, `core/templates/core/print.html`·`nc_print.html`, `qms/templates/qms/audit_pack.html` |
 
 ---
@@ -465,6 +465,11 @@ scripts/
   - 전체 테스트가 PostgreSQL에서 통과한다.
   - 같은 날 부적합을 동시에 등록하는 테스트(스레드 2개)에서 번호가 겹치지 않는다.
 - **되돌리기:** `QMS_DB_NAME` 환경변수를 지우면 SQLite 설정으로 돌아간다(`config/settings.py` 분기).
+- **결과 (2026-11-12 완료):**
+  - PostgreSQL 18(localhost 전용)과 `psycopg[binary]`를 설치했다. 운영 데이터를 `dumpdata`/`loaddata`로 옮겼고 106개 표의 행 수가 같다(지운 모델을 가리키던 권한 연결 36행만 뺐다).
+  - 번호는 시퀀스 대신 `save_numbered`로 바꿨다. 스키마 변경이 없다. 동시 등록 테스트(스레드 2개)가 통과한다.
+  - `backup`은 `pg_dump`(`db.dump`), `restore`는 임시 DB 예행연습과 `pg_restore`를 쓴다(README "PostgreSQL").
+  - 전체 테스트 464개가 PostgreSQL에서 통과했다. e2e(`e2e_check.py`·`e2e_browser.py`)는 임시 SQLite DB로 돈다.
 
 ### 5단계 — 일괄 교체 (템플릿 제거·admin 제한)
 

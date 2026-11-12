@@ -10,7 +10,7 @@ from django.utils import timezone
 from simple_history.models import HistoricalRecords
 
 from core.numbering import next_revision
-from core.models import Approvable, Item, Lot, Nonconformance, validate_photo
+from core.models import Approvable, Item, Lot, Nonconformance, save_numbered, validate_photo
 
 
 PRIVATE_APPS = ['personal', 'auth', 'admin', 'sessions', 'contenttypes']  # 증적·엑셀 양식으로 내보내지 않는 앱
@@ -672,9 +672,10 @@ class Evidence(models.Model):
 # ---------- CAPA · 내부심사 · PPAP ----------
 
 def _capa_number():
-    """CAPA-YYMMDD-001: 날짜별 순번. 같은 순간 두 화면에서 만들면 저장 시 중복 오류로 막힌다(번호 고쳐 저장)."""
+    """CAPA-YYMMDD-001: 날짜별 순번. 중간 번호가 지워져도 겹치지 않게 그날 마지막 번호 다음으로 매긴다."""
     prefix = timezone.localtime().strftime('CAPA-%y%m%d-')
-    return f'{prefix}{Capa.objects.filter(number__startswith=prefix).count() + 1:03d}'
+    last = Capa.objects.filter(number__startswith=prefix).order_by('-number').values_list('number', flat=True).first()
+    return f'{prefix}{int(last[-3:]) + 1 if last and last[-3:].isdigit() else 1:03d}'
 
 class Capa(models.Model):
     """시정·예방조치. 8D·SCAR·심사 지적·SPC·부적합 어디서 나왔든 한 목록에서 유효성 확인까지 추적한다."""
@@ -724,7 +725,10 @@ class Capa(models.Model):
 
     def save(self, *args, **kwargs):
         self.clean()
-        super().save(*args, **kwargs)
+        if self._state.adding:
+            save_numbered(self, _capa_number, r'CAPA-\d{6}-\d{3}', lambda: super(Capa, self).save(*args, **kwargs))
+        else:
+            super().save(*args, **kwargs)
         if self.source_type_id and self.source_type.model == 'auditfinding':  # 심사 지적에서 만들면 지적에 연결
             AuditFinding.objects.filter(pk=self.source_id, capa__isnull=True).update(capa=self)
 

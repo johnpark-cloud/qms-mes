@@ -7,7 +7,7 @@ from django.contrib.contenttypes.fields import GenericForeignKey
 from django.contrib.contenttypes.models import ContentType
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.core.validators import RegexValidator
-from django.db import models, transaction
+from django.db import IntegrityError, models, transaction
 from django.db.models import ProtectedError
 from django.db.models.signals import post_delete
 from django.dispatch import receiver
@@ -357,8 +357,21 @@ class LotLink(models.Model):
         super().save(*args, **kwargs)
 
 
-# shortcut: SQLite는 transaction_mode=IMMEDIATE(settings)라 atomic 안에서 만든 부적합만 번호가 겹치지 않는다(등록 경로는 모두 atomic),
-#   PostgreSQL에서는 동시 등록 시 번호 중복(IntegrityError) 가능, 하루 999건 넘으면 순번 정렬이 깨진다 — 전환 시 DB 시퀀스로 바꾼다
+def save_numbered(obj, make, auto_pattern, save, tries=5):
+    """새 기록 저장. 자동 번호(auto_pattern 모양)가 동시 등록으로 겹치면(PostgreSQL) 다음 번호로 다시 저장한다.
+    모양이 다른 직접 입력 번호는 다시 매기지 않고 중복 오류를 그대로 낸다."""
+    for i in range(tries):
+        try:
+            with transaction.atomic():  # 실패해도 바깥 트랜잭션을 살리는 저장점
+                return save()
+        except IntegrityError:
+            if (i == tries - 1 or not re.fullmatch(auto_pattern, obj.number)
+                    or not type(obj).objects.filter(number=obj.number).exists()):
+                raise
+            obj.number = make()
+
+
+# shortcut: 하루 999건을 넘으면 순번 정렬이 깨진다, 그 전에 자릿수를 늘린다
 def _nc_number():
     """NC-YYMMDD-001: 날짜별 순번. 중간 번호가 지워져도 겹치지 않게 그날 마지막 번호 다음으로 매긴다."""
     prefix = timezone.localtime().strftime('NC-%y%m%d-')
@@ -477,7 +490,10 @@ class Nonconformance(models.Model):
         is_new = self._state.adding
         if self.disposition and not self.closed_at:
             self.closed_at = timezone.now()
-        super().save(*args, **kwargs)
+        if is_new:
+            save_numbered(self, _nc_number, r'NC-\d{6}-\d{3}', lambda: super(Nonconformance, self).save(*args, **kwargs))
+        else:
+            super().save(*args, **kwargs)
         if is_new:
             # 인터록: 해당 LOT과 하위 계보 전체를 자동 보류
             bulk_create_with_history([Hold(lot=lot, nonconformance=self) for lot in [self.lot, *self.lot.descendants()]], Hold)

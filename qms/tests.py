@@ -570,6 +570,12 @@ class QmsTest(TestCase):
         self.assertEqual(capa.status, '기한 초과')
         second = Capa.objects.create(title='둘째', source='OTHER', action='x', owner=self.lead, due_date=timezone.localdate())
         self.assertEqual((capa.number[-3:], second.number[-3:]), ('001', '002'))  # 같은 순간에 만들어도 번호가 겹치지 않음
+        racer = Capa(title='셋째', source='OTHER', action='x', owner=self.lead, due_date=timezone.localdate(), number=second.number)
+        racer.save()  # 다른 화면이 같은 번호를 먼저 저장해도 다음 번호로
+        self.assertEqual(racer.number[-3:], '003')
+        second.delete()
+        self.assertEqual(Capa.objects.create(title='넷째', source='OTHER', action='x', owner=self.lead,
+                                             due_date=timezone.localdate()).number[-3:], '004')  # 중간 삭제 뒤에도 안 겹침
         self.assertIn(capa.number, self.client.get(f'/admin/qms/scar/{scar.pk}/change/').content.decode())
         capa.closed_at = timezone.localdate()
         with self.assertRaises(ValidationError):  # 유효성 확인 없이 종결

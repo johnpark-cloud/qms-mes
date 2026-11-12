@@ -105,7 +105,7 @@ React 19·TypeScript·Vite·Ant Design 새 화면. 개발 PC에서 `npm run buil
 | 항목 | 위치 / 환경변수 |
 | --- | --- |
 | 데이터 폴더 | `data/` (`QMS_DATA_DIR`로 변경) |
-| DB | `data/db.sqlite3`, PostgreSQL은 `QMS_DB_NAME`·`QMS_DB_USER`·`QMS_DB_PASSWORD`·`QMS_DB_HOST`·`QMS_DB_PORT`. SQLite는 `transaction_mode='IMMEDIATE'`, `timeout=20`으로 쓰기를 순서대로 처리한다(동시 저장 시 부적합 번호 중복·"database is locked" 방지). PostgreSQL로 옮기면 부적합 번호(`core/models.py` `_nc_number`)를 DB 시퀀스로 바꿔야 한다 |
+| DB | `data/db.sqlite3`, PostgreSQL은 `QMS_DB_NAME`·`QMS_DB_USER`·`QMS_DB_PASSWORD`·`QMS_DB_HOST`·`QMS_DB_PORT`. SQLite는 `transaction_mode='IMMEDIATE'`, `timeout=20`으로 쓰기를 순서대로 처리한다(동시 저장 시 부적합 번호 중복·"database is locked" 방지). PostgreSQL은 동시 저장을 막지 않으므로, 자동 번호(부적합 `NC-`, CAPA `CAPA-`)는 `core/models.py` `save_numbered`가 savepoint 안에서 저장하고 같은 번호가 이미 있으면 다음 번호로 다시 매긴다(최대 5회). 백업·복원은 `pg_dump`·`pg_restore`(`core/management/commands/backup.py` `run_pg`) |
 | 첨부 | `data/media/`, 기록 첨부(`Attachment`)는 `data/attachments/`, 개인 명세서는 `data/private/` (뒤의 둘은 `/media/` 주소로 닿지 않음) |
 | 로고 | `data/brand/logo.svg|png|jpg` |
 | 비밀키 | `data/secret_key.txt` 자동 생성, 또는 `QMS_SECRET_KEY` |

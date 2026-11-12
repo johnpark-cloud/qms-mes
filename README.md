@@ -234,7 +234,7 @@ powershell -ExecutionPolicy Bypass -File scripts\register_backup_task.ps1 -Dest 
 .\.venv\Scripts\python manage.py restore "\\NAS\quality\qms-backup\qms-20261026-180000" --apply   # 실제 복원 (서버를 먼저 끄세요)
 ```
 
-실제 복원 전의 데이터는 `data/pre-restore-날짜/`에 따로 보관됩니다.
+실제 복원 전의 데이터는 `data/pre-restore-날짜/`에 따로 보관됩니다. PostgreSQL을 쓸 때의 백업·복원 방식은 아래 "PostgreSQL" 절을 봅니다.
 
 ## 기한 알림 (메일 · Teams)
 
@@ -289,12 +289,22 @@ RAW-1,수입검사,외관,OK
 # 이후 /admin/ 에서 본인 기록을 삭제하고, data\private\personal 폴더를 지웁니다.
 ```
 
-## PostgreSQL 전환 (2단계: 팀 확장 또는 셀 시리얼 도입 시)
+## PostgreSQL
 
-1. PostgreSQL Windows 설치 파일로 설치하고 `.\.venv\Scripts\python -m pip install psycopg`
-2. 기존 데이터 내보내기: `python manage.py dumpdata --natural-foreign -e contenttypes -e auth.permission -o all.json`
-3. 환경변수 `QMS_DB_NAME`, `QMS_DB_USER`, `QMS_DB_PASSWORD` 지정 → `python manage.py migrate` → `python manage.py loaddata all.json`
-4. 백업은 `pg_dump`로 바꿉니다.
+환경변수 `QMS_DB_NAME`이 있으면 SQLite 대신 PostgreSQL을 씁니다. 없으면 `data/db.sqlite3`를 씁니다.
+
+| 사용자 환경변수 | 값 | 설명 |
+| --- | --- | --- |
+| `QMS_DB_NAME` | `qms` | DB 이름. 지우면 SQLite로 돌아갑니다 |
+| `QMS_DB_USER` | `qms` | 접속 계정 |
+| `QMS_DB_PASSWORD` | | 접속 비밀번호 |
+| `QMS_DB_HOST` / `QMS_DB_PORT` | `localhost` / `5432` | 기본값이면 지정하지 않습니다 |
+| `QMS_PG_BIN` | `C:\Program Files\PostgreSQL\18\bin` | `pg_dump`·`pg_restore` 폴더. 이 기본 위치면 지정하지 않습니다 |
+
+- PostgreSQL 18은 이 PC에서만 접속하도록(`localhost`) 설치합니다. 접속 드라이버는 `requirements.txt`의 `psycopg[binary]`입니다.
+- 백업은 `pg_dump`로 `db.dump` 파일을 만들고, 복원 리허설은 임시 DB(`qms_restore_check`)에 실제로 풀어 건수를 센 뒤 지웁니다. `--apply`는 현재 DB를 `data/pre-restore-날짜/db.dump`로 보관한 뒤 `pg_restore`로 한 번에 복원합니다(중간에 실패하면 현재 DB가 그대로 남음).
+- SQLite에서 옮길 때: `PYTHONUTF8=1`을 켠 상태에서 `python manage.py dumpdata --natural-foreign -e contenttypes -e auth.permission -o all.json`로 내보내고, 빈 PostgreSQL DB에 `migrate` → 마이그레이션이 넣은 기본 행 비우기 → `loaddata all.json` → `migrate` 순으로 싣습니다. `PYTHONUTF8=1`이 없으면 파일이 cp949로 저장돼 `loaddata`가 실패합니다. 이미 지운 모델의 권한 참조는 빼고 싣습니다.
+- SQLite로 되돌리려면 `QMS_DB_NAME`을 지우고 서버를 다시 켭니다. 전환 뒤 PostgreSQL에 입력한 데이터는 SQLite에 없습니다.
 
 ## 테스트
 

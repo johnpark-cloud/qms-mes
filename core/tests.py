@@ -1,6 +1,9 @@
 from django.contrib.auth.models import Group, User
 from django.core.exceptions import PermissionDenied, ValidationError
-from django.test import TestCase
+from unittest import skipUnless
+
+from django.db import connection
+from django.test import TestCase, TransactionTestCase
 
 from .models import Item, Lot, LotLink, Nonconformance, Process, RoutingStep, Shipment, WorkOrder, WorkResult
 
@@ -110,7 +113,7 @@ class ShellTest(TestCase):
                 (Path(tmp) / 'brand' / 'logo.png').write_bytes(b'\x89PNG\r\n\x1a\n')
                 resp = self.client.get('/brand/logo')
                 self.assertEqual(resp.status_code, 200)
-                resp.close()  # Windows는 열린 파일을 지울 수 없다
+                resp.getvalue()  # Windows는 열린 파일을 지울 수 없다. 끝까지 읽어 닫는다(close()를 직접 부르면 PostgreSQL 테스트 DB 연결이 끊긴다)
                 self.assertIn('src="/brand/logo"', self.client.get('/todo/').content.decode())
 
     def test_logged_in_pages_not_stored(self):
@@ -524,6 +527,18 @@ class NcQuickTest(TestCase):
         self.assertEqual(nc.photos.count(), 1)
         self.assertEqual(self._post(lot='l1').status_code, 302)  # 대소문자 차이
 
+    def test_auto_number_collision_takes_next(self):
+        """동시 등록으로 자동 번호가 겹치면 다음 번호로 저장하고, 보류도 한 번만 건다. 직접 적은 번호는 오류 그대로."""
+        from django.db import IntegrityError
+        first = Nonconformance.objects.create(lot=self.lot, description='찍힘')
+        racer = Nonconformance(lot=self.lot, description='긁힘', number=first.number)  # 먼저 받은 번호를 다른 화면이 이미 씀
+        racer.save()
+        self.assertEqual(racer.number[-3:], '002')
+        self.assertEqual(racer.holds.count(), 1)
+        Nonconformance.objects.create(lot=self.lot, description='수기', number='NC-수기-1')
+        with self.assertRaises(IntegrityError):
+            Nonconformance.objects.create(lot=self.lot, description='수기', number='NC-수기-1')
+
     def test_redirect_encodes_lot(self):
         Lot.objects.create(number='A+1&2#3', item=self.lot.item)
         r = self._post(lot='A+1&2#3')
@@ -809,3 +824,73 @@ class TracePermTest(TestCase):
         inspector.groups.add(Group.objects.get(name='검사원'))
         self.client.force_login(inspector)
         self.assertEqual(self.client.get('/trace/?lot=T-1').status_code, 200)
+
+
+@skipUnless(connection.vendor == 'postgresql', 'PostgreSQL에서만 실행')
+class PgBackupRestoreTest(TransactionTestCase):
+    def test_backup_rehearsal_and_apply(self):
+        import tempfile
+        from io import StringIO
+        from pathlib import Path
+
+        from django.core.management import call_command
+        from django.core.management.base import CommandError
+        from django.test import override_settings
+        item = Item.objects.create(code='R1', name='양극재', item_type=Item.RAW)
+        Lot.objects.create(number='L1', item=item)
+        dest, live = Path(tempfile.mkdtemp()), Path(tempfile.mkdtemp())
+        with override_settings(DATA_DIR=live, MEDIA_ROOT=live / 'media'):
+            call_command('backup', str(dest), stdout=StringIO())
+            backup = next(dest.iterdir())
+            self.assertTrue((backup / 'db.dump').exists())
+            Lot.objects.create(number='L2', item=item)  # 백업 뒤에 들어온 기록
+            out = StringIO()
+            call_command('restore', str(backup), stdout=out)
+            self.assertIn('core_lot: 1건', out.getvalue())
+            self.assertEqual(Lot.objects.count(), 2)  # 리허설은 운영 DB를 건드리지 않는다
+            call_command('restore', str(backup), '--apply', stdout=StringIO())
+            self.assertEqual(list(Lot.objects.values_list('number', flat=True)), ['L1'])
+            self.assertTrue(any((p / 'db.dump').exists() for p in live.glob('pre-restore-*')))  # 복원 전 데이터 보관
+            (backup / 'db.dump').write_bytes(b'not a dump')
+            with self.assertRaises(CommandError):
+                call_command('restore', str(backup), stdout=StringIO())
+        self.assertEqual(Lot.objects.count(), 1)
+
+    def test_concurrent_nc_numbers_do_not_collide(self):
+        """두 화면이 같은 순간 번호를 계산해도(같은 번호) 하나는 다음 번호로 저장된다. 실제 스레드 2개."""
+        import threading
+        from unittest import mock
+
+        from django.db import connections
+        from core import models as core_models
+        item = Item.objects.create(code='R1', name='양극재', item_type=Item.RAW)
+        lot = Lot.objects.create(number='L1', item=item)
+        real, gate, seen = core_models._nc_number, threading.Barrier(2, timeout=10), set()
+
+        def numbered():  # 첫 계산 뒤 두 스레드가 만날 때까지 기다려 같은 번호로 저장을 시도하게 한다
+            n = real()
+            if threading.get_ident() not in seen:
+                seen.add(threading.get_ident())
+                gate.wait()
+            return n
+
+        errors = []
+
+        def register(desc):
+            try:
+                Nonconformance.objects.create(lot=lot, description=desc)
+            except Exception as e:  # 스레드 안 오류는 밖에서 확인
+                errors.append(e)
+            finally:
+                connections.close_all()
+
+        field = Nonconformance._meta.get_field('number')  # 첫 번호는 필드 기본값, 다시 매길 때는 모듈 함수
+        with mock.patch.object(core_models, '_nc_number', numbered), mock.patch.object(field, '_get_default', numbered):
+            threads = [threading.Thread(target=register, args=(d,)) for d in ('찍힘', '긁힘')]
+            for t in threads:
+                t.start()
+            for t in threads:
+                t.join()
+        self.assertEqual(errors, [])
+        self.assertEqual(sorted(n[-3:] for n in Nonconformance.objects.values_list('number', flat=True)), ['001', '002'])
+        self.assertEqual(lot.holds.count(), 2)

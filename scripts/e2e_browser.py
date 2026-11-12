@@ -12,6 +12,7 @@ PROJ = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 PY = os.path.join(PROJ, '.venv', 'Scripts', 'python.exe')
 BASE = 'http://127.0.0.1:8766'
 env = dict(os.environ, QMS_DATA_DIR=tempfile.mkdtemp(), DJANGO_SUPERUSER_PASSWORD='e2e-pass-123')
+env.pop('QMS_DB_NAME', None)  # 운영 PostgreSQL이 아니라 임시 폴더의 SQLite를 쓴다
 
 def manage(*args):
     return subprocess.run([PY, 'manage.py', *args], cwd=PROJ, env=env, check=True, capture_output=True)
