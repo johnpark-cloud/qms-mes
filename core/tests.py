@@ -153,6 +153,8 @@ class ShellTest(TestCase):
         self.assertIn('data-group="통합 업무 홈" open>', html)
         self.assertIn('data-group="생산관리 (MES)">', html)
         self.assertIn('<p class="page-head__where">기준정보 및 시스템 관리</p>', html)  # 페이지 머리의 현재 위치
+        self.assertIn('<li>기준정보 및 시스템 관리</li>', html)  # 경로도 앱 이름 대신 묶음 이름
+        self.assertNotIn('MES · 부적합', html)
 
     def test_admin_index_grouped_like_sidebar(self):
         self.client.force_login(User.objects.create_superuser('root'))

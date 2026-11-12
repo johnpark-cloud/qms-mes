@@ -1,5 +1,5 @@
 {% extends "admin/base.html" %}
-{% load static %}
+{% load static shell_tags %}
 {# 모든 화면(관리·로그인·할 일·KPI·검사 입력)이 이 틀을 쓴다. 디자인: core/static/qms/fiori.css #}
 
 {% block title %}{% if subtitle %}{{ subtitle }} | {% endif %}{{ title }} | {{ site_title|default:"QMS+MES" }}{% endblock %}
@@ -37,6 +37,9 @@
   <div class="page-head__text">{% if nav_where %}<p class="page-head__where">{{ nav_where }}</p>{% endif %}<h1>{{ title }}</h1></div>
   {% block page_actions %}{% endblock %}
 </div>{% endif %}{% endblock %}
+
+{# 경로의 앱 이름(MES · 부적합·QMS) 대신 사이드바 묶음 이름 #}
+{% block nav-breadcrumbs %}{% filter crumb_where:nav_where %}{{ block.super }}{% endfilter %}{% endblock %}
 
 {# 기본 상단 메뉴·Django 사이드바 대신 회색 틀 사이드바 #}
 {% block nav-global %}{% endblock %}
