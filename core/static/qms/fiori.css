@@ -279,6 +279,17 @@ input[type=file] { max-width: 100%; }
 .card > table { width: 100%; }
 .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(24rem, 1fr)); gap: 1.5rem; align-items: start; }
 .cards .card { margin: 0; }
+/* 기준정보 입력 칸: 넓은 화면에서 여러 열(좁으면 1열), 긴 글 칸은 한 줄 전체 */
+fieldset.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(18rem, 100%), 1fr)); column-gap: 1.5rem; }
+fieldset.grid > .form-row, fieldset.grid .flex-container { min-width: 0; }
+fieldset.grid .form-row > div { width: auto; } /* 장고 휴대폰 규칙(100vw - 30px)이 카드 밖으로 밀어내지 않게 */
+fieldset.grid > :not(.form-row), fieldset.grid > .form-row:has(textarea) { grid-column: 1 / -1; }
+fieldset.grid > .form-row { border-bottom: 0; }
+fieldset.grid .flex-container:not(.checkbox-row) { flex-direction: column; align-items: stretch; }
+fieldset.grid .flex-container:not(.checkbox-row) > label { width: auto; min-width: 0; padding: 0 0 4px; }
+fieldset.grid .flex-container:not(.checkbox-row) > :is(input, select, textarea, .related-widget-wrapper),
+fieldset.grid .vTextField, fieldset.grid select { width: 100%; max-width: 100%; box-sizing: border-box; }
+fieldset.grid .help, fieldset.grid div.help { margin-left: 0; padding-left: 0; }
 
 /* 모듈 제목: 흰 바탕 제목 + 띠색 구분선 */
 .module h2, .module caption, .inline-group h2 {

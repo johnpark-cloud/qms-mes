@@ -1,3 +1,4 @@
+from django.apps import apps
 from django.contrib.auth import authenticate, login, logout
 from django.core.exceptions import PermissionDenied
 from django.db.models import Q, prefetch_related_objects
@@ -10,7 +11,7 @@ from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from core import audit
+from core import audit, relations
 from core.api.permissions import require_perm
 from core.models import Hold, Item, Lot, RevisionLog, is_approver
 from core.nav import visible_nav
@@ -169,3 +170,29 @@ class TraceView(APIView):
             'actions': [{'label': label, 'url': url} for label, url in lot_actions(lot, request.user)],
             'ancestors': [row(x) for x in ancestors], 'descendants': [row(x) for x in descendants],
         })
+
+
+class RelationsView(APIView):
+    """GET /api/relations/<app.model>/<pk>/ → 이 기록과 연결된 기록 묶음. ?key=&page=n 이면 묶음 하나의 n쪽."""
+    schema = None
+
+    def get(self, request, label, pk):
+        if not relations.is_registered(label):
+            raise Http404
+        model = apps.get_model(label)
+        require_perm(request.user, f'{model._meta.app_label}.view_{model._meta.model_name}')
+        obj = get_object_or_404(model, pk=pk)
+        key = request.query_params.get('key')
+        if not key:
+            return Response(relations.relations_payload(request.user, obj))
+        rel = next((r for r in relations.relations_for(model) if r.key == key), None)
+        if rel is None:
+            raise Http404
+        try:
+            page = max(1, int(request.query_params.get('page', 1)))
+        except ValueError:
+            page = 1
+        group = relations.group_payload(request.user, obj, rel, page=page)
+        if group is None:
+            raise PermissionDenied
+        return Response({**group, 'page': page, 'pages': relations.pages(group['count'])})

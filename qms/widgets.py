@@ -129,7 +129,8 @@ TODO_SECTIONS = [  # (todo_lists.html 구역 id, 이름, due_items 키): 보통 
     ('nc-incomplete', '보완 필요', 'nc_incomplete'), ('nc-mail', '메일 대기', 'nc_mail_pending'),
     ('nc-notify', '고객 통보', 'nc_notify_pending'), ('edit-requests', '삭제·수정 요청', 'edit_requests'),
     ('my-rejected', '거절된 내 요청', 'my_rejected'), ('memos-unsorted', '미분류 메모', 'memos_unsorted'),
-    ('fa', '초품 미확인', 'first_articles'), ('gauges', '계측기 교정', 'gauges'), ('ppaps', 'PPAP 제출', 'ppaps'),
+    ('fa', '초품 미확인', 'first_articles'), ('gauges', '계측기 교정', 'gauges'), ('partner-certs', '협력사 인증 만료', 'partner_certs'),
+    ('ppaps', 'PPAP 제출', 'ppaps'),
 ]
 
 
@@ -243,6 +244,9 @@ def todo_lists_data(ctx, d, size):
                                  effective_at=lambda c: _local(c.effective_at)),
         'gauges': _lines(d['gauges'], str, lambda g: change('qms_gauge', g), next_due=lambda g: g.next_due,
                          overdue=lambda g: g.next_due < d['today']),
+        'partner_certs': _lines(d['partner_certs'], lambda c: f'{c.partner} {c.get_standard_display()}',
+                                lambda c: change('core_partner', c.partner), valid_until=lambda c: c.valid_until,
+                                overdue=lambda c: c.valid_until < d['today']),
         'ppaps': _lines(d['ppaps'], str, lambda p: change('qms_ppapsubmission', p), due_date=lambda p: p.due_date,
                         overdue=lambda p: p.due_date < d['today']),
         'approvals': [{'kind': kind, 'label': str(o), 'href': href(o)} for kind, key, href in pend for o in d[key]],

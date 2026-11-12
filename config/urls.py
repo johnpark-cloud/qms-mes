@@ -27,6 +27,7 @@ urlpatterns = [
     path('nc/new/', core_views.nc_quick, name='nc_quick'),
     path('nc/<int:pk>/mail/', core_views.nc_mail, name='nc_mail'),
     path('nc/<int:pk>/photos.zip', core_views.nc_photos_zip, name='nc_photos_zip'),
+    path('attachments/<int:pk>/', core_views.attachment_download, name='attachment_download'),
     path('import/', core_views.import_view, name='import'),
     path('approve/<str:app_label>/<str:model_name>/<int:pk>/', core_views.approve, name='approve'),
     path('request/<str:kind>/<str:app_label>/<str:model_name>/<int:pk>/', core_views.edit_request, name='edit_request'),

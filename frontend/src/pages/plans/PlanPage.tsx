@@ -7,6 +7,8 @@ import { ApiError, api } from '../../api/client'
 import type { PlanDetail, PlanLine } from '../../api/plans'
 import type { RevLog } from '../../api/specs'
 import EditGrid, { isBlank, withTail, type GridColumn, type GridRow } from '../../components/EditGrid'
+import AttachmentPanel from '../../components/AttachmentPanel'
+import RelationsPanel from '../../components/RelationsPanel'
 import RecordPage from '../../components/RecordPage'
 import SaveBar from '../../components/SaveBar'
 import SignModal from '../../components/SignModal'
@@ -241,8 +243,10 @@ export default function PlanPage() {
         actions={actions}
         props={props}
         side={[
+          { key: 'relations', label: '연결', node: <RelationsPanel ct="qms.controlplan" id={id} /> },
           { key: 'log', label: '개정 이력', node: history },
           { key: 'memo', label: '메모', node: <a href="/app/memos">미분류 메모 열기</a> },
+          { key: 'files', label: '첨부', node: <AttachmentPanel ct="qms.controlplan" id={id} /> },
         ]}
       >
         {made && (

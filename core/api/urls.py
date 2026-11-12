@@ -1,7 +1,7 @@
 from django.urls import include, path
 from drf_spectacular.views import SpectacularAPIView
 
-from . import master, views
+from . import attachments, master, views
 from .permissions import IsStaff
 
 urlpatterns = [
@@ -20,7 +20,9 @@ urlpatterns = [
     path('core/processes/', master.ProcessTableView.as_view()),
     path('core/import/profiles/', master.ImportProfileListView.as_view()),
     path('core/import/', master.ImportView.as_view()),
-    path('revision-log/<int:pk>/approve/', views.RevisionLogApproveView.as_view()),
+    path('attachments/', attachments.AttachmentListView.as_view()),
+    path('relations/<str:label>/<int:pk>/', views.RelationsView.as_view(), name='relations'),
+    path('revision-log/<int:pk>/approve/',views.RevisionLogApproveView.as_view()),
     path('audit-log/', views.AuditLogView.as_view()),
     path('qms/', include('qms.api.urls')),
     path('schema/', SpectacularAPIView.as_view(permission_classes=[IsStaff]), name='api_schema'),

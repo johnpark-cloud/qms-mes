@@ -5,6 +5,8 @@ import { Link, useParams } from 'react-router-dom'
 import { ApiError, api } from '../../api/client'
 import type { InspectionDetail } from '../../api/inspect'
 import MemoPanel from '../../components/MemoPanel'
+import AttachmentPanel from '../../components/AttachmentPanel'
+import RelationsPanel from '../../components/RelationsPanel'
 import RecordPage from '../../components/RecordPage'
 import { addRecent } from '../../lib/recent'
 
@@ -53,7 +55,11 @@ export default function InspectionPage() {
         { label: '검사 일시', node: d.inspected_at.slice(0, 16).replace('T', ' ') },
         { label: '부적합', node: d.nonconformance ? <a href={d.nonconformance.url}>{d.nonconformance.number}</a> : '없음' },
       ]}
-      side={[{ key: 'memo', label: '메모', node: <MemoPanel ct="qms.inspection" id={id} /> }]}
+      side={[
+        { key: 'relations', label: '연결', node: <RelationsPanel ct="qms.inspection" id={id} /> },
+        { key: 'memo', label: '메모', node: <MemoPanel ct="qms.inspection" id={id} /> },
+        { key: 'files', label: '첨부', node: <AttachmentPanel ct="qms.inspection" id={id} /> },
+      ]}
     >
       <Table<M> size="small" columns={COLUMNS} dataSource={d.measurements} rowKey={(m) => m.name} pagination={false} locale={{ emptyText: '측정 결과가 없습니다' }} />
     </RecordPage>

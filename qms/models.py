@@ -467,6 +467,8 @@ class ChangeRequest(Approvable):
 
 class CustomerRule(models.Model):
     customer = models.CharField('고객사', max_length=100, unique=True)
+    partner = models.ForeignKey('core.Partner', on_delete=models.PROTECT, null=True, blank=True, related_name='customer_rules',
+                                limit_choices_to={'is_customer': True}, verbose_name='거래처')
     containment_hours = models.PositiveIntegerField('봉쇄(D3) 기한(시간)', default=24)
     corrective_days = models.PositiveIntegerField('대책(D5) 기한(일)', default=10)
     history = HistoricalRecords()
@@ -485,6 +487,8 @@ class CustomerClaim(models.Model):
 
     number = models.CharField('클레임 번호', max_length=50, unique=True)
     customer = models.CharField('고객사', max_length=100)
+    partner = models.ForeignKey('core.Partner', on_delete=models.PROTECT, null=True, blank=True, related_name='claims',
+                                limit_choices_to={'is_customer': True}, verbose_name='거래처')
     lot = models.ForeignKey(Lot, on_delete=models.PROTECT, related_name='claims', verbose_name='클레임 LOT')
     description = models.TextField('클레임 내용')
     defect_qty = models.DecimalField('불량 수량', max_digits=12, decimal_places=3, default=0, help_text='고객 PPM 계산에 사용')
@@ -541,6 +545,8 @@ class Scar(models.Model):
     number = models.CharField('SCAR 번호', max_length=50, unique=True)
     supplier = models.CharField('협력사', max_length=100)
     lot = models.ForeignKey(Lot, on_delete=models.PROTECT, related_name='scars', verbose_name='자재 LOT')
+    partner = models.ForeignKey('core.Partner', on_delete=models.PROTECT, null=True, blank=True, related_name='scars',
+                                limit_choices_to={'is_supplier': True}, verbose_name='거래처')
     nonconformance = models.ForeignKey(Nonconformance, on_delete=models.PROTECT, null=True, blank=True,
                                        related_name='scars', verbose_name='부적합')
     request = models.TextField('요구 내용')
@@ -734,6 +740,10 @@ class InternalAudit(models.Model):
     planned_date = models.DateField('계획일')
     auditor = models.CharField('심사원', max_length=100)
     auditee = models.CharField('피심사 부서', max_length=100, blank=True)
+    auditor_user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, null=True, blank=True,
+                                     related_name='+', verbose_name='심사원(사용자)')
+    auditee_dept = models.ForeignKey('core.Department', on_delete=models.PROTECT, null=True, blank=True,
+                                     related_name='audits', verbose_name='심사 대상 부서')
     performed_at = models.DateField('실시일', null=True, blank=True)
     closed_at = models.DateField('종결일', null=True, blank=True)
     history = HistoricalRecords()
@@ -792,6 +802,8 @@ class PpapSubmission(Approvable):
     """PPAP 제출. 승인 서명 = 내부 PSW 서명이며, '제출(S)' 요소에 증적이 모두 있어야 한다."""
     item = models.ForeignKey(Item, on_delete=models.PROTECT, related_name='ppaps', verbose_name='품번')
     customer = models.CharField('고객사', max_length=100)
+    partner = models.ForeignKey('core.Partner', on_delete=models.PROTECT, null=True, blank=True, related_name='ppaps',
+                                limit_choices_to={'is_customer': True}, verbose_name='거래처')
     level = models.PositiveSmallIntegerField('제출 수준', choices=[(i, f'Level {i}') for i in range(1, 6)], default=3)
     reason = models.CharField('제출 사유', max_length=200, help_text='예: 신규 부품, 설계 변경, 4M 변경(공정 변경)')
     due_date = models.DateField('제출 기한', null=True, blank=True)

@@ -1,6 +1,8 @@
 from django.apps import AppConfig
 from django.db.models.signals import post_migrate
 
+TEAM_LEAD_ONLY = ['department', 'partner', 'fielddef']  # core 모델 이름
+
 
 def ensure_roles(sender, **kwargs):
     """역할 그룹과 권한을 만든다. 품질팀장 그룹 = 승인자(core.models.APPROVER_GROUP)."""
@@ -14,9 +16,12 @@ def ensure_roles(sender, **kwargs):
         'view_inspection', 'add_inspection', 'change_inspection',
         'view_measurement', 'add_measurement', 'change_measurement', 'delete_measurement', 'view_gauge',
         'add_nonconformance', 'view_nonconformance', 'add_nonconformancephoto', 'view_routingstep', 'view_workresult', 'add_workresult',
-        'add_memo', 'view_memo', 'add_memophoto', 'view_memophoto'])
+        'add_memo', 'view_memo', 'add_memophoto', 'view_memophoto', 'view_attachment', 'add_attachment'])
     mine = Permission.objects.filter(content_type__app_label='personal')  # 본인 것만 보이게 admin이 거른다
-    for name, perms in (('품질엔지니어', engineer), ('품질팀장', engineer), ('검사원', inspector)):
+    # 부서·거래처·사용자 정의 칸 추가·수정은 품질팀장(과 시스템 관리자)만
+    masters = [f'{a}_{m}' for m in TEAM_LEAD_ONLY for a in ('add', 'change')]
+    eng_only = engineer.exclude(content_type__app_label='core', codename__in=masters)
+    for name, perms in (('품질엔지니어', eng_only), ('품질팀장', engineer), ('검사원', inspector)):
         Group.objects.get_or_create(name=name)[0].permissions.set(list(perms) + list(mine))
 
 

@@ -293,6 +293,9 @@ components:
 - **경로(breadcrumb):** 15px 회색. 링크는 파랑이고, hover 때만 밑줄이 생긴다.
 - **페이지 머리 (`.page-head`):** 모든 화면 제목 줄. 위에 현재 묶음 이름(`.page-head__where`, 14px·500 보조 slate), 아래 업무명 h1, 오른쪽에 주요 버튼(`.page-head__actions`, 외곽선 버튼). 화면 템플릿은 `page_actions` 블록에 버튼만 넣는다(`templates/admin/base_site.html`). 좁은 화면에서는 버튼이 제목 아래로 내려간다.
 
+### Master Forms (기준정보 입력 화면)
+부서·거래처 관리 화면(`MasterAdmin`)의 입력 칸은 `fieldset.grid` 카드에 놓는다. 칸은 최소 18rem 자동 채움(넓은 화면 3열, 휴대폰 1열, 1.5rem 간격)이고, 이름표는 칸 위에 쌓이며 입력 상자는 칸 폭을 채운다. 긴 글 칸(textarea)은 한 줄 전체를 쓴다. 순서는 그 기준정보의 칸 → "사용자 정의 칸" 카드 → "관리" 카드(사용·비고 3줄)이다. 하위 클래스가 `fieldsets`를 정하면 그것을 쓴다.
+
 ### Overview Cards (공장 종합현황)
 `.overview` 섹션(생산 현황·품질 현황)마다 h2 제목과 `.overview__grid`(최소 20rem 칸 자동 채움, 1rem 간격)에 기존 넓은 위젯 카드(`qms/widgets/tile.html`, `size="wide"`)를 놓는다. 카드는 제목·계산 기준 한 줄·숫자 머리 + 최대 10줄 목록 + "전체 보기"이고, 머리를 누르면 걸러진 목록으로 간다. 볼 권한이 없는 카드는 그리지 않는다.
 

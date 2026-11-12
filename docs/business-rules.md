@@ -115,7 +115,10 @@
 | 품질팀장 그룹이 승인자다. | `core/models.py` `APPROVER_GROUP`, `is_approver` |
 | 연차·급여(`personal`)는 본인 기록만 조회·다운로드한다. 시스템 관리자도 남의 것은 볼 수 없다. 명세서 파일은 `/media/` 밖(`data/private/`)에 둔다. 연차 사용 표는 합계와 같은 입사 기념일 기간으로 보여 준다. 명세서를 지우거나 파일을 바꾸면 옛 파일도 지운다. 화면 이름(`__str__`)에는 날짜·일수를 넣지 않는다(삭제 확인 화면·변경 로그 노출 방지). | `personal/views.py`, `personal/admin.py`, `personal/models.py` `private_storage`, `Payslip.save`, `_delete_payslip_file` |
 | LOT 이력 조회(`/trace/`)는 `core.view_lot` 권한이 있어야 본다. | `core/views.py` `trace`, `core/nav.py` |
-| 첨부 파일은 로그인한 스태프만 받을 수 있다. | `config/urls.py` `/media/` |
+| `/media/` 아래 파일(부적합 사진·메모 사진·거래처 인증서 등)은 로그인한 스태프만 받을 수 있다. | `config/urls.py` `/media/` |
+| 기록 첨부(`Attachment`)는 `/media/` 밖(`data/attachments/`)에 두고 `/attachments/<id>/`로만 받는다. 받으려면 `core.view_attachment` 권한과 첨부가 붙은 기록의 보기 권한이 모두 있어야 하고, 그 기록이 있어야 한다. 개인 앱(`PRIVATE_APPS`) 기록에는 붙일 수도 받을 수도 없다. 올리기(`/api/attachments/`)는 `core.add_attachment`와 대상 기록 보기 권한이 필요하다. 관리 화면에서는 첨부를 추가하지 않고, 삭제는 시스템 관리자만 한다. 첨부 행을 지우면 파일도 지운다. | `core/views.py` `can_view_target`·`attachment_download`, `core/api/attachments.py`, `core/models.py` `attachment_storage` |
+| 부서·거래처·사용자 정의 칸의 추가·수정은 품질팀장(과 시스템 관리자)만 한다. 품질엔지니어·검사원은 보기만 한다. | `qms/apps.py` `TEAM_LEAD_ONLY`, `ensure_roles` |
+| 연결 패널(`/api/relations/<app.model>/<id>/`)은 그 기록 보기 권한이 있어야 열리고, 사용자가 볼 권한이 없는 표의 묶음은 개수도 알리지 않는다. 개인 앱·이력 표·사용자 계정은 연결 대상이 아니다. | `core/api/views.py` `RelationsView`, `core/relations.py` |
 | 엑셀 일괄 등록은 대상(품번·작업지시)의 추가·변경 권한이 모두 있어야 올릴 수 있다(기존 행을 덮어쓰므로). 각 행은 모델 검증(`full_clean`)을 거치고, 한 행이라도 틀리면 전체를 되돌린다. | `core/views.py` `import_view`, `core/importer.py` |
 | 인쇄·승인·삭제 요청 경로는 개인 자료와 계정·세션 등 시스템 기록(`personal`, `auth`, `admin`, `sessions`, `contenttypes`)을 열지 않는다. | `core/views.py` `_get_record` |
 | 엑셀 양식 출력은 읽기 전용 메서드만 호출한다. 개인·인증 앱(`PRIVATE_APPS`)은 양식 대상과 심사 증적·PPAP 요소의 기록 종류에서 제외하고, 값을 따라가다 그 앱 기록에 닿으면 칸을 비운다. | `qms/models.py` `PRIVATE_APPS`, `ExcelTemplate.fill`, `report_safe` |
@@ -127,6 +130,10 @@
 감사 기록 화면(`/app/audit`, API `GET /api/audit-log/`)은 승인자(`is_approver`: 품질팀장·시스템 관리자)만 본다. 개인정보 앱(`PRIVATE_APPS`, `personal` 등)의 이력은 보여 주지 않고, `password` 필드 변경은 가린다(`core/api/views.py` `AuditLogView`, `core/audit.py` `audited_models`·`SECRET_FIELDS`). 사이드바의 "감사 기록" 메뉴도 승인자에게만 나온다(`core/nav.py`).
 
 업무 모델은 `history = HistoricalRecords()`로 모든 변경을 남긴다. 새 업무 모델에도 붙이고, 기존 모델에서 제거하지 않는다. 여러 행을 한꺼번에 저장할 때는 `bulk_create`·`update()` 대신 이력을 남기는 `simple_history.utils.bulk_create_with_history`·`bulk_update_with_history`를 쓴다(보류 생성·해제, 부적합 메일 발송 표시가 이 방식이다: `core/models.py` `Nonconformance.save`, `core/views.py` `_mark_mailed`).
+
+기준정보(부서·거래처)는 지우지 않고 "사용"을 끈다. 사용자 정의 칸(`FieldDef`)은 저장 뒤 키와 대상을 바꿀 수 없다(`FieldDef.LOCKED_MSG`). 사용을 끈 칸의 값은 `extra`에 그대로 남는다(`core/models.py` `validate_extra`).
+
+`link_masters --apply`는 기존 기록의 비어 있는 연결 칸만 채우고 글자 칸은 바꾸지 않는다. 실행 전에 `backup`을 먼저 실행하며 백업 폴더가 없으면 멈춘다. 모델 `save()`·`clean()`을 거치지 않으므로 잠금·인터록 검사는 적용되지 않지만, `bulk_update_with_history`로 변경 이력(사유 "기준정보 연결(link_masters)")은 남는다(`core/management/commands/link_masters.py`).
 
 ## 12. 번호 부여
 

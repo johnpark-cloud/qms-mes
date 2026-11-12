@@ -1,8 +1,9 @@
 from django import forms
 from django.apps import apps
 from django.contrib import admin, messages
+from django.contrib.auth import get_user_model
 from django.contrib.contenttypes.models import ContentType
-from django.core.exceptions import ValidationError
+from django.core.exceptions import NON_FIELD_ERRORS, ValidationError
 from django.db import models, transaction
 from django.db.models import ProtectedError
 from django.shortcuts import redirect
@@ -11,8 +12,8 @@ from django.utils import timezone
 from django.utils.html import format_html, format_html_join
 from simple_history.admin import SimpleHistoryAdmin
 
-from .models import (BomLine, CodeValue, Hold, ImportProfile, Item, Lot, LotLink, Nonconformance, NonconformancePhoto, NumberRule, Process,
-                     RevisionLog, RoutingStep, Shipment, WorkOrder, WorkResult)
+from .models import (Attachment, BomLine, CodeValue, Department, FieldDef, Hold, ImportProfile, Item, Lot, LotLink, Nonconformance,
+                     NonconformancePhoto, NumberRule, Partner, PartnerCertificate, Process, RevisionLog, RoutingStep, Shipment, WorkOrder, WorkResult)
 from .records import blockers, can_edit_locked, delete_record, is_locked
 from .rules import LOCKED_MSG, begin_edit, child_editable, finish_edit, missing_message, nc_locked_fields, sign_disposition
 
@@ -22,7 +23,7 @@ _app_list = admin.site.get_app_list
 # 사이드바에 따로 두지 않는 목록이 전체 메뉴에서 들어갈 묶음
 INDEX_EXTRA = {'통합 업무 홈': ['qms.memo', 'personal.leaveprofile', 'personal.leaveuse', 'personal.payslip'],
                '품질보증 및 개선': ['qms.documentrevision', 'qms.audititem'],
-               '기준정보 및 시스템 관리': ['core.importprofile', 'auth.group']}
+               '기준정보 및 시스템 관리': ['core.importprofile', 'core.attachment', 'auth.group']}
 
 
 def grouped_app_list(request, app_label=None):
@@ -260,6 +261,134 @@ class NumberRuleAdmin(BaseAdmin):
         return form
 
 
+def extra_form_field(d):
+    """사용자 정의 칸(FieldDef) 하나를 관리 화면 입력 칸으로."""
+    opts = {'label': d.label, 'required': d.required and d.kind != FieldDef.BOOL}
+    if d.kind == FieldDef.NUMBER:
+        return forms.DecimalField(**opts)
+    if d.kind == FieldDef.DATE:
+        return forms.DateField(**opts)
+    if d.kind == FieldDef.BOOL:
+        return forms.BooleanField(**opts)
+    if d.kind == FieldDef.CHOICE:
+        return forms.ChoiceField(choices=[('', '---------')] + [(c, c) for c in d.choices], **opts)
+    if d.kind == FieldDef.PARTNER:
+        return forms.ModelChoiceField(Partner.objects.filter(active=True), **opts)
+    if d.kind == FieldDef.USER:
+        return forms.ModelChoiceField(get_user_model().objects.filter(is_active=True), **opts)
+    return forms.CharField(**opts)
+
+
+class ExtraFieldsForm(forms.ModelForm):
+    """extra__<키> 칸 값을 extra(JSON)에 모은다. 정의에 없는 키(사용 중지된 칸 포함)는 그대로 둔다."""
+    defs = []
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        for d in self.defs:
+            self.fields[f'extra__{d.key}'].initial = (self.instance.extra or {}).get(d.key)
+
+    def clean(self):
+        data = super().clean()
+        extra = dict(self.instance.extra or {})
+        for d in self.defs:
+            v = data.get(f'extra__{d.key}')
+            if d.kind == FieldDef.DATE and v:
+                v = v.isoformat()
+            elif d.kind in (FieldDef.PARTNER, FieldDef.USER) and v:
+                v = v.pk
+            if v in (None, ''):
+                extra.pop(d.key, None)
+            else:
+                extra[d.key] = v
+        self.instance.extra = extra
+        return data
+
+    def _update_errors(self, errors):
+        # 모델 clean()의 extra 오류는 폼에 extra 칸이 없으므로 폼 상단 오류로 보인다
+        if hasattr(errors, 'error_dict') and 'extra' in errors.error_dict:
+            errors.error_dict.setdefault(NON_FIELD_ERRORS, []).extend(errors.error_dict.pop('extra'))
+        super()._update_errors(errors)
+
+
+class MasterAdmin(BaseAdmin):
+    """기준정보 공통: 등록자 자동 기록, 지우는 대신 '사용'을 끈다. 사용자 정의 칸(FieldDef)을 폼 끝에 붙인다."""
+    exclude = ['extra']
+
+    def get_form(self, request, obj=None, change=False, **kwargs):
+        defs = list(FieldDef.objects.filter(target=ContentType.objects.get_for_model(self.model), active=True))
+        attrs = {'defs': defs, **{f'extra__{d.key}': extra_form_field(d) for d in defs}}
+        kwargs['form'] = type('ExtraForm', (ExtraFieldsForm,), attrs)
+        kwargs['widgets'] = {'note': forms.Textarea(attrs={'rows': 3}), **kwargs.get('widgets', {})}
+        return super().get_form(request, obj, change, **kwargs)
+
+    def get_fieldsets(self, request, obj=None):
+        # 이 기준정보의 칸을 먼저 여러 열로, 사용자 정의 칸, 마지막에 사용·비고 (공통 칸이 맨 위에 오지 않게)
+        if self.fieldsets:
+            return super().get_fieldsets(request, obj)
+        fields = self.get_fields(request, obj)
+        tail = [f for f in ('active', 'note') if f in fields]
+        extra = [f for f in fields if f.startswith('extra__')]
+        main = [f for f in fields if f not in tail and f not in extra]
+        sets = [(None, {'classes': ['grid'], 'fields': main})]
+        if extra:
+            sets.append(('사용자 정의 칸', {'classes': ['grid'], 'fields': extra}))
+        return sets + [('관리', {'classes': ['grid'], 'fields': tail})]
+
+    def save_model(self, request, obj, form, change):
+        if not change:
+            obj.created_by = request.user
+        super().save_model(request, obj, form, change)
+
+
+@admin.register(Department)
+class DepartmentAdmin(MasterAdmin):
+    list_display = ['code', 'name', 'parent', 'manager', 'sort', 'active']
+    list_filter = ['active']
+    search_fields = ['code', 'name']
+
+
+class PartnerCertificateInline(admin.TabularInline):
+    model = PartnerCertificate
+    extra = 1
+
+
+@admin.register(Partner)
+class PartnerAdmin(MasterAdmin):
+    list_display = ['code', 'name', 'status', 'grade', 'is_supplier', 'is_customer', 'is_outsource', 'is_calibrator', 'active']
+    list_filter = ['status', 'is_supplier', 'is_customer', 'active']
+    search_fields = ['code', 'name', 'qc_name']
+    inlines = [PartnerCertificateInline]
+
+
+@admin.register(Attachment)
+class AttachmentAdmin(BaseAdmin):
+    """목록·이력 확인용. 파일은 각 기록 화면에서 올린다(대상 기록 열람 권한 확인 때문에)."""
+    list_display = ['title', 'kind', 'content_type', 'object_id', 'uploaded_by', 'uploaded_at']
+    list_filter = ['kind', 'content_type']
+    search_fields = ['title']
+    readonly_fields = ['content_type', 'object_id', 'download', 'uploaded_by', 'uploaded_at']
+    exclude = ['file']
+
+    @admin.display(description='파일')
+    def download(self, obj):
+        # FileField 기본 표시는 /media/ 주소라 닿지 않는다: 권한을 확인하는 내려받기 주소로 건다
+        return format_html('<a href="{}">{}</a>', reverse('attachment_download', args=[obj.pk]), obj.title) if obj.pk else '-'
+
+    def has_add_permission(self, request):
+        return False
+
+
+@admin.register(FieldDef)
+class FieldDefAdmin(BaseAdmin):
+    list_display = ['target', 'sort', 'key', 'label', 'kind', 'required', 'active']
+    list_filter = ['target', 'kind', 'active']
+
+    def get_readonly_fields(self, request, obj=None):
+        fields = list(super().get_readonly_fields(request, obj))
+        return fields + ['target', 'key'] if obj else fields
+
+
 @admin.register(Process)
 class ProcessAdmin(BaseAdmin):
     list_display = ['code', 'name']
@@ -340,7 +469,7 @@ class LotAdmin(BaseAdmin):
     list_display = ['number', 'item', 'work_order', 'qty', 'supplier', 'is_hold', 'is_gap', 'created_at']
     search_fields = ['number', 'item__code', 'supplier']
     list_filter = ['item__item_type', 'supplier']
-    autocomplete_fields = ['item', 'work_order']
+    autocomplete_fields = ['item', 'work_order', 'partner']
     inlines = [ParentLinkInline]
 
     @admin.display(boolean=True, description='보류')
@@ -495,7 +624,7 @@ class HoldAdmin(BaseAdmin):
 class ShipmentAdmin(ReportLinksMixin, BaseAdmin):
     list_display = ['lot', 'customer', 'qty', 'shipped_at']
     search_fields = ['lot__number', 'customer']
-    autocomplete_fields = ['lot']
+    autocomplete_fields = ['lot', 'partner']
     readonly_fields = ['report_links']  # 인쇄 = 출하성적서, 고객 엑셀 양식은 매핑 {"A10": "coa_rows"}
 
     def related(self, obj):

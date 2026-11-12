@@ -6,6 +6,7 @@ from django.conf import settings
 from django.contrib.contenttypes.fields import GenericForeignKey
 from django.contrib.contenttypes.models import ContentType
 from django.core.exceptions import PermissionDenied, ValidationError
+from django.core.validators import RegexValidator
 from django.db import models, transaction
 from django.db.models import ProtectedError
 from django.db.models.signals import post_delete
@@ -287,6 +288,8 @@ class Lot(models.Model):
     is_serial = models.BooleanField('시리얼', default=False)
     qty = models.DecimalField('수량', max_digits=12, decimal_places=3, default=1)
     supplier = models.CharField('협력사', max_length=100, blank=True, help_text='구매 자재 LOT이면 입력 (협력사 성적표에 사용)')
+    partner = models.ForeignKey('core.Partner', on_delete=models.PROTECT, null=True, blank=True, related_name='lots',
+                                limit_choices_to={'is_supplier': True}, verbose_name='거래처')
     created_at = models.DateTimeField('생성', default=timezone.now)
     history = HistoricalRecords()
 
@@ -536,6 +539,8 @@ class Hold(models.Model):
 class Shipment(models.Model):
     lot = models.ForeignKey(Lot, on_delete=models.PROTECT, related_name='shipments', verbose_name='LOT')
     customer = models.CharField('고객사', max_length=100)
+    partner = models.ForeignKey('core.Partner', on_delete=models.PROTECT, null=True, blank=True, related_name='shipments',
+                                limit_choices_to={'is_customer': True}, verbose_name='거래처')
     qty = models.DecimalField('수량', max_digits=12, decimal_places=3)
     shipped_at = models.DateTimeField('출하 일시', default=timezone.now)
     history = HistoricalRecords()
@@ -669,3 +674,226 @@ class RevisionLog(models.Model):
         if self.status == self.CONFIRMED or (self.pk and RevisionLog.objects.filter(pk=self.pk, status=self.CONFIRMED).exists()):
             raise ValidationError(self.LOCKED_MSG)
         return super().delete(*args, **kwargs)
+
+
+class MasterModel(models.Model):
+    """기준정보 공통 칸. 행은 지우지 않고 '사용'을 끈다. 사용자 정의 칸 값은 extra에 둔다."""
+    created_at = models.DateTimeField('등록 일시', auto_now_add=True)
+    created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+                                   editable=False, related_name='+', verbose_name='등록자')
+    updated_at = models.DateTimeField('수정 일시', auto_now=True)
+    active = models.BooleanField('사용', default=True)
+    note = models.TextField('비고', blank=True)
+    extra = models.JSONField('사용자 정의 칸', default=dict, blank=True)
+    history = HistoricalRecords(inherit=True)
+
+    class Meta:
+        abstract = True
+
+    def clean(self):
+        validate_extra(self)
+
+
+def validate_extra(obj):
+    """사용자 정의 칸(FieldDef) 값 검사. 정의에 없는 키(사용 중지된 칸 포함)는 그대로 둔다."""
+    import datetime
+    from decimal import Decimal, InvalidOperation
+    extra, errors = obj.extra if isinstance(obj.extra, dict) else {}, []
+    for d in FieldDef.objects.filter(target=ContentType.objects.get_for_model(type(obj)), active=True):
+        v = extra.get(d.key)
+        if v in (None, ''):
+            if d.required:
+                errors.append(f'{d.label}: 값을 입력하세요.')
+            continue
+        if d.kind == FieldDef.NUMBER:
+            try:
+                num = Decimal(str(v))
+                if isinstance(v, bool) or not num.is_finite():
+                    raise InvalidOperation
+                extra[d.key] = int(num) if num == num.to_integral_value() else float(num)
+            except InvalidOperation:
+                errors.append(f'{d.label}: 숫자가 아닙니다.')
+        elif d.kind == FieldDef.DATE:
+            try:
+                datetime.date.fromisoformat(v) if isinstance(v, str) and len(v) == 10 else int('x')
+            except ValueError:
+                errors.append(f'{d.label}: 날짜 형식(YYYY-MM-DD)이 아닙니다.')
+        elif d.kind == FieldDef.BOOL:
+            extra[d.key] = bool(v)
+        elif d.kind == FieldDef.CHOICE and v not in d.choices:
+            errors.append(f'{d.label}: 선택지에 없는 값입니다.')
+        elif d.kind in (FieldDef.PARTNER, FieldDef.USER):
+            from django.contrib.auth import get_user_model
+            model, msg = (Partner, '없는 거래처입니다.') if d.kind == FieldDef.PARTNER else (get_user_model(), '없는 사용자입니다.')
+            if not (isinstance(v, int) and not isinstance(v, bool) and model.objects.filter(pk=v).exists()):
+                errors.append(f'{d.label}: {msg}')
+    obj.extra = extra
+    if errors:
+        raise ValidationError({'extra': errors})
+
+
+class Department(MasterModel):
+    CYCLE_MSG = '상위 부서가 자기 자신이나 하위 부서일 수 없습니다.'
+
+    code = models.CharField('부서 코드', max_length=10, unique=True)
+    name = models.CharField('부서 이름', max_length=60)
+    parent = models.ForeignKey('self', on_delete=models.PROTECT, null=True, blank=True, related_name='children',
+                               verbose_name='상위 부서')
+    manager = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+                                related_name='+', verbose_name='부서장')
+    sort = models.PositiveIntegerField('정렬', default=0)
+
+    class Meta:
+        verbose_name = verbose_name_plural = '부서'
+        ordering = ['sort', 'code']
+
+    def __str__(self):
+        return self.name
+
+    def clean(self):
+        super().clean()
+        seen, p = set(), self.parent
+        while p is not None and p.pk not in seen:
+            if p is self or (self.pk and p.pk == self.pk):
+                raise ValidationError({'parent': self.CYCLE_MSG})
+            seen.add(p.pk)
+            p = p.parent
+
+
+class Partner(MasterModel):
+    """협력사·고객사·외주처·교정기관 (한 회사가 여러 구분을 가질 수 있다)."""
+    ROLE_MSG = '협력사·고객사·외주처·교정기관 중 하나 이상을 고르세요.'
+    NEW, APPROVED, CONDITIONAL, SUSPENDED = 'new', 'approved', 'conditional', 'suspended'
+    STATUS_CHOICES = [(NEW, '신규 평가'), (APPROVED, '승인'), (CONDITIONAL, '조건부 승인'), (SUSPENDED, '거래 중지')]
+    GRADE_CHOICES = [(g, g) for g in 'ABCD']
+
+    code = models.CharField('거래처 코드', max_length=20, unique=True)
+    name = models.CharField('거래처 이름', max_length=100)
+    is_supplier = models.BooleanField('협력사', default=False)
+    is_customer = models.BooleanField('고객사', default=False)
+    is_outsource = models.BooleanField('외주처', default=False)
+    is_calibrator = models.BooleanField('교정기관', default=False)
+    qc_name = models.CharField('품질 담당자', max_length=30, blank=True)
+    qc_phone = models.CharField('품질 담당 전화', max_length=30, blank=True)
+    qc_email = models.EmailField('품질 담당 이메일', blank=True)
+    status = models.CharField('거래 상태', max_length=12, choices=STATUS_CHOICES, default=NEW)
+    grade = models.CharField('평가 등급', max_length=1, choices=GRADE_CHOICES, blank=True)
+    evaluated_on = models.DateField('평가일', null=True, blank=True)
+
+    class Meta:
+        verbose_name = verbose_name_plural = '거래처'
+        ordering = ['code']
+
+    def __str__(self):
+        return self.name
+
+    def clean(self):
+        super().clean()
+        if not (self.is_supplier or self.is_customer or self.is_outsource or self.is_calibrator):
+            raise ValidationError(self.ROLE_MSG)
+
+
+class PartnerCertificate(models.Model):
+    STANDARD_CHOICES = [(s, s) for s in ('ISO 9001', 'IATF 16949', 'AS9100', 'ISO 17025', 'ISO 14001', 'NADCAP')] + [('etc', '기타')]
+
+    partner = models.ForeignKey(Partner, on_delete=models.CASCADE, related_name='certificates', verbose_name='거래처')
+    standard = models.CharField('인증 규격', max_length=20, choices=STANDARD_CHOICES)
+    cert_no = models.CharField('인증 번호', max_length=60, blank=True)
+    valid_until = models.DateField('유효 기한')
+    file = models.FileField('인증서 파일', upload_to='partner_cert/%Y/', blank=True)  # 기밀 아님 → MEDIA
+    history = HistoricalRecords()
+
+    class Meta:
+        verbose_name = verbose_name_plural = '거래처 인증'
+        ordering = ['valid_until']
+
+    def __str__(self):
+        return f'{self.partner} {self.get_standard_display()}'
+
+
+def extra_targets():
+    """사용자 정의 칸을 붙일 수 있는 모델(MasterModel 하위)의 ContentType 조건."""
+    names = [m._meta.model_name for m in apps.get_app_config('core').get_models()
+             if issubclass(m, MasterModel) and not m.__name__.startswith('Historical')]
+    return models.Q(app_label='core', model__in=names)
+
+
+class FieldDef(models.Model):
+    """관리 화면에서 기준정보에 더하는 칸. 값은 그 기록의 extra(JSON)에 키로 저장된다."""
+    LOCKED_MSG = '저장된 칸의 키·대상은 바꿀 수 없습니다.'
+    TEXT, NUMBER, DATE, BOOL, CHOICE, PARTNER, USER = 'text', 'number', 'date', 'bool', 'choice', 'partner', 'user'
+    KIND_CHOICES = [(TEXT, '글'), (NUMBER, '수'), (DATE, '날짜'), (BOOL, '예·아니오'), (CHOICE, '선택'),
+                    (PARTNER, '거래처'), (USER, '사용자')]
+
+    target = models.ForeignKey(ContentType, on_delete=models.PROTECT, limit_choices_to=extra_targets, verbose_name='대상')
+    key = models.CharField('키', max_length=40, validators=[RegexValidator(r'^[a-z][a-z0-9_]*$', '키는 영문 소문자로 시작하고 영문 소문자·숫자·_만 씁니다.')])
+    label = models.CharField('이름', max_length=60)
+    kind = models.CharField('종류', max_length=10, choices=KIND_CHOICES, default=TEXT)
+    choices = models.JSONField('선택지', default=list, blank=True, help_text='종류가 "선택"일 때 ["국민", "신한"]처럼 적습니다.')
+    required = models.BooleanField('필수', default=False)
+    sort = models.PositiveIntegerField('순서', default=0)
+    active = models.BooleanField('사용', default=True)
+    history = HistoricalRecords()
+
+    class Meta:
+        verbose_name = verbose_name_plural = '사용자 정의 칸'
+        ordering = ['target', 'sort', 'key']
+        constraints = [models.UniqueConstraint(fields=['target', 'key'], name='uniq_fielddef_key')]
+
+    def __str__(self):
+        return self.label
+
+    def clean(self):
+        if self.pk:
+            old = FieldDef.objects.filter(pk=self.pk).values('key', 'target_id').first()
+            if old and (old['key'] != self.key or old['target_id'] != self.target_id):
+                raise ValidationError(self.LOCKED_MSG)
+        if self.kind == self.CHOICE and not (isinstance(self.choices, list) and self.choices):
+            raise ValidationError({'choices': '종류가 "선택"이면 선택지를 입력하세요.'})
+
+
+def attachment_storage():
+    # MEDIA_ROOT 밖: /media/ 주소로 닿지 않고, 대상 기록 열람 권한을 확인하는 core.views.attachment_download로만 연다
+    from django.core.files.storage import FileSystemStorage
+    return FileSystemStorage(location=settings.DATA_DIR / 'attachments')
+
+
+class Attachment(models.Model):
+    """어느 업무 기록에나 붙이는 파일(사진·사양서·도면 등). 개인 기록에는 붙이지 않는다."""
+    PRIVATE_MSG = '개인 기록에는 첨부할 수 없습니다.'
+    KIND_CHOICES = [('photo', '사진'), ('spec', '사양서'), ('drawing', '도면'), ('manual', '매뉴얼'), ('purchase', '구매서류'),
+                    ('report', '성적서'), ('warranty', '보증서'), ('cert', '인증서'), ('etc', '기타')]
+
+    content_type = models.ForeignKey(ContentType, on_delete=models.PROTECT, verbose_name='대상 종류')
+    object_id = models.PositiveBigIntegerField('대상 번호')
+    target = GenericForeignKey('content_type', 'object_id')
+    kind = models.CharField('구분', max_length=10, choices=KIND_CHOICES, default='etc')
+    file = models.FileField('파일', upload_to='%Y/%m/', storage=attachment_storage)
+    title = models.CharField('제목', max_length=200, blank=True)
+    uploaded_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+                                    editable=False, related_name='+', verbose_name='올린 사람')
+    uploaded_at = models.DateTimeField('올린 일시', auto_now_add=True)
+    history = HistoricalRecords()
+
+    class Meta:
+        verbose_name = verbose_name_plural = '첨부파일'
+        ordering = ['-uploaded_at']
+        indexes = [models.Index(fields=['content_type', 'object_id'])]
+
+    def __str__(self):
+        return self.title
+
+    def clean(self):
+        from qms.models import PRIVATE_APPS
+        if self.content_type_id and self.content_type.app_label in PRIVATE_APPS:
+            raise ValidationError(self.PRIVATE_MSG)
+
+    def save(self, *args, **kwargs):
+        if not self.title and self.file:
+            self.title = os.path.basename(self.file.name)[:200]
+        super().save(*args, **kwargs)
+
+
+@receiver(post_delete, sender=Attachment)
+def _delete_attachment_file(sender, instance, **kwargs):
+    transaction.on_commit(lambda: instance.file.delete(save=False))

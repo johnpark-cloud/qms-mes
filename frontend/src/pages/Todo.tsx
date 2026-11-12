@@ -50,6 +50,7 @@ const SECTIONS: { title: string; note: string; rows: (d: any) => Row[] }[] = [
   { title: '미분류 메모', note: '', rows: (d) => (d.memos_unsorted ? [{ label: '미분류 메모 분류하기', href: '/app/memos', meta: `${d.memos_unsorted}건` }] : []) },
   { title: '4M 변경 초품 미확인', note: '출하 차단 중', rows: (d) => d.first_articles.map((c: any) => ({ label: c.label, href: c.href, meta: `적용 ${dayjs(c.effective_at).format('YYYY-MM-DD HH:mm')}`, tone: 'negative' })) },
   { title: '계측기 교정', note: '14일 이내·초과', rows: (d) => d.gauges.map((g: any) => ({ label: g.label, href: g.href, meta: `${g.next_due} ${g.overdue ? '초과' : '임박'}`, tone: g.overdue ? 'negative' : 'critical' })) },
+  { title: '협력사 인증 만료', note: '30일 이내·만료', rows: (d) => (d.partner_certs ?? []).map((c: any) => ({ label: c.label, href: c.href, meta: `${c.valid_until} ${c.overdue ? '만료' : '임박'}`, tone: c.overdue ? 'negative' : 'critical' })) },
   { title: 'PPAP 제출 기한', note: '14일 이내', rows: (d) => d.ppaps.map((p: any) => ({ label: p.label, href: p.href, meta: p.overdue ? `${p.due_date} 초과` : p.due_date, tone: p.overdue ? 'negative' : null })) },
   { title: '승인 대기', note: '품질팀장 서명', rows: (d) => d.approvals.map((a: any) => ({ label: a.label, href: a.href, meta: a.kind })) },
 ]

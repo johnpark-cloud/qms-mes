@@ -4,7 +4,7 @@ import datetime
 from django.db.models import Exists, OuterRef
 from django.utils import timezone
 
-from core.models import EditRequest, Hold, Nonconformance
+from core.models import EditRequest, Hold, Nonconformance, PartnerCertificate
 
 from . import spc
 from .models import (AuditFinding, Capa, ChangeRequest, Characteristic, ControlPlan, CustomerClaim, DocumentRevision, Gauge,
@@ -46,6 +46,8 @@ def due_items(approver=False, user=None):
         'ppaps': list(PpapSubmission.objects.filter(submitted_at__isnull=True, due_date__lte=today + datetime.timedelta(days=14))
                       .select_related('item')),
         'gauges': [g for g in Gauge.objects.filter(active=True) if g.next_due <= today + datetime.timedelta(days=14)],
+        'partner_certs': list(PartnerCertificate.objects.filter(partner__active=True, valid_until__lte=today + datetime.timedelta(days=30))
+                              .select_related('partner')),
         'first_articles': list(ChangeRequest.objects.filter(approved_at__isnull=False, effective_at__lte=now).annotate(
             fa=Exists(Inspection.objects.filter(lot__item=OuterRef('item'), result=Inspection.PASS,
                                                 inspected_at__gte=OuterRef('effective_at')))).filter(fa=False)
@@ -88,6 +90,7 @@ def digest(d):
         ('SCAR 회신 기한', [f'{s} · 기한 {s.response_due}' for s in d['scars']]),
         ('CAPA', [f'{c} · {c.owner} · {c.status} · 기한 {c.due_date}' for c in d['capas']]),
         ('계측기 교정', [f'{g} · 교정 기한 {g.next_due}' for g in d['gauges']]),
+        ('협력사 인증 만료', [f'{c.partner} · {c.get_standard_display()} · {c.valid_until}' for c in d['partner_certs']]),
         ('4M 초품 미확인 (출하 차단 중)', [str(c) for c in d['first_articles']]),
         ('내부심사 예정', [str(a) for a in d['audits']]),
         ('CAPA 미연결 심사 지적', [str(f) for f in d['findings']]),

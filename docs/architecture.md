@@ -33,7 +33,7 @@ docs/        구조·업무 규칙·테스트 문서, superpowers/ 설계·계�
 
 | 파일 | 역할 |
 | --- | --- |
-| `models.py` | `Approvable`(승인 필드·잠금 기반 클래스), 품번 `Item`·공정 `Process`·BOM `BomLine`·라우팅 `RoutingStep`, 작업지시 `WorkOrder`·실적 `WorkResult`, LOT `Lot`·계보 `LotLink`, 부적합 `Nonconformance`·사진 `NonconformancePhoto`, 보류 `Hold`, 출하 `Shipment`, 삭제·수정 요청 `EditRequest`, 엑셀 가져오기 설정 `ImportProfile`, 개정 이력 `RevisionLog`(신청 → 승인자 확정, 확정 후 수정·삭제 불가) |
+| `models.py` | `Approvable`(승인 필드·잠금 기반 클래스), 품번 `Item`·공정 `Process`·BOM `BomLine`·라우팅 `RoutingStep`, 작업지시 `WorkOrder`·실적 `WorkResult`, LOT `Lot`·계보 `LotLink`, 부적합 `Nonconformance`·사진 `NonconformancePhoto`, 보류 `Hold`, 출하 `Shipment`, 삭제·수정 요청 `EditRequest`, 엑셀 가져오기 설정 `ImportProfile`, 개정 이력 `RevisionLog`(신청 → 승인자 확정, 확정 후 수정·삭제 불가), 기준정보 `MasterModel` 기반의 부서 `Department`(조직도: 상위 부서·부서장)·거래처 `Partner`(구분·품질 담당자 1명·인증서 `PartnerCertificate`), 사용자 정의 칸 `FieldDef`(값은 각 기준정보의 `extra` JSON), 기록 첨부 `Attachment`(ContentType + id, 파일은 `data/attachments/`). `Lot`·`Shipment`의 `partner`가 거래처를 가리킨다 |
 | `admin.py` | `BaseAdmin`(삭제는 시스템 관리자만, 승인 잠금, 요청 링크, 상세 화면 관련 기록 `related_panel`), 부적합 폼(MRB 처분 시 비밀번호·보완 필수 칸 검사) |
 | `records.py` | 삭제(`delete_record`), 잠금(`is_locked`), 잠금 해제 확인(`can_edit_locked`) 규칙 |
 | `views.py` | LOT 추적, 통합 검색, 부적합 간편 등록, 승인 서명, 삭제·수정 요청, 출력, 부적합 메일·사진 ZIP, 엑셀 가져오기 |
@@ -43,10 +43,11 @@ docs/        구조·업무 규칙·테스트 문서, superpowers/ 설계·계�
 | `export.py` | 문서 구조(dict)·표를 A4 `.xlsx`로 내보낸다(`document_xlsx`, `table_xlsx`, `xlsx_response`). React 인쇄 화면도 같은 문서 구조를 쓴다 |
 | `audit.py` | simple-history 이력을 감사 기록 화면용으로 읽는다(`audited_models`는 `PRIVATE_APPS` 제외, `row_payload`는 `password` 변경 제외) |
 | `rules.py` | admin·기존 뷰·API가 함께 쓰는 업무 규칙(잠금·삭제·승인 등). 규칙 본문은 한 곳에만 둔다 |
+| `relations.py` | 관계 레지스트리: 모델 `_meta`와 일반 연결(첨부·메모·증적·PPAP 요소·CAPA 출처)에서 어느 기록이든 그 기록을 가리키는 묶음(incoming)과 그 기록이 가리키는 묶음(outgoing)을 만든다. 새 표·외래키는 따로 등록하지 않는다. API `/api/relations/<app.model>/<id>/`(`core/api/views.py` `RelationsView`), 첨부 API `/api/attachments/`(`core/api/attachments.py`), 첨부 받기 `/attachments/<id>/`(`core/views.py` `attachment_download`) |
 | `numbering.py` | 번호 규칙(`NumberRule` 틀 문자열) 해석: 틀 검사(`check_rule`), 다음 번호 계산(`next_number`), 긴 번호 풀이(`describe`), 개정 자동 채움(`next_revision`). 코드값은 `CodeValue` |
 | `api/` | DRF 기반 JSON API: 로그인·`/api/auth/me/`, 오류 응답 형식(`exceptions.py`), 모델 권한(`permissions.py`). 업무 규칙은 `core/rules.py`·모델 `save()`를 그대로 쓴다 |
 | `api/master.py` | 품번·BOM·라우팅 `/api/core/items/`(목록·`?export=xlsx`·생성·`<id>/` 조회·저장), 공정 `/api/core/processes/` 표 조회·저장, 번호 자동 부여 `/api/core/numbering/item-options/`(규칙·토큰별 선택지)·`/api/core/numbering/item-preview/`(다음 번호 미리보기), 엑셀 일괄 등록 `/api/core/import/profiles/`·`/api/core/import/`(`commit=0` 미리보기, `1` 확정). 저장 규칙은 `core/rules.py`(`save_item`·`save_table`)를 쓴다 |
-| `management/commands/` | `backup`, `restore` |
+| `management/commands/` | `backup`, `restore`, `link_masters`(기존 글자 칸 → 거래처·부서·사용자 연결, 기본은 미리보기) |
 | `static/qms/` | `fiori.css`(디자인 토큰, `DESIGN.md`), `shell.js`, `dashboard.js`, `nc_form.js`, `copy_mail.js` |
 
 ### qms (`qms/`)
@@ -77,7 +78,7 @@ React 19·TypeScript·Vite·Ant Design 새 화면. 개발 PC에서 `npm run buil
 | `src/main.tsx` | 라우터(`basename="/app"`)·테마·쿼리 클라이언트 |
 | `src/api/` | `client.ts`(CSRF·오류 형식·세션 만료 시 로그인 이동), `auth.ts` |
 | `src/layout/AppLayout.tsx`, `src/theme.ts` | 상단 바·사이드 메뉴, Fiori 색 토큰(라이트·다크) |
-| `src/pages/`, `src/components/` | 화면(`Login`, `Overview`, `Todo`, `specs/SpecList`·`SpecPage`·`SpecPrint`, `inspect/InspectPage`·`MeasurePage`, `inspections/InspectionList`·`InspectionPage`·`InspectionPrint`, `Trace`, `Memos`, `AuditLog`)과 공통 부품(`Tile`, `DataList`, `EditGrid`, `RecordPage`, `SaveBar`, `SignModal`, `DocumentView`, `PrintPage`, `CommandPalette`, `MemoPanel`, `lotOptions`) |
+| `src/pages/`, `src/components/` | 화면(`Login`, `Overview`, `Todo`, `specs/SpecList`·`SpecPage`·`SpecPrint`, `inspect/InspectPage`·`MeasurePage`, `inspections/InspectionList`·`InspectionPage`·`InspectionPrint`, `Trace`, `Memos`, `AuditLog`)과 공통 부품(`Tile`, `DataList`, `EditGrid`, `RecordPage`, `SaveBar`, `SignModal`, `DocumentView`, `PrintPage`, `CommandPalette`, `MemoPanel`, `RelationsPanel`(연결 탭), `AttachmentPanel`(첨부 탭), `lotOptions`) |
 | `src/api/specs.ts`, `src/api/inspect.ts`, `src/app.css`, `src/lib/` | 검사기준서·검사 입력 API 호출, 화면 스타일(`DESIGN.md`), 붙여넣기 분해(`tsv.ts`)·최근 연 기록(`recent.ts`)·샘플링 선택지(`sampling.ts`) |
 
 전환 검토와 단계 계획은 `docs/architecture-migration-plan.md`에 있다.
@@ -105,7 +106,7 @@ React 19·TypeScript·Vite·Ant Design 새 화면. 개발 PC에서 `npm run buil
 | --- | --- |
 | 데이터 폴더 | `data/` (`QMS_DATA_DIR`로 변경) |
 | DB | `data/db.sqlite3`, PostgreSQL은 `QMS_DB_NAME`·`QMS_DB_USER`·`QMS_DB_PASSWORD`·`QMS_DB_HOST`·`QMS_DB_PORT`. SQLite는 `transaction_mode='IMMEDIATE'`, `timeout=20`으로 쓰기를 순서대로 처리한다(동시 저장 시 부적합 번호 중복·"database is locked" 방지). PostgreSQL로 옮기면 부적합 번호(`core/models.py` `_nc_number`)를 DB 시퀀스로 바꿔야 한다 |
-| 첨부 | `data/media/`, 개인 명세서는 `data/private/` |
+| 첨부 | `data/media/`, 기록 첨부(`Attachment`)는 `data/attachments/`, 개인 명세서는 `data/private/` (뒤의 둘은 `/media/` 주소로 닿지 않음) |
 | 로고 | `data/brand/logo.svg|png|jpg` |
 | 비밀키 | `data/secret_key.txt` 자동 생성, 또는 `QMS_SECRET_KEY` |
 | 서버 | `QMS_DEBUG`(기본 1), `QMS_ALLOWED_HOSTS` |

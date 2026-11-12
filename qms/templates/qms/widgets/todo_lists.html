@@ -129,6 +129,16 @@
   </section>
   {% endif %}
 
+  {% if partner_certs %}
+  <section class="card" id="partner-certs">
+    <h2>협력사 인증 만료 <span class="count">30일 이내·만료</span></h2>
+    <table><tbody>
+      {% for c in partner_certs %}<tr><td><a href="{% url 'admin:core_partner_change' c.partner_id %}">{{ c.partner }} {{ c.get_standard_display }}</a></td>
+        <td>{{ c.valid_until|date:"Y-m-d" }} {% if c.valid_until < today %}<span class="status status--negative">만료</span>{% else %}<span class="status status--critical">임박</span>{% endif %}</td></tr>{% endfor %}
+    </tbody></table>
+  </section>
+  {% endif %}
+
   {% if ppaps %}
   <section class="card">
     <h2>PPAP 제출 기한 <span class="count">14일 이내</span></h2>

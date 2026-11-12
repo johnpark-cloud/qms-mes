@@ -24,7 +24,7 @@ from simple_history.utils import bulk_update_with_history
 from . import rules
 from .importer import TARGET_MODELS, run_import
 from .timeline import lot_actions, lot_timeline
-from .models import (Approvable, EditRequest, Hold, ImportProfile, Lot, Nonconformance, NonconformancePhoto, is_approver,
+from .models import (Approvable, Attachment, EditRequest, Hold, ImportProfile, Lot, Nonconformance, NonconformancePhoto, is_approver,
                      validate_photo)
 from .records import blockers, is_locked
 from .search import search as run_search
@@ -343,3 +343,23 @@ def nc_photos_zip(request, pk):
                 continue
     return HttpResponse(buf.getvalue(), content_type='application/zip',
                         headers={'Content-Disposition': f'attachment; filename="{nc.number}_photos.zip"'})
+
+
+def can_view_target(user, ct, object_id):
+    """첨부가 붙은 기록을 볼 수 있는가: 그 모델 보기 권한이 있고 기록이 있어야 한다. 개인 기록은 늘 아니다."""
+    from qms.models import PRIVATE_APPS
+    model = ct.model_class()
+    if model is None or ct.app_label in PRIVATE_APPS:
+        return False
+    return user.has_perm(f'{ct.app_label}.view_{ct.model}') and model._default_manager.filter(pk=object_id).exists()
+
+
+@staff_member_required
+def attachment_download(request, pk):
+    att = get_object_or_404(Attachment.objects.select_related('content_type'), pk=pk)
+    if not (request.user.has_perm('core.view_attachment') and can_view_target(request.user, att.content_type, att.object_id)):
+        raise PermissionDenied
+    try:
+        return FileResponse(att.file.open('rb'), as_attachment=True, filename=os.path.basename(att.file.name))
+    except OSError:
+        raise Http404('파일이 없습니다.')

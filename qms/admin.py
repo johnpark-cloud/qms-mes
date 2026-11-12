@@ -273,11 +273,12 @@ class InternalAuditAdmin(BaseAdmin):
     list_display = ['name', 'kind', 'planned_date', 'auditor', 'auditee', 'performed_at', 'open_findings', 'closed_at']
     list_filter = ['kind']
     search_fields = ['name', 'auditee']
+    autocomplete_fields = ['auditee_dept']
     inlines = [AuditFindingInline]
     readonly_fields = ['memo_list']
     fieldsets = [
-        (None, {'fields': ['name', 'kind', 'planned_date', 'auditor']}),
-        ('추가 정보', {'classes': ['collapse'], 'fields': ['scope', 'checklist', 'auditee', 'performed_at', 'closed_at']}),
+        (None, {'fields': ['name', 'kind', 'planned_date', 'auditor', 'auditor_user']}),
+        ('추가 정보', {'classes': ['collapse'], 'fields': ['scope', 'checklist', 'auditee', 'auditee_dept', 'performed_at', 'closed_at']}),
         ('이번 심사 메모', {'fields': ['memo_list']}),
     ]
 
@@ -340,10 +341,10 @@ class PpapElementInline(admin.TabularInline):
 class PpapSubmissionAdmin(ApprovalAdminMixin, ReportLinksMixin, BaseAdmin):
     list_display = ['item', 'customer', 'level', 'reason', 'due_date', 'is_approved', 'submitted_at', 'customer_approved_at']
     search_fields = ['item__code', 'customer']
-    autocomplete_fields = ['item']
+    autocomplete_fields = ['item', 'partner']
     inlines = [PpapElementInline]
     fieldsets = [
-        (None, {'fields': ['item', 'customer', 'level', 'reason']}),
+        (None, {'fields': ['item', 'customer', 'partner', 'level', 'reason']}),
         ('추가 정보', {'classes': ['collapse'], 'fields': ['due_date', 'submitted_at', 'customer_approved_at', 'approval',
                                                          'report_links']}),
     ]
@@ -359,18 +360,19 @@ class PpapSubmissionAdmin(ApprovalAdminMixin, ReportLinksMixin, BaseAdmin):
 @admin.register(CustomerRule)
 class CustomerRuleAdmin(BaseAdmin):
     list_display = ['customer', 'containment_hours', 'corrective_days']
+    autocomplete_fields = ['partner']
 
 
 @admin.register(CustomerClaim)
 class CustomerClaimAdmin(ReportLinksMixin, BaseAdmin):
     list_display = ['number', 'customer', 'lot', 'received_at', 'current_step', 'containment_due', 'corrective_due', 'closed_at']
     search_fields = ['number', 'customer', 'lot__number']
-    autocomplete_fields = ['lot']
+    autocomplete_fields = ['lot', 'partner']
     list_filter = [('closed_at', admin.EmptyFieldListFilter)]
     readonly_fields = ['nonconformance', 'trace_link', 'containment_due', 'corrective_due', 'current_step', 'report_links',
                        'similar_cases', 'capa']
     fieldsets = [
-        (None, {'fields': ['number', 'customer', 'lot', 'description']}),
+        (None, {'fields': ['number', 'customer', 'partner', 'lot', 'description']}),
         ('추가 정보', {'classes': ['collapse'], 'fields': ['defect_qty', 'received_at', 'nonconformance', 'trace_link',
                                                          'containment_due', 'corrective_due', 'current_step', 'report_links']}),
         ('재발 방지', {'fields': ['similar_cases', 'capa']}),
@@ -400,11 +402,11 @@ class CustomerClaimAdmin(ReportLinksMixin, BaseAdmin):
 class ScarAdmin(ReportLinksMixin, BaseAdmin):
     list_display = ['number', 'supplier', 'lot', 'issued_at', 'response_due', 'responded_at', 'closed_at']
     search_fields = ['number', 'supplier', 'lot__number']
-    autocomplete_fields = ['lot', 'nonconformance']
+    autocomplete_fields = ['lot', 'nonconformance', 'partner']
     list_filter = [('closed_at', admin.EmptyFieldListFilter)]
     readonly_fields = ['report_links', 'capa']
     fieldsets = [
-        (None, {'fields': ['number', 'supplier', 'lot', 'request', 'response_due']}),
+        (None, {'fields': ['number', 'supplier', 'partner', 'lot', 'request', 'response_due']}),
         ('추가 정보', {'classes': ['collapse'], 'fields': ['nonconformance', 'issued_at', 'response', 'responded_at', 'closed_at',
                                                          'capa', 'report_links']}),
     ]

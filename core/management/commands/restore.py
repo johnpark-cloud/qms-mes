@@ -39,7 +39,8 @@ class Command(BaseCommand):
                 con.close()
         if status != 'ok':
             raise CommandError(f'무결성 검사 실패: {status}')
-        self.stdout.write(f'무결성 검사: ok, 첨부파일 폴더: {"있음" if (src / "media").exists() else "없음"}, 개인 파일 폴더: {"있음" if (src / "private").exists() else "없음"}')
+        self.stdout.write(f'무결성 검사: ok, 첨부파일 폴더: {"있음" if (src / "media").exists() else "없음"}, 개인 파일 폴더: {"있음" if (src / "private").exists() else "없음"}, '
+                          f'첨부 보관 폴더: {"있음" if (src / "attachments").exists() else "없음"}')
         for t, n in counts.items():
             self.stdout.write(f'  {t}: {n}건')
         if not apply:
@@ -49,16 +50,19 @@ class Command(BaseCommand):
         # 복원 전에 지금 데이터를 보관한다 (잘못 복원해도 되돌릴 수 있게)
         keep = Path(settings.DATA_DIR) / f'pre-restore-{datetime.datetime.now():%Y%m%d-%H%M%S}'
         keep.mkdir()
-        current, media, private = Path(db['NAME']), Path(settings.MEDIA_ROOT), Path(settings.DATA_DIR) / 'private'
+        current, media = Path(db['NAME']), Path(settings.MEDIA_ROOT)
         if current.exists():
             shutil.copy2(current, keep / 'db.sqlite3')
         if media.exists():
             shutil.move(media, keep / 'media')
-        if (src / 'private').exists() and private.exists():  # 옛 백업(private 없음)이면 현재 파일을 그대로 둔다
-            shutil.move(private, keep / 'private')
+        for name in ('private', 'attachments'):
+            folder = Path(settings.DATA_DIR) / name
+            if (src / name).exists() and folder.exists():  # 옛 백업(그 폴더 없음)이면 현재 파일을 그대로 둔다
+                shutil.move(folder, keep / name)
         shutil.copy2(src / 'db.sqlite3', current)
         if (src / 'media').exists():
             shutil.copytree(src / 'media', media)
-        if (src / 'private').exists():
-            shutil.copytree(src / 'private', private)
+        for name in ('private', 'attachments'):
+            if (src / name).exists():
+                shutil.copytree(src / name, Path(settings.DATA_DIR) / name)
         self.stdout.write(self.style.SUCCESS(f'복원 완료. 이전 데이터는 {keep}에 보관했습니다.'))

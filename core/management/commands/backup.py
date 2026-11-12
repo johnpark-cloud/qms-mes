@@ -34,9 +34,11 @@ class Command(BaseCommand):
         out.close()
         if Path(settings.MEDIA_ROOT).exists():
             shutil.copytree(settings.MEDIA_ROOT, target / 'media')
-        private = Path(settings.DATA_DIR) / 'private'  # 개인 급여 파일 (personal.models.private_storage)
-        if private.exists():
-            shutil.copytree(private, target / 'private')
+        # private: 개인 급여 파일(personal.models.private_storage), attachments: 업무 첨부(core.models.attachment_storage)
+        for name in ('private', 'attachments'):
+            folder = Path(settings.DATA_DIR) / name
+            if folder.exists():
+                shutil.copytree(folder, target / name)
         cutoff = datetime.datetime.now() - datetime.timedelta(days=KEEP_DAYS)
         for old in root.glob('qms-*'):
             try:

@@ -359,6 +359,29 @@ try:
             ok, why = False, str(e)[:80]
         check('검사 목록 요약·메뉴 강조', ok, why)
 
+        try:  # 검사 기록 오른쪽 '연결' 탭: 이 검사가 가리키는 LOT 묶음
+            page.goto(f'/app/inspections/{insp_id}')
+            page.get_by_role('tab', name='연결').click()
+            panel = page.get_by_role('region', name='연결')
+            panel.get_by_role('heading', name='LOT').wait_for(timeout=5000)
+            ok, why = panel.get_by_role('link', name='E2E-IN-1').count() >= 1, panel.inner_text()[:80]
+        except Exception as e:
+            ok, why = False, str(e)[:80]
+        check('검사 기록: 연결 탭에 LOT', ok, why)
+
+        try:  # '첨부' 탭: 파일 올리기 → 목록 1줄, 제목은 내려받기 링크
+            page.get_by_role('tab', name='첨부').click()
+            page.get_by_label('첨부 파일').set_input_files({'name': 'e2e-cert.pdf', 'mimeType': 'application/pdf',
+                                                         'buffer': b'%PDF-1.4 e2e'})
+            page.get_by_role('button', name='올리기').click()
+            row = page.locator('[data-attachment]', has_text='e2e-cert.pdf')
+            row.wait_for(timeout=5000)
+            href = row.get_by_role('link').first.get_attribute('href') or ''
+            ok, why = page.locator('[data-attachment]').count() == 1 and '/attachments/' in href, href
+        except Exception as e:
+            ok, why = False, str(e)[:80]
+        check('검사 기록: 첨부 올리기', ok, why)
+
         try:  # 메모 칸은 크기 고정, 사진 첨부 → 미리보기 → 저장하면 메모에 사진
             import base64
             png = base64.b64decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==')
