@@ -160,32 +160,22 @@ def _field_rows(obj):
 @staff_member_required
 def edit_request(request, kind, app_label, model_name, pk):
     """삭제·수정 요청: 사유와 본인 비밀번호. 시스템 관리자는 요청과 동시에 승인·실행된다."""
-    model, obj = _get_record(app_label, model_name, pk)
-    # 관리 화면이 없는 기록과 보류(부적합과 함께만 삭제)는 요청 대상이 아니다
-    if not admin.site.is_registered(model) or model is Hold or kind not in (EditRequest.DELETE, EditRequest.EDIT):
-        raise Http404
-    if kind == EditRequest.EDIT and not is_locked(obj):
-        raise Http404
-    if not request.user.has_perm(f'{app_label}.view_{model_name}'):
-        raise PermissionDenied
+    _, obj = _get_record(app_label, model_name, pk)
+    rules.check_edit_request(obj, kind, request.user)
     back = record_url(obj) or reverse(f'admin:{app_label}_{model_name}_change', args=[pk])
     error = None
     if request.method == 'POST':
-        reason = request.POST.get('reason', '').strip()
-        if not reason:
-            error = '사유를 입력하세요.'
-        elif not request.user.check_password(request.POST.get('password', '')):
-            error = '비밀번호가 맞지 않습니다.'
+        try:
+            req, decide_error = rules.submit_edit_request(obj, request.user, kind, request.POST.get('reason', ''),
+                                                          request.POST.get('password', ''))
+        except ValidationError as e:
+            error = ' '.join(e.messages)
         else:
-            req = EditRequest.objects.create(kind=kind, target=obj, object_repr=str(obj)[:200], reason=reason,
-                                             requested_by=request.user)
             if not request.user.is_superuser:
                 messages.success(request, '요청했습니다. 시스템 관리자가 승인하면 처리됩니다.')
                 return redirect(back)
-            try:
-                req.decide(request.user, True)
-            except ValidationError as e:  # 예: 다른 기록이 참조 중이라 삭제 불가 → 승인 화면에서 안내
-                messages.error(request, ' '.join(e.messages))
+            if decide_error:  # 승인 화면에서 안내
+                messages.error(request, decide_error)
                 return redirect('edit_request_decide', req.pk)
             if kind == EditRequest.DELETE:
                 messages.success(request, f'{req.object_repr} 삭제 완료')

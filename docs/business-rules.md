@@ -56,7 +56,7 @@
 | 규칙 | 위치 |
 | --- | --- |
 | 관리 화면에서 삭제는 시스템 관리자(슈퍼유저)만 할 수 있다. 역할 그룹에도 core·qms의 `delete_` 권한이 없다(검사원의 측정값 삭제만 예외). | `core/admin.py` `BaseAdmin.has_delete_permission`, `qms/apps.py` `ensure_roles` |
-| 일반 사용자는 본인 비밀번호와 사유로 삭제·수정 요청을 하고, 시스템 관리자가 승인한다. 승인된 수정은 1회만 잠금을 푼다. | `core/models.py` `EditRequest.decide`, `core/views.py` `edit_request`, `core/records.py` |
+| 일반 사용자는 본인 비밀번호와 사유로 삭제·수정 요청을 하고, 시스템 관리자가 승인한다. 승인된 수정은 1회만 잠금을 푼다. | `core/models.py` `EditRequest.decide`, `core/rules.py` `check_edit_request`·`submit_edit_request`(관리 화면 요청 화면과 records API가 함께 씀), `core/records.py` |
 | 부적합을 삭제하면 그 부적합이 만든 보류만 함께 지운다. 같은 LOT의 다른 부적합 보류는 남는다. | `core/records.py` `delete_record` |
 | 다른 기록이 참조(PROTECT)하는 기록은 지울 수 없다. | `EditRequest.decide`, `records.blockers` |
 | 시스템 관리자는 요청 없이 바로 수정·삭제한다. 모든 변경은 simple-history 이력에 남는다. | `records.can_edit_locked` |
@@ -120,6 +120,8 @@
 | 기록 첨부(`Attachment`)는 `/media/` 밖(`data/attachments/`)에 두고 `/attachments/<id>/`로만 받는다. 받으려면 `core.view_attachment` 권한과 첨부가 붙은 기록의 보기 권한이 모두 있어야 하고, 그 기록이 있어야 한다. 개인 앱(`PRIVATE_APPS`) 기록에는 붙일 수도 받을 수도 없다. 올리기(`/api/attachments/`)는 `core.add_attachment`와 대상 기록 보기 권한이 필요하다. 관리 화면에서는 첨부를 추가하지 않고, 삭제는 시스템 관리자만 한다. 첨부 행을 지우면 파일도 지운다. | `core/views.py` `can_view_target`·`attachment_download`, `core/api/attachments.py`, `core/models.py` `attachment_storage` |
 | 부서·거래처·사용자 정의 칸의 추가·수정은 품질팀장(과 시스템 관리자)만 한다. 품질엔지니어·검사원은 보기만 한다. | `qms/apps.py` `TEAM_LEAD_ONLY`, `ensure_roles` |
 | 새 기록 화면(`/app/r/<app>/<model>/<id>`)과 records API는 설명서(`core/recordspec.py` `SPECS`)에 등록된 모델만 연다(그 밖은 404). 목록·상세·변경 이력 탭은 그 모델의 `view_` 권한으로 서버가 검사한다(변경 이력 탭은 `view_` 권한자에게 보인다, 2026-11-13 사용자 결정). 전체 감사 기록 화면(`/app/audit`)은 그대로 품질팀장 전용이다. | `core/api/records.py`, `core/recordspec.py` |
+| 기록 화면의 범용 저장(`PATCH /api/records/<label>/<id>/`)은 `change_` 권한, 설명서 `Spec.edit` 칸만 받는다. 서명 칸(`SIGN_FIELDS`: 승인자·승인 일시·판정 등)은 설명서에 넣을 수 없고(테스트가 검사) 보내면 400이다. 저장은 ModelForm 검증 + `validate_constraints` → `rules.save_with_lock`(승인 잠금·수정 승인 1회 소모)이고, 이력 번호(`version`)가 다르면 409다. 승인은 `rules.approve`(품질팀장·비밀번호)로만 한다. | `core/api/records.py`, `core/recordspec.py` `SIGN_FIELDS`, `core/rules.py` |
+| 기록 화면의 부적합 처분은 `POST /api/records/core.nonconformance/<id>/dispose/`(`change_nonconformance` 권한)로만 하고, 관리 화면과 같은 `rules.dispose_nc`(MRB 비밀번호·필수칸·모델 `clean` 처분 규칙·보류 해제)를 거친다. 처분·특채 승인번호·보류 해제 일시는 `SIGN_FIELDS`라 범용 저장으로 보낼 수 없다(400). 보류는 설명서 `edit`가 비어 있어 범용 저장이 403이고, 수정·삭제 요청은 404다. | `core/api/records.py` `RecordDisposeView`, `core/rules.py` `dispose_nc`, `core/recordspec.py` |
 | 연결 패널(`/api/relations/<app.model>/<id>/`)은 그 기록 보기 권한이 있어야 열리고, 사용자가 볼 권한이 없는 표의 묶음은 개수도 알리지 않는다. 개인 앱·이력 표·사용자 계정은 연결 대상이 아니다. | `core/api/views.py` `RelationsView`, `core/relations.py` |
 | 엑셀 일괄 등록은 대상(품번·작업지시)의 추가·변경 권한이 모두 있어야 올릴 수 있다(기존 행을 덮어쓰므로). 각 행은 모델 검증(`full_clean`)을 거치고, 한 행이라도 틀리면 전체를 되돌린다. | `core/views.py` `import_view`, `core/importer.py` |
 | 인쇄·승인·삭제 요청 경로는 개인 자료와 계정·세션 등 시스템 기록(`personal`, `auth`, `admin`, `sessions`, `contenttypes`)을 열지 않는다. | `core/views.py` `_get_record` |

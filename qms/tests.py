@@ -874,7 +874,7 @@ class TimelineTest(TestCase):
         self.assertContains(self.client.get('/trace/', {'lot': 'CELL-1'}), '보류 중')
         acts = lot_actions(self.cell, self.admin)
         self.assertEqual(acts[0][0], '처분 입력')
-        self.assertIn(f'/{nc.pk}/change/', acts[0][1])
+        self.assertEqual(f'/app/r/core/nonconformance/{nc.pk}', acts[0][1])  # 새 기록 화면의 「처분」
         self.assertNotIn('출하 등록', [n for n, _ in acts])
 
     def test_scrapped_lot_has_no_disposition_or_ship_action(self):
@@ -1003,9 +1003,9 @@ class MemoTest(TestCase):
         self.assertEqual(self.client.get(f'/memo/new/?ct=auth.user&id={self.admin.pk}').status_code, 404)
         data = {'body': 'x', 'speaker_kind': 'OTHER'}
         r = self.client.post(f'/memo/new/?ct=core.nonconformance&id={self.nc.pk}', data)
-        self.assertRedirects(r, f'/admin/core/nonconformance/{self.nc.pk}/change/')
+        self.assertRedirects(r, f'/app/r/core/nonconformance/{self.nc.pk}', fetch_redirect_response=False)
         r = self.client.post(f'/memo/new/?ct=core.lot&id={self.lot.pk}', data)
-        self.assertRedirects(r, '/trace/?lot=L1')
+        self.assertRedirects(r, f'/app/r/core/lot/{self.lot.pk}', fetch_redirect_response=False)
 
 
 class AuditPackTest(TestCase):

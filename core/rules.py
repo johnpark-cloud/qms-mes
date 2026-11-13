@@ -2,10 +2,11 @@
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.contrib.contenttypes.models import ContentType
 from django.db import IntegrityError, transaction
+from django.http import Http404
 from django.utils import timezone
 
 from .grid import collect_rows, record_version, table_version
-from .models import BomLine, Nonconformance, RevisionLog, RoutingStep, is_approver
+from .models import BomLine, EditRequest, Hold, Nonconformance, RevisionLog, RoutingStep, is_approver
 from .records import can_edit_locked, delete_record, edit_unlocked, is_locked
 
 LOCKED_MSG = '잠긴 기록입니다. 수정 요청 후 승인받아야 수정할 수 있습니다.'
@@ -132,6 +133,35 @@ def approve(obj, user, password):
     except ValidationError:  # 예: 고객 승인번호 없는 4M 변경
         obj.approved_by, obj.approved_at = prev
         raise
+
+
+def check_edit_request(obj, kind, user):
+    """수정·삭제 요청 대상인지 본다: 관리 화면 기록만, 보류(부적합과 함께만 삭제) 제외, 수정 요청은 잠긴 기록만, view_ 권한."""
+    from django.contrib import admin
+    model = type(obj)
+    if not admin.site.is_registered(model) or model is Hold or kind not in (EditRequest.DELETE, EditRequest.EDIT):
+        raise Http404
+    if kind == EditRequest.EDIT and not is_locked(obj):
+        raise Http404
+    if not user.has_perm(f'{model._meta.app_label}.view_{model._meta.model_name}'):
+        raise PermissionDenied
+
+
+def submit_edit_request(obj, user, kind, reason, password):
+    """사유와 본인 비밀번호로 요청을 남긴다. 시스템 관리자는 요청과 동시에 승인·실행된다.
+    돌려주는 값: (요청, 즉시 승인 실패 문구 또는 None). 예: 다른 기록이 참조 중이라 삭제 불가."""
+    reason = reason.strip() if isinstance(reason, str) else ''
+    if not reason:
+        raise ValidationError('사유를 입력하세요.')
+    if not user.check_password(password if isinstance(password, str) else ''):
+        raise ValidationError('비밀번호가 맞지 않습니다.')
+    req = EditRequest.objects.create(kind=kind, target=obj, object_repr=str(obj)[:200], reason=reason, requested_by=user)
+    if user.is_superuser:
+        try:
+            req.decide(user, True)
+        except ValidationError as e:
+            return req, ' '.join(e.messages)
+    return req, None
 
 
 def _clean_texts(changes, reason):

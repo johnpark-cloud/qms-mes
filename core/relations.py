@@ -100,12 +100,14 @@ def record_url(obj):
 
 def status_of(obj):
     names = {f.name for f in obj._meta.concrete_fields}
+    if 'closed_at' in names:  # 부적합은 처분 승인과 종결이 함께라 종결·진행으로 보인다
+        return '종결' if obj.closed_at else '진행'
     if 'approved_at' in names:
         return '승인됨' if obj.approved_at else '초안'
     if 'result' in names and hasattr(obj, 'get_result_display'):
         return obj.get_result_display() or '미판정'
-    if 'closed_at' in names:
-        return '종결' if obj.closed_at else '진행'
+    if 'released_at' in names:
+        return '해제' if obj.released_at else '보류'
     if 'active' in names and not obj.active:
         return '사용 중지'
     return ''

@@ -21,6 +21,9 @@ class RecordsApiTest(TestCase):
         self.g2 = Gauge.objects.create(number='G-2', name='캘리퍼스', last_calibrated=today, active=False)
         self.qual = Qualification.objects.create(user=self.root, inspection_type='INCOMING', valid_until=today - datetime.timedelta(days=1),
                                                  basis='교육 이수')
+        from core.models import Item, Lot, Nonconformance
+        self.lot = Lot.objects.create(number='L-1', item=Item.objects.create(code='R1', name='양극재', item_type=Item.RAW))
+        Nonconformance.objects.create(lot=self.lot, description='찍힘')  # 보류 자동 생성
         self.client.force_login(self.root)
 
     def test_list_tabs_search_export(self):
@@ -104,3 +107,272 @@ class RecordsApiTest(TestCase):
                 recordspec.value_of(obj, name)  # 오타면 AttributeError
             for c in spec.children:
                 getattr(obj, c.accessor)
+
+
+class RecordsWriteApiTest(TestCase):
+    """Phase 6(B2): 기록 화면에서 수정·승인·수정/삭제 요청 (REC-05·06)."""
+
+    def setUp(self):
+        from qms.models import Document, DocumentRevision, Gauge
+        self.root = User.objects.create_superuser('root', password='pw')
+        self.doc = Document.objects.create(number='QP-01', title='품질 매뉴얼', doc_type='매뉴얼')
+        self.rev = DocumentRevision.objects.create(document=self.doc, file=SimpleUploadedFile('a.pdf', b'x'), change_note='제정')
+        self.g = Gauge.objects.create(number='G-1', name='마이크로미터', last_calibrated=timezone.localdate())
+        self.user = User.objects.create_user('u', password='pw', is_staff=True)
+        self.user.user_permissions.add(*Permission.objects.filter(codename__in=[
+            'view_gauge', 'change_gauge', 'view_documentrevision', 'change_documentrevision']))
+        self.client.force_login(self.user)
+
+    def detail(self, label, pk):
+        return self.client.get(f'/api/records/{label}/{pk}/').json()
+
+    def patch(self, label, pk, values, version=None):
+        if version is None:
+            version = self.detail(label, pk)['version']
+        return self.client.patch(f'/api/records/{label}/{pk}/', {'values': values, 'version': version},
+                                 content_type='application/json')
+
+    def post(self, url, data):
+        return self.client.post(url, data, content_type='application/json')
+
+    def test_detail_describes_edit(self):
+        d = self.detail('qms.gauge', self.g.pk)
+        self.assertTrue(d['can_change'])
+        self.assertFalse(d['locked'])
+        self.assertFalse(d['can_approve'])  # 계측기는 승인 대상이 아니다
+        edit = {e['key']: e for e in d['edit']}
+        self.assertEqual(edit['interval_days']['type'], 'int')
+        self.assertEqual((edit['active']['type'], edit['active']['value']), ('bool', True))
+        self.assertEqual(edit['last_calibrated']['type'], 'date')
+        self.assertEqual(d['requests'], {'edit': False, 'delete': True})
+
+    def test_patch_saves_with_history(self):
+        r = self.patch('qms.gauge', self.g.pk, {'name': '캘리퍼스', 'interval_days': 180, 'active': False})
+        self.assertEqual(r.status_code, 200, r.content)
+        self.g.refresh_from_db()
+        self.assertEqual((self.g.name, self.g.interval_days, self.g.active), ('캘리퍼스', 180, False))
+        self.assertEqual(self.g.history.first().history_user, self.user)
+        self.assertEqual(r.json()['fields'][1]['value'], '캘리퍼스')
+
+    def test_patch_field_errors(self):
+        from qms.models import Gauge
+        Gauge.objects.create(number='G-2', name='x', last_calibrated=timezone.localdate())
+        r = self.patch('qms.gauge', self.g.pk, {'number': 'G-2', 'interval_days': 'abc', 'name': ''})
+        self.assertEqual(r.status_code, 400)
+        self.assertEqual(set(r.json()['fields']), {'number', 'interval_days', 'name'})
+        self.g.refresh_from_db()
+        self.assertEqual(self.g.number, 'G-1')
+
+    def test_patch_rejects_unlisted_and_sign_fields(self):
+        r = self.patch('qms.documentrevision', self.rev.pk, {'approved_at': '2026-01-01T00:00', 'approved_by': self.root.pk})
+        self.assertEqual(r.status_code, 400)
+        self.assertIn('승인 서명', r.json()['fields']['approved_at'][0])
+        r = self.patch('qms.documentrevision', self.rev.pk, {'document': 999})
+        self.assertEqual(r.status_code, 400)
+        self.assertIn('document', r.json()['fields'])
+        self.rev.refresh_from_db()
+        self.assertIsNone(self.rev.approved_at)
+        from qms.models import DocumentRevision
+        DocumentRevision.objects.create(document=self.doc, revision='9', file=SimpleUploadedFile('b.pdf', b'x'), change_note='n')
+        r = self.patch('qms.documentrevision', self.rev.pk, {'revision': '9'})  # 문서·개정 고유 조건
+        self.assertEqual(r.status_code, 400, r.content)
+
+    def test_spec_edit_never_includes_sign_fields(self):
+        for label, spec in recordspec.SPECS.items():
+            self.assertFalse(set(spec.edit) & recordspec.SIGN_FIELDS, label)
+            self.assertTrue(set(spec.edit) <= set(spec.fields), label)
+
+    def test_patch_needs_change_permission(self):
+        u = User.objects.create_user('v', password='pw', is_staff=True)
+        u.user_permissions.add(Permission.objects.get(codename='view_gauge'))
+        self.client.force_login(u)
+        self.assertFalse(self.detail('qms.gauge', self.g.pk)['can_change'])
+        self.assertEqual(self.patch('qms.gauge', self.g.pk, {'name': 'x'}).status_code, 403)
+
+    def test_patch_stale_version_409(self):
+        v = self.detail('qms.gauge', self.g.pk)['version']
+        self.g.name = '다른 사람'
+        self.g.save()
+        self.assertEqual(self.patch('qms.gauge', self.g.pk, {'name': 'x'}, version=v).status_code, 409)
+
+    def test_approve_then_locked(self):
+        url = f'/api/records/qms.documentrevision/{self.rev.pk}/approve/'
+        self.assertEqual(self.post(url, {'password': 'pw'}).status_code, 403)  # 품질팀장만
+        self.client.force_login(self.root)
+        self.assertTrue(self.detail('qms.documentrevision', self.rev.pk)['can_approve'])
+        self.assertEqual(self.post(url, {'password': 'no'}).status_code, 400)
+        self.assertEqual(self.post(url, {'password': 'pw'}).status_code, 200)
+        self.rev.refresh_from_db()
+        self.assertEqual(self.rev.approved_by, self.root)
+        self.assertEqual(self.post(url, {'password': 'pw'}).status_code, 400)  # 이미 승인
+        self.assertEqual(self.post(f'/api/records/qms.gauge/{self.g.pk}/approve/', {'password': 'pw'}).status_code, 404)
+        # 승인 후 잠금: 일반 사용자는 화면에서도 서버에서도 못 고친다
+        self.client.force_login(self.user)
+        d = self.detail('qms.documentrevision', self.rev.pk)
+        self.assertTrue(d['locked'])
+        self.assertFalse(d['can_change'])
+        self.assertTrue(d['requests']['edit'])
+        self.assertEqual(self.patch('qms.documentrevision', self.rev.pk, {'change_note': '몰래'}).status_code, 409)
+        self.rev.refresh_from_db()
+        self.assertEqual(self.rev.change_note, '제정')
+
+    def test_edit_request_then_unlock(self):
+        from core.models import EditRequest
+        from core.rules import approve
+        approve(self.rev, self.root, 'pw')
+        url = f'/api/records/qms.documentrevision/{self.rev.pk}/request/'
+        self.assertEqual(self.post(url, {'kind': 'EDIT', 'reason': '', 'password': 'pw'}).status_code, 400)
+        self.assertEqual(self.post(url, {'kind': 'EDIT', 'reason': '오타', 'password': 'no'}).status_code, 400)
+        r = self.post(url, {'kind': 'EDIT', 'reason': '오타', 'password': 'pw'})
+        self.assertEqual(r.status_code, 201, r.content)
+        req = EditRequest.objects.get()
+        self.assertEqual((req.status, req.requested_by), (EditRequest.PENDING, self.user))
+        req.decide(self.root, True)
+        self.assertTrue(self.detail('qms.documentrevision', self.rev.pk)['can_change'])
+        self.assertEqual(self.patch('qms.documentrevision', self.rev.pk, {'change_note': '제정(오타 수정)'}).status_code, 200)
+        req.refresh_from_db()
+        self.assertEqual(req.status, EditRequest.USED)
+        self.assertEqual(self.patch('qms.documentrevision', self.rev.pk, {'change_note': '또'}).status_code, 409)
+
+    def test_delete_request(self):
+        from core.models import EditRequest
+        from qms.models import Gauge
+        url = f'/api/records/qms.gauge/{self.g.pk}/request/'
+        self.assertEqual(self.post(url, {'kind': 'EDIT', 'reason': 'x', 'password': 'pw'}).status_code, 404)  # 수정 요청은 잠긴 기록만
+        r = self.post(url, {'kind': 'DELETE', 'reason': '중복 등록', 'password': 'pw'})
+        self.assertEqual(r.status_code, 201)
+        self.assertFalse(r.json()['deleted'])
+        self.assertEqual(EditRequest.objects.get().kind, EditRequest.DELETE)
+        # 시스템 관리자는 요청과 동시에 실행된다
+        g2 = Gauge.objects.create(number='G-9', name='y', last_calibrated=timezone.localdate())
+        self.client.force_login(self.root)
+        r = self.post(f'/api/records/qms.gauge/{g2.pk}/request/', {'kind': 'DELETE', 'reason': '중복', 'password': 'pw'})
+        self.assertEqual(r.status_code, 201)
+        self.assertTrue(r.json()['deleted'])
+        self.assertFalse(Gauge.objects.filter(pk=g2.pk).exists())
+
+
+class RecordsNcApiTest(TestCase):
+    """Phase 7(B3): LOT·부적합·보류 기록 화면. 처분은 MRB 서명 API로만, 보류는 읽기 전용 (REC-08)."""
+
+    def setUp(self):
+        from django.contrib.auth.models import Group
+        from core.models import Item, Lot, LotLink, Nonconformance
+        self.root = User.objects.create_superuser('root', password='pw')
+        raw = Item.objects.create(code='R1', name='양극재', item_type=Item.RAW)
+        fg = Item.objects.create(code='F1', name='셀', item_type=Item.FINISHED)
+        self.raw = Lot.objects.create(number='RAW-1', item=raw, qty=5)
+        self.fg = Lot.objects.create(number='FG-1', item=fg)
+        LotLink.objects.create(parent=self.raw, child=self.fg)
+        self.nc = Nonconformance.objects.create(lot=self.raw, origin='INCOMING', description='찍힘', defect_type='외관',
+                                                sorting_result='전수 선별', contained_qty=5)
+        self.hold = self.nc.holds.get(lot=self.raw)
+        perms = Permission.objects.filter(codename__in=['view_lot', 'view_hold', 'view_nonconformance', 'change_nonconformance',
+                                                        'change_hold'])
+        self.boss = User.objects.create_user('boss', password='pw', is_staff=True)
+        self.boss.groups.add(Group.objects.get(name='품질팀장'))
+        self.boss.user_permissions.add(*perms)
+        self.eng = User.objects.create_user('eng', password='pw', is_staff=True)
+        self.eng.user_permissions.add(*perms)
+        self.client.force_login(self.boss)
+
+    def get(self, label, pk):
+        return self.client.get(f'/api/records/{label}/{pk}/')
+
+    def dispose(self, data, nc=None):
+        return self.client.post(f'/api/records/core.nonconformance/{(nc or self.nc).pk}/dispose/', data,
+                                content_type='application/json')
+
+    def test_links_open_new_record_screen(self):
+        self.assertEqual(record_url(self.raw), f'/app/r/core/lot/{self.raw.pk}')
+        self.assertEqual(record_url(self.nc), f'/app/r/core/nonconformance/{self.nc.pk}')
+        self.assertEqual(record_url(self.hold), f'/app/r/core/hold/{self.hold.pk}')
+        d = self.get('core.lot', self.raw.pk).json()
+        kids = {c['key']: c for c in d['children']}
+        self.assertEqual(kids['nonconformances']['rows'][0]['url'], f'/app/r/core/nonconformance/{self.nc.pk}')
+        self.assertEqual(len(kids['holds']['rows']), 1)
+        d = self.client.get('/api/records/core.lot/?tab=hold').json()
+        self.assertEqual(sorted(r['cells']['number'] for r in d['results']), ['FG-1', 'RAW-1'])  # 하위 계보도 보류
+
+    def test_hold_is_read_only(self):
+        for user in (self.boss, self.root):
+            self.client.force_login(user)
+            d = self.get('core.hold', self.hold.pk).json()
+            self.assertFalse(d['can_change'])
+            self.assertEqual(d['requests'], {'edit': False, 'delete': False})
+            for values in ({}, {'released_at': '2026-01-01T00:00'}):
+                r = self.client.patch(f'/api/records/core.hold/{self.hold.pk}/', {'values': values, 'version': d['version']},
+                                      content_type='application/json')
+                self.assertEqual(r.status_code, 403, r.content)
+            r = self.client.post(f'/api/records/core.hold/{self.hold.pk}/request/',
+                                 {'kind': 'DELETE', 'reason': 'x', 'password': 'pw'}, content_type='application/json')
+            self.assertEqual(r.status_code, 404)
+        self.hold.refresh_from_db()
+        self.assertIsNone(self.hold.released_at)
+
+    def test_patch_cannot_dispose(self):
+        d = self.get('core.nonconformance', self.nc.pk).json()
+        self.assertTrue(d['can_change'])
+        self.assertTrue(d['can_dispose'])
+        self.assertEqual([e['key'] for e in d['dispose']], ['disposition', 'customer_approval_ref', 'cost'])
+        for key, value in (('disposition', 'SCRAP'), ('customer_approval_ref', 'A-1'), ('approved_by', self.boss.pk),
+                           ('closed_at', '2026-01-01T00:00')):
+            r = self.client.patch(f'/api/records/core.nonconformance/{self.nc.pk}/', {'values': {key: value}, 'version': d['version']},
+                                  content_type='application/json')
+            self.assertEqual(r.status_code, 400, key)
+            self.assertEqual(r.json()['fields'][key], ['승인 서명으로만 바꿀 수 있습니다.'])
+        r = self.client.patch(f'/api/records/core.nonconformance/{self.nc.pk}/', {'values': {'description': '찍힘 2곳'},
+                              'version': d['version']}, content_type='application/json')
+        self.assertEqual(r.status_code, 200, r.content)
+        self.nc.refresh_from_db()
+        self.assertEqual((self.nc.description, self.nc.disposition), ('찍힘 2곳', ''))
+
+    def test_dispose_rules_same_messages(self):
+        def detail_of(r):
+            self.assertEqual(r.status_code, 400, r.content)
+            return r.json()['detail']
+        self.assertEqual(detail_of(self.dispose({'disposition': 'SCRAP', 'password': 'bad'})), 'MRB 승인 비밀번호가 맞지 않습니다.')
+        self.assertEqual(detail_of(self.dispose({'disposition': '', 'password': 'pw'})), '처분을 선택하세요.')
+        self.assertEqual(detail_of(self.dispose({'disposition': 'CONCESSION', 'password': 'pw'})), '특채는 고객 승인 문서번호가 필요합니다.')
+        self.assertEqual(detail_of(self.dispose({'disposition': 'REWORK', 'password': 'pw'})),
+                         '재작업·수리는 부적합 발견 이후 재검사 합격 기록이 있어야 보류를 해제합니다.')
+        self.assertIn('바꿀 수 없는 칸', detail_of(self.dispose({'disposition': 'SCRAP', 'lot': self.fg.pk, 'password': 'pw'})))
+        self.client.force_login(self.eng)  # 품질팀장이 아니면 처분 불가 (모델 clean 문구)
+        self.assertFalse(self.get('core.nonconformance', self.nc.pk).json()['can_dispose'])
+        self.assertEqual(detail_of(self.dispose({'disposition': 'SCRAP', 'password': 'pw'})), '처분에는 품질팀장(MRB 승인자)이 필요합니다.')
+        self.nc.refresh_from_db()
+        self.assertEqual(self.nc.disposition, '')
+
+    def test_dispose_scrap_keeps_hold_concession_releases(self):
+        from core.models import Nonconformance
+        r = self.dispose({'disposition': 'SCRAP', 'cost': '1000', 'password': 'pw'})
+        self.assertEqual(r.status_code, 200, r.content)
+        d = r.json()
+        self.assertEqual((d['status'], d['can_dispose'], d['can_change'], d['locked']), ('종결', False, False, True))
+        self.assertTrue(self.raw.on_hold and self.fg.on_hold)  # 폐기는 보류 유지
+        self.assertEqual(self.dispose({'disposition': 'SCRAP', 'password': 'pw'}).status_code, 409)  # 종결 뒤 재처분 불가
+        nc2 = Nonconformance.objects.create(lot=self.fg, origin='INCOMING', description='x', defect_type='외관',
+                                            sorting_result='선별', contained_qty=1)
+        r = self.dispose({'disposition': 'CONCESSION', 'customer_approval_ref': 'CUS-7', 'password': 'pw'}, nc2)
+        self.assertEqual(r.status_code, 200, r.content)
+        self.assertFalse(nc2.holds.filter(released_at__isnull=True).exists())
+        self.nc.refresh_from_db()
+        self.assertEqual((self.nc.approved_by, self.nc.cost), (self.boss, 1000))
+
+    def test_dispose_missing_fields(self):
+        from core.models import Nonconformance
+        nc = Nonconformance.objects.create(lot=self.fg, description='x')  # 공정 내부: 불량유형·선별·격리·공정 비어 있음
+        r = self.dispose({'disposition': 'SCRAP', 'password': 'pw'}, nc)
+        self.assertEqual(r.status_code, 400)
+        self.assertIn('보완 필요:', r.json()['detail'])
+
+    def test_dispose_needs_change_permission_and_nc(self):
+        u = User.objects.create_user('v', password='pw', is_staff=True)
+        u.user_permissions.add(Permission.objects.get(codename='view_nonconformance'))
+        self.client.force_login(u)
+        self.assertFalse(self.get('core.nonconformance', self.nc.pk).json()['can_dispose'])
+        self.assertEqual(self.dispose({'disposition': 'SCRAP', 'password': 'pw'}).status_code, 403)
+        self.client.force_login(self.root)
+        r = self.client.post(f'/api/records/core.lot/{self.raw.pk}/dispose/', {'disposition': 'SCRAP', 'password': 'pw'},
+                             content_type='application/json')
+        self.assertEqual(r.status_code, 404)

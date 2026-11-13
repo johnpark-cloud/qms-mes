@@ -649,6 +649,42 @@ try:
             ok, page_err = False, str(e)[:80]
         check('기록 화면: 계측기 목록 → 상세·변경 이력', ok, page.url if ok else page_err)
 
+        # REC-05: 기록 화면에서 수정 → 저장 → 칸에 반영·변경 이력
+        try:
+            page.get_by_role('button', name='수정').click()
+            name = page.locator('#name')
+            name.fill('E2E 마이크로미터 2')
+            page.get_by_role('button', name='저장').click()
+            page.locator('.record-props', has_text='E2E 마이크로미터 2').wait_for(timeout=5000)
+            page.get_by_role('tab', name='변경 이력').click()
+            page.locator('.record-side li', has_text='· 변경').first.wait_for(timeout=5000)
+            ok = True
+        except Exception as e:
+            ok, page_err = False, str(e)[:80]
+        check('기록 화면: 수정 → 저장', ok, page.url if ok else page_err)
+
+        # REC-08: 부적합 기록 화면에서 MRB 처분(비밀번호) → 종결, 폐기는 보류 유지
+        manage('shell', '-c', (
+            "from core.models import Item, Lot, Nonconformance;"
+            "i=Item.objects.create(code='E2E-NC', name='E2E 부적합 자재', item_type='RAW');"
+            "Nonconformance.objects.create(lot=Lot.objects.create(number='E2E-NC-1', item=i), origin='INCOMING',"
+            " description='E2E 찍힘', defect_type='외관', sorting_result='전수', contained_qty=1)"))
+        try:
+            page.goto('/app/r/core/nonconformance')
+            page.locator('.ant-table-tbody tr', has_text='E2E-NC-1').click()
+            page.wait_for_url('**/app/r/core/nonconformance/*')
+            page.get_by_role('button', name='처분').click()
+            page.locator('.ant-modal .ant-select').first.click()
+            page.locator('.ant-select-item-option', has_text='폐기').click()
+            page.locator('.ant-modal input[type=password]').fill('e2e-pass-123')
+            page.get_by_role('button', name='처분 승인').click()
+            page.locator('.record-props', has_text='폐기').wait_for(timeout=5000)
+            page.locator('.ant-table-tbody tr', has_text='E2E-NC-1').first.wait_for(timeout=5000)  # 보류 표
+            ok, page_err = page.get_by_role('button', name='처분', exact=True).count() == 0, '처분 버튼이 남음'
+        except Exception as e:
+            ok, page_err = False, str(e)[:80]
+        check('기록 화면: 부적합 MRB 처분', ok, page.url if ok else page_err)
+
         # 세션이 끊기면 API를 부르는 화면이 로그인으로 보내야 한다 (client.ts 의 403 처리)
         page.context.clear_cookies()
         page.goto('/app/overview')
