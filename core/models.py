@@ -326,8 +326,9 @@ class Lot(models.Model):
         return self._walk('parent_links', 'parent')
 
     def assert_usable(self, action):
-        if self.on_hold:
-            raise ValidationError(f'{self.number}은(는) 보류 중이라 {action}할 수 없습니다.')
+        causes = sorted({h.nonconformance.number for h in self.holds.filter(released_at__isnull=True).select_related('nonconformance')})
+        if causes:
+            raise ValidationError(f"[부적합] {', '.join(causes)}: {self.number}은(는) 보류 중이라 {action}할 수 없습니다.")
 
 
 def lot_changed(obj, field):
@@ -603,7 +604,7 @@ class Shipment(models.Model):
             # 4M 변경 후 초품 합격 전에는 출하 금지 (qms 앱이 정의, core는 qms를 import하지 않는다)
             waiting = apps.get_model('qms', 'ChangeRequest').awaiting_first_article(self.lot.item)
             if waiting:
-                raise ValidationError(f'4M 변경 {", ".join(c.number for c in waiting)}의 초품 검사 합격 전이라 출하할 수 없습니다.')
+                raise ValidationError(f'[4M 변경] {", ".join(c.number for c in waiting)}: 초품 검사 합격 전이라 출하할 수 없습니다.')
 
     def save(self, *args, **kwargs):
         self.clean()
@@ -945,7 +946,7 @@ class ModuleSwitch(models.Model):
         return f"{self.get_key_display()} — {'켜짐' if self.enabled else '꺼짐'}"
 
     def clean(self):
-        from core.modules import MODULES, active_set
+        from core.modules import MODULES, active_set, open_records
         if self.key not in MODULES:
             raise ValidationError({'key': '끌 수 있는 모듈이 아닙니다. 기본 플랫폼은 끌 수 없습니다.'})
         on = active_set() - {self.key} | ({self.key} if self.enabled else set())
@@ -957,6 +958,9 @@ class ModuleSwitch(models.Model):
             users = [m.name for k, m in MODULES.items() if self.key in m.requires and k in on]
             if users:
                 raise ValidationError(f"이 모듈을 쓰는 켜진 모듈이 있어 끌 수 없습니다: {', '.join(users)}")
+            if self.key in active_set() and (rows := open_records(self.key)):
+                shown = ', '.join(str(r) for r in rows[:20]) + (f' 외 {len(rows) - 20}건' if len(rows) > 20 else '')
+                raise ValidationError(f'열린 기록을 먼저 닫아야 끌 수 있습니다: {shown}')
 
     def save(self, *args, **kwargs):
         self.full_clean()  # 관리 화면 밖(셸·관리 명령)에서도 requires를 지킨다

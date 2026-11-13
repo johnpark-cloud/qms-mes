@@ -110,7 +110,7 @@ class GateTest(TestCase):
         self.assertEqual((r.status_code, r.json()['code']), (404, 'module_inactive'))
         self.as_admin()
         self.assertEqual(self.client.get('/api/qms/specs/').status_code, 200)
-        r = self.client.post('/api/qms/inspect/receive/', {}, content_type='application/json')
+        r = self.client.post('/api/qms/specs/', {}, content_type='application/json')  # 검사 입력은 종결 허용(A3)이라 기준서로 본다
         self.assertEqual((r.status_code, r.json()['code']), (403, 'module_inactive'))
 
     def test_admin_screens_and_label_routes(self):
@@ -160,3 +160,77 @@ class GateTest(TestCase):
         sidebar = self.client.get('/todo/').content.decode().partition('id="qms-sidebar"')[2].partition('</nav>')[0]
         self.assertIn('/admin/core/lot/', sidebar)
         self.assertNotIn('/admin/qms/capa/', sidebar)  # 위젯·할 일 목록 필터는 A4
+
+
+class OffSafetyTest(TestCase):
+    """A3: 끄기 전 열린 기록 검사(MOD-06), 시스템 관리자 종결 허용(MOD-07), 인터록 원인 표시(MOD-08)."""
+
+    def setUp(self):
+        self.admin = User.objects.create_superuser('root', password='pw')
+        self.item = Item.objects.create(code='C1', name='셀', item_type=Item.FINISHED)
+
+    def capa(self, **kw):
+        return apps.get_model('qms', 'Capa').objects.create(title='재발 방지', source='OTHER', action='조치', owner=self.admin,
+                                                            due_date=datetime.date.today(), **kw)
+
+    def change(self):
+        cr = apps.get_model('qms', 'ChangeRequest').objects.create(
+            number='CR-1', item=self.item, category='MATERIAL', description='원료 변경', customer_notice=False,
+            effective_at=datetime.datetime(2020, 1, 1, tzinfo=datetime.UTC))
+        type(cr).objects.filter(pk=cr.pk).update(approved_at=datetime.datetime(2020, 1, 1, tzinfo=datetime.UTC), approved_by=self.admin)
+        return cr
+
+    def test_open_records_block_disable(self):
+        capa = self.capa()
+        switch_off('qms_audit')
+        with self.assertRaisesMessage(ValidationError, capa.number):
+            switch_off('qms_capa')
+        apps.get_model('qms', 'Capa').objects.filter(pk=capa.pk).update(closed_at=datetime.date.today())
+        switch_off('qms_capa')
+        self.assertFalse(modules.active('qms_capa'))
+
+    def test_open_4m_and_work_order_block_disable(self):
+        self.change()
+        with self.assertRaisesMessage(ValidationError, 'CR-1'):
+            switch_off('qms_change')
+        apps.get_model('core', 'WorkOrder').objects.create(number='WO-1', item=self.item, planned_qty=1)
+        with self.assertRaisesMessage(ValidationError, 'WO-1'):
+            switch_off('mes')
+
+    def test_open_list_shows_in_admin_form(self):
+        self.capa()
+        switch_off('qms_audit')
+        self.client.force_login(self.admin)
+        r = self.client.post('/admin/core/moduleswitch/add/', {'key': 'qms_capa'})
+        self.assertContains(r, '열린 기록')
+
+    def test_superuser_closing_whitelist(self):
+        capa = self.capa()
+        ModuleSwitch.objects.create(key='qms_audit', enabled=False)
+        ModuleSwitch.objects.filter(pk=ModuleSwitch.objects.create(key='qms_kpi').pk).update(key='qms_capa', enabled=False)  # 검사 우회: 이미 꺼진 상태
+        self.assertFalse(modules.active('qms_capa'))
+        self.client.force_login(self.admin)
+        r = self.client.post(f'/admin/qms/capa/{capa.pk}/change/', {})
+        self.assertNotEqual(r.status_code, 403)  # 종결 화면은 열린다(빈 값이라 폼 오류)
+        self.assertEqual(self.client.post('/admin/qms/capa/add/', {}).status_code, 403)
+        self.assertEqual(self.client.post(f'/admin/qms/capa/{capa.pk}/delete/', {}).status_code, 403)
+        user = User.objects.create_user('lead', password='pw', is_staff=True)
+        user.groups.add(Group.objects.get(name='품질팀장'))
+        self.client.force_login(user)
+        self.assertEqual(self.client.post(f'/admin/qms/capa/{capa.pk}/change/', {}).status_code, 404)
+
+    def test_superuser_can_judge_inspection_when_off(self):
+        switch_off('qms_change', 'qms_inspection')
+        self.client.force_login(self.admin)
+        r = self.client.post('/api/qms/inspect/submit/', {}, content_type='application/json')
+        self.assertNotEqual(r.status_code, 403)
+        self.assertEqual(self.client.post('/api/qms/specs/', {}, content_type='application/json').status_code, 403)
+
+    def test_interlock_messages_name_cause(self):
+        lot = Lot.objects.create(number='L-1', item=self.item)
+        nc = Nonconformance.objects.create(lot=lot, description='이물')
+        with self.assertRaisesMessage(ValidationError, f'[부적합] {nc.number}'):
+            Shipment.objects.create(lot=lot, customer='A사', qty=1)
+        self.change()
+        with self.assertRaisesMessage(ValidationError, '[4M 변경] CR-1'):
+            Shipment.objects.create(lot=Lot.objects.create(number='L-2', item=self.item), customer='A사', qty=1)

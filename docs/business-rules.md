@@ -133,6 +133,9 @@
 | 모듈은 시스템 관리자만 켜고 끈다(명시 권한이 있어도 일반 사용자는 불가). 기본 플랫폼(홈·LOT·부적합·보류·기준정보·시스템·개인)은 끌 수 없고, 스위치 행은 지우지 않는다. | `core/admin.py` `ModuleSwitchAdmin`, `core/models.py` `ModuleSwitch.clean` |
 | 의존 모듈: 4M 변경은 검사, 내부심사는 CAPA가 켜져 있어야 켠다. 켜진 의존 모듈이 있으면 그 대상은 끌 수 없다. | `core/modules.py` `requires`, `ModuleSwitch.clean` |
 | 꺼진 모듈의 화면·API는 일반 사용자에게 404(API는 `code: module_inactive`), 시스템 관리자는 GET만 되고 쓰기는 403이다. 첨부·메모·관련 기록·인쇄·자동완성도 대상 기록의 모듈로 판정한다. | `core/middleware.py` `ModuleGate`, `core/modules.py` `check_label` |
+| 열린 기록이 있는 모듈은 끌 수 없고 기록 번호를 보인다: 완료 안 된 작업지시, 미판정 검사, 초품 합격 전 4M(승인된 것), 미종결 CAPA·클레임·SCAR·내부심사, 미승인 PPAP. | `core/modules.py` `open_records`, `ModuleSwitch.clean` |
+| 꺼진 모듈에서도 시스템 관리자는 열린 기록을 닫을 수 있다: CAPA·클레임·SCAR·내부심사(지적) 관리 화면 변경 폼, 검사 입력(4M 초품 판정·재작업 재검사). 그 밖의 쓰기(추가·삭제 포함)는 403이다. 초품 수동 해제 규칙은 없다. | `core/modules.py` `CLOSING`, `blocked` |
+| 인터록 거부 메시지 앞에 원인 모듈과 기록 번호를 붙인다: `[부적합] NC-…`, `[4M 변경] CR-…`. | `core/models.py` `Lot.assert_usable`, `Shipment.clean` |
 | 모듈 설정은 업무 규칙을 바꾸지 않는다. 모든 모듈을 꺼도 LOT 보류 인터록은 동작한다. | `core/tests_modules.py` `test_hold_interlock_with_all_modules_off` |
 
 ## 11. 이력

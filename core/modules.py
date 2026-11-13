@@ -59,6 +59,16 @@ BASE_PATHS = (
     'api/qms/overview/', 'api/qms/todo/', 'api/qms/dashboard/', 'api/qms/memos/',
 )
 
+# 꺼진 모듈에서도 시스템 관리자가 열린 기록을 닫을 수 있는 쓰기 주소(MOD-07). 관리 화면은 변경 폼만, 추가·삭제는 열지 않는다.
+# 4M 초품은 검사 판정으로만 풀리므로 검사 입력을 연다(미결 #3: 수동 해제 규칙은 만들지 않는다).
+CLOSING = {
+    'qms_capa': ('admin/qms/capa/',),
+    'qms_claim': ('admin/qms/customerclaim/',),
+    'qms_supplier': ('admin/qms/scar/',),
+    'qms_audit': ('admin/qms/internalaudit/', 'admin/qms/auditfinding/'),
+    'qms_inspection': ('inspect/', 'api/qms/inspect/'),
+}
+
 _MODEL = {label: BASE for label in BASE_MODELS} | {label: key for key, m in MODULES.items() for label in m.models}
 
 
@@ -102,6 +112,29 @@ def module_of_request(request, view_kwargs):
     return module_of_path(path) or BASE  # 등록되지 않은 주소는 전수 테스트가 잡는다
 
 
+def closing_allowed(key, path):
+    return any(path.startswith(p) and (not p.startswith('admin/') or path.endswith('/change/')) for p in CLOSING.get(key, ()))
+
+
+def open_records(key):
+    """끄면 닫을 길이 사라지는 열린 기록(MOD-06). 이 목록이 비어야 끌 수 있다."""
+    from django.apps import apps
+    model = lambda label: apps.get_model(*label.split('.'))
+    if key == 'mes':
+        wo = model('core.workorder')
+        return list(wo.objects.exclude(status=wo.DONE))
+    if key == 'qms_inspection':
+        return [f'{i.lot.number} 미판정 검사' for i in model('qms.inspection').objects.filter(result='').select_related('lot')]
+    if key == 'qms_change':  # 승인됐는데 초품 합격이 아직 없는 4M (적용 일시 전 것도 곧 출하를 막는다)
+        return [c for c in model('qms.changerequest').objects.filter(approved_at__isnull=False) if not c.first_article]
+    found = {'qms_capa': ('qms.capa', 'closed_at'), 'qms_claim': ('qms.customerclaim', 'closed_at'),
+             'qms_supplier': ('qms.scar', 'closed_at'), 'qms_audit': ('qms.internalaudit', 'closed_at'),
+             'qms_ppap': ('qms.ppapsubmission', 'approved_at')}.get(key)
+    if not found:
+        return []
+    return list(model(found[0]).objects.filter(**{f'{found[1]}__isnull': True}))
+
+
 def active_set():
     """켜진 모듈 키 + BASE. 행이 없으면 켜짐. 캐시하지 않는다(요청마다 한 쿼리)."""
     from core.models import ModuleSwitch
@@ -114,12 +147,14 @@ def active(key):
 
 
 def blocked(request, key, active_keys=None):
-    """꺼진 모듈이면 404(일반 사용자) 또는 403(시스템 관리자의 쓰기). 열려 있으면 None."""
+    """꺼진 모듈이면 404(일반 사용자) 또는 403(시스템 관리자의 종결 외 쓰기). 열려 있으면 None."""
     if key == BASE or key in (active_keys if active_keys is not None else active_set()):
         return None
-    if request.user.is_superuser and request.method in SAFE_METHODS:
+    if not request.user.is_superuser:
+        return 404
+    if request.method in SAFE_METHODS or closing_allowed(key, request.path_info.lstrip('/')):
         return None
-    return 403 if request.user.is_superuser else 404
+    return 403
 
 
 def check_label(request, label):
