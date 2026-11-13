@@ -1,19 +1,19 @@
 ---
 gsd_state_version: "1.0"
-current_phase: 8
-current_phase_name: CAPA·클레임·SCAR·4M 변경
+current_phase: 9
+current_phase_name: 내부심사·체크리스트·심사 항목·PPAP
 status: planning
-stopped_at: Phase 7 complete
+stopped_at: Phase 8 complete
 last_updated: "2026-11-13T00:00:00.000Z"
 last_activity: 2026-11-13
-last_activity_desc: Phase 7(B3) 구현·검증 완료
+last_activity_desc: Phase 8(B4) 구현·검증 완료
 state_head: fb4d3be6d0178892e74247aff4858b54bfaafd18
 progress:
   total_phases: 10
-  completed_phases: 7
+  completed_phases: 8
   total_plans: 0
   completed_plans: 0
-  percent: 70
+  percent: 80
 ---
 
 # Project State
@@ -23,16 +23,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-11-12)
 
 **Core value:** 부적합·인터록 규칙이 어떤 화면 변경이나 모듈 설정에서도 약해지지 않고, 기록이 이력과 함께 보존된다.
-**Current focus:** Phase 8 (B4) — CAPA·클레임·SCAR·4M 변경 새 기록 화면
+**Current focus:** Phase 9 (B5) — 내부심사·체크리스트·심사 항목·PPAP 새 기록 화면
 
 ## Current Position
 
-Phase: 8 of 10 (B4)
+Phase: 9 of 10 (B5)
 Plan: 0 of TBD in current phase
 Status: Ready
-Last activity: 2026-11-13 — Phase 7(B3) 완료: LOT·부적합·보류 기록 화면. 부적합 처분은 MRB 서명 API(rules.dispose_nc, 관리 화면과 같은 규칙), 처분 칸은 SIGN_FIELDS, 보류는 읽기 전용(PATCH 403)
+Last activity: 2026-11-13 — Phase 8(B4) 완료: CAPA·클레임·클레임 설정·SCAR·4M 변경 기록 화면. 종결 API(rules.close_record, 모델 clean 규칙), 서버 links(LOT 추적·CAPA 만들기), 기록별 서명 칸(Spec.sign), 꺼진 모듈 종결 허용 확장
 
-Progress: [███████░░░] 70%
+Progress: [████████░░] 80%
 
 ## Performance Metrics
 
