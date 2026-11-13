@@ -5,6 +5,15 @@
   --app-added-bg: #e8f5ec;
   --app-removed: #aa0808;
   --app-error: #aa0808;
+  --app-label: #475e75;
+  --app-positive: #256f3a;
+  --app-negative: #aa0808;
+  --app-critical: #a33f00;
+  --app-neutral: #475e75;
+  --app-positive-bg: #f5fae5;
+  --app-negative-bg: #ffeaf4;
+  --app-critical-bg: #fff8d6;
+  --app-neutral-bg: #f5f6f7;
 }
 @media (prefers-color-scheme: dark) {
   :root {
@@ -13,16 +22,48 @@
     --app-added-bg: #16301f;
     --app-removed: #ff8a8a;
     --app-error: #ff8a8a;
+    --app-label: #a9b4be;
+    --app-positive: #6bd28c;
+    --app-negative: #ff8a8a;
+    --app-critical: #ffab52;
+    --app-neutral: #a9b4be;
+    --app-positive-bg: #18301f;
+    --app-negative-bg: #3a1414;
+    --app-critical-bg: #36260d;
+    --app-neutral-bg: #1d232a;
   }
 }
 .page-title { font-size: 24px; font-weight: 600; margin: 0 0 16px; }
 .prop-grid { display: grid; grid-template-columns: minmax(120px, 200px) 1fr; gap: 8px 16px; font-size: 14px; }
 .prop-grid > dt { opacity: 0.7; margin: 0; }
 .prop-grid > dd { margin: 0; }
-/* 기록 화면 머리 정보: 이름 위·값 아래 카드를 폭에 맞춰 여러 칸으로 채운다. */
-.prop-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px 24px; margin: 0 0 20px; padding: 12px 16px; border: 1px solid var(--app-border); border-radius: 8px; font-size: 14px; }
-.prop-cards dt { opacity: 0.7; font-size: 12px; margin: 0 0 2px; }
-.prop-cards dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
+/* 기록 화면(RecordPage): 머리 띠 → 기본정보 4열 → 본문 + 오른쪽 열. 규칙은 DESIGN.md 「기록 화면 규칙」. */
+.record { padding-bottom: 72px; }
+.record-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; padding-bottom: 12px; margin-bottom: 16px; border-bottom: 1px solid var(--app-border); }
+.record-head .page-title { margin: 0; }
+.record-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-left: auto; }
+.record-body { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 24px; align-items: start; }
+.record-main, .record-side { min-width: 0; }
+.record-props { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px 24px; margin: 0 0 20px; }
+.record-props dt { color: var(--app-label); font-size: 13px; margin: 0 0 2px; }
+.record-props dd { margin: 0; font-size: 15px; min-width: 0; overflow-wrap: anywhere; }
+@media (max-width: 960px) { .record-body { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 767px) { .record-props { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+/* 판정 띠: 색과 글자를 함께 쓴다(색만으로 구분하지 않는다). */
+.verdict { font-size: 28px; font-weight: 500; line-height: 1.2; padding: 2px 12px; border-radius: 6px; }
+.verdict-pass { color: var(--app-positive); background: var(--app-positive-bg); }
+.verdict-fail { color: var(--app-negative); background: var(--app-negative-bg); }
+.verdict-none { color: var(--app-neutral); background: var(--app-neutral-bg); }
+.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.num-quiet { color: var(--app-label); }
+.cc-tag { margin-left: 6px; font-size: 12px; color: var(--app-critical); }
+.text-pass { color: var(--app-positive); }
+.text-fail { color: var(--app-negative); }
+/* 위치 막대: 하한~상한 사이 측정값 자리. 끝 10%는 주의 색, 한계 밖은 오류 색. */
+.pos-bar { position: relative; width: 80px; height: 8px; border-radius: 4px; background: var(--app-neutral-bg); border: 1px solid var(--app-border); }
+.pos-dot { position: absolute; top: 50%; width: 10px; height: 10px; border-radius: 50%; transform: translate(-50%, -50%); background: var(--app-positive); }
+.pos-warn { background: var(--app-critical); }
+.pos-bad { background: var(--app-negative); }
 /* LOT 흐름도: 상자와 화살표를 가로로 잇고, 좁으면 줄을 바꾼다. */
 .flow { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 .flow-col { display: grid; gap: 8px; align-content: start; align-self: flex-start; }

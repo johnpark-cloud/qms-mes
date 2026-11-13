@@ -360,6 +360,25 @@ try:
             ok, why = False, str(e)[:80]
         check('검사 목록 요약·메뉴 강조', ok, why)
 
+        try:  # 검사 기록 머리 띠: 판정 글자, 측정값 표 머리글, 「⋯」 메뉴에 삭제 1번만
+            page.goto(f'/app/inspections/{insp_id}')
+            verdict = page.locator('.verdict')
+            verdict.wait_for(timeout=5000)
+            heads = page.locator('.record-main thead th').all_inner_texts()
+            want = ['항목', '하한', '기준(중앙)', '상한', '단위', '측정값', '위치', '판정', '계측기']
+            page.get_by_role('button', name='더보기').click()
+            menu = page.locator('.ant-dropdown-menu')
+            menu.wait_for(timeout=5000)
+            deletes = menu.get_by_role('menuitem', name='삭제').count()  # 「삭제」와 「삭제 요청」 모두 잡힌다
+            outside = page.get_by_role('button', name='삭제').count()
+            primary = page.get_by_role('button', name='인쇄/PDF').count()
+            page.keyboard.press('Escape')
+            ok = verdict.inner_text() in ('합격', '불합격', '미판정') and heads == want and deletes == 1 and outside == 0 and primary == 1
+            why = f'판정 {verdict.inner_text()!r}, 머리글 {heads}, 메뉴 삭제 {deletes}, 버튼 삭제 {outside}, 인쇄 {primary}'
+        except Exception as e:
+            ok, why = False, str(e)[:80]
+        check('검사 기록: 판정 띠·측정값 표·⋯ 메뉴', ok, why)
+
         try:  # 검사 기록 오른쪽 '연결' 탭: 이 검사가 가리키는 LOT 묶음
             page.goto(f'/app/inspections/{insp_id}')
             page.get_by_role('tab', name='연결').click()
@@ -566,7 +585,8 @@ try:
             page.get_by_role('button', name='전체 화면으로').click()
             page.wait_for_url('**/app/plans/*')
             plan_id = page.url.rstrip('/').split('/')[-1]
-            page.get_by_role('button', name='검사기준 초안 만들기').click()
+            page.get_by_role('button', name='더보기').click()  # 주요 버튼 밖의 동작은 「⋯」 메뉴에 있다
+            page.get_by_role('menuitem', name='검사기준 초안 만들기').click()
             page.locator('.ant-alert a[href*="/app/specs/"]').first.wait_for(timeout=5000)
             links = page.locator('.ant-alert a[href*="/app/specs/"]').count()
             page.get_by_role('button', name='새 개정').click()

@@ -149,7 +149,7 @@ export default function ItemPage() {
 
   return (
     <>
-      <RecordPage title={d.title} actions={null} props={props} side={[{ key: 'relations', label: '연결', node: <RelationsPanel ct="core.item" id={id} /> }, { key: 'memo', label: '메모', node: <MemoPanel ct="core.item" id={id} /> }, { key: 'files', label: '첨부', node: <AttachmentPanel ct="core.item" id={id} /> }]}>
+      <RecordPage title={d.title} actions={null} record={{ ct: 'core.item', id }} props={props} side={[{ key: 'relations', label: '연결', node: <RelationsPanel ct="core.item" id={id} /> }, { key: 'memo', label: '메모', node: <MemoPanel ct="core.item" id={id} /> }, { key: 'files', label: '첨부', node: <AttachmentPanel ct="core.item" id={id} /> }]}>
         {(saveErr || otherErrors.length > 0) && (
           <Alert
             style={{ marginBottom: 12 }}

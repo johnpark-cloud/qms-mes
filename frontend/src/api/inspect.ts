@@ -101,12 +101,26 @@ export interface InspectionDetail {
   id: number
   title: string
   status: '합격' | '불합격' | '미판정'
-  lot: { id: number; number: string; trace_url: string }
+  lot: { id: number; number: string; trace_url: string; supplier?: string; qty?: string }
   item: { code: string; name: string }
-  spec: { id: number; title: string }
+  spec: { id: number; title: string; sampling?: string; revision?: number; approved_by?: string; approved_at?: string | null }
   inspector: string
   inspected_at: string
   nonconformance: { id: number; number: string; url: string } | null
-  measurements: { name: string; spec_text: string; value: string | null; gauge: string; passed: boolean | null }[]
+  measurements: {
+    name: string
+    spec_text: string
+    value: string | null
+    gauge: string
+    passed: boolean | null
+    lsl?: string | null
+    usl?: string | null
+    unit?: string
+    is_variable?: boolean
+    special?: string
+    decimals?: number | null
+    gauge_name?: string
+  }[]
   templates: { id: number; name: string; url: string }[]
+  capa?: { id: number; number: string; url: string }[]
 }

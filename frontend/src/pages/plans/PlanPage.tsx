@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Alert, Button, Dropdown, Form, Input, Modal, Select, Space, Tooltip, message } from 'antd'
+import { Alert, Button, Form, Input, Modal, Select, Space, Tooltip, message } from 'antd'
+import type { MenuProps } from 'antd'
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { fetchMe } from '../../api/auth'
@@ -162,48 +163,30 @@ export default function PlanPage() {
   const cellErrors = Object.keys(errors).some((k) => k.startsWith('lines.'))
   const otherErrors = Object.entries(errors).filter(([k]) => !k.startsWith('lines.'))
 
-  const actions = (
-    <>
-      {approved && (
-        <Button loading={newRev.isPending} onClick={() => newRev.mutate()}>
-          새 개정
-        </Button>
-      )}
-      {d.can_approve && (
-        <Tooltip title={count > 0 ? '저장한 뒤에 승인하세요.' : ''}>
-          <Button type="primary" disabled={count > 0} onClick={() => setSignOpen(true)}>
-            승인 서명
-          </Button>
-        </Tooltip>
-      )}
-      {!approved && (
-        <Button disabled={count > 0} onClick={() => setLogOpen(true)}>
-          이력 남기기
-        </Button>
-      )}
-      {d.prev_id !== null && (
-        <Button type={compare ? 'primary' : 'default'} onClick={() => setCompare(!compare)}>
-          이전 개정과 비교
-        </Button>
-      )}
-      <Dropdown
-        menu={{
-          items: [
-            { key: 'xlsx', label: <a href={`/api/qms/plans/${id}/document/?export=xlsx`} download>.xlsx</a> },
-            { key: 'pdf', label: <Link to={`/plans/${id}/print`}>PDF</Link> },
-          ],
-        }}
-      >
-        <Button>내보내기 ▾</Button>
-      </Dropdown>
-      {d.can_make_specs && (
-        <Button loading={makeSpecs.isPending} onClick={() => makeSpecs.mutate()}>
-          검사기준 초안 만들기
-        </Button>
-      )}
-      {locked && <Button href={d.edit_request_url}>수정 요청</Button>}
-    </>
+  // 주요 버튼 1개: 승인 대기면 승인 서명, 승인됨이면 새 개정, 초안이면 이력 남기기. 나머지는 「⋯」.
+  const actions = d.can_approve ? (
+    <Tooltip title={count > 0 ? '저장한 뒤에 승인하세요.' : ''}>
+      <Button type="primary" disabled={count > 0} onClick={() => setSignOpen(true)}>
+        승인 서명
+      </Button>
+    </Tooltip>
+  ) : approved ? (
+    <Button type="primary" loading={newRev.isPending} onClick={() => newRev.mutate()}>
+      새 개정
+    </Button>
+  ) : (
+    <Button type="primary" disabled={count > 0} onClick={() => setLogOpen(true)}>
+      이력 남기기
+    </Button>
   )
+  const menu: MenuProps['items'] = [
+    ...(d.can_approve && !approved ? [{ key: 'log', label: '이력 남기기', disabled: count > 0, onClick: () => setLogOpen(true) }] : []),
+    ...(d.prev_id !== null ? [{ key: 'compare', label: compare ? '비교 닫기' : '이전 개정과 비교', onClick: () => setCompare(!compare) }] : []),
+    ...(d.can_make_specs ? [{ key: 'make-specs', label: '검사기준 초안 만들기', disabled: makeSpecs.isPending, onClick: () => makeSpecs.mutate() }] : []),
+    { key: 'xlsx', label: <a href={`/api/qms/plans/${id}/document/?export=xlsx`} download>엑셀 받기</a> },
+    { key: 'pdf', label: <Link to={`/plans/${id}/print`}>인쇄/PDF</Link> },
+    ...(locked ? [{ key: 'edit', label: <a href={d.edit_request_url}>수정 요청</a> }] : []),
+  ]
 
   const props = [
     { label: '품번', node: `${d.item.code} · ${d.item.name}` },
@@ -241,6 +224,8 @@ export default function PlanPage() {
         title={d.title}
         status={locked ? '잠김' : (d.status as '초안' | '승인됨')}
         actions={actions}
+        menu={menu}
+        record={{ ct: 'qms.controlplan', id }}
         props={props}
         side={[
           { key: 'relations', label: '연결', node: <RelationsPanel ct="qms.controlplan" id={id} /> },
