@@ -22,6 +22,7 @@ from django.utils.http import content_disposition_header
 from django.views.decorators.http import require_POST
 
 from core.models import Item, Lot, Nonconformance
+from core.modules import check_label
 from core.views import _get_record
 
 from . import kpi, spc
@@ -251,6 +252,7 @@ def _memo_target(request):
         raise Http404
     if key not in ATTACHABLE or ct.model_class() is None:
         raise Http404
+    check_label(request, key)
     if not request.user.has_perm(f'{app_label}.view_{model}'):
         raise PermissionDenied
     return get_object_or_404(ct.model_class(), pk=pk)

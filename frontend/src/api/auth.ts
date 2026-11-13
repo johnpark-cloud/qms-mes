@@ -13,6 +13,7 @@ export interface Me {
   groups: string[]
   perms: string[]
   nav: NavGroup[]
+  modules: Record<string, boolean> // 모듈 키 → 켜짐 (core/modules.py)
 }
 
 export const fetchMe = () => api<Me>('/api/auth/me/')

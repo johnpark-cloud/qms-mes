@@ -650,7 +650,7 @@ class InspectionApiTest(TestCase):
         capa = Capa.objects.create(title='두께 재발 방지', source='NC', action='x', owner=self.lead, due_date=timezone.localdate(),
                                    source_type=ContentType.objects.get_for_model(Nonconformance), source_id=bad.nonconformance.pk)
         c = self.c()
-        with self.assertNumQueries(8):  # 항목·CAPA 수와 상관없이 같다
+        with self.assertNumQueries(9):  # 모듈 문 1 + 항목·CAPA 수와 상관없이 같다
             d = c.get(f'/api/qms/inspections/{bad.pk}/').json()
         self.assertEqual(set(d) >= {'id', 'title', 'status', 'lot', 'item', 'spec', 'inspector', 'inspected_at',
                                     'nonconformance', 'measurements', 'templates', 'capa'}, True)

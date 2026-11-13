@@ -5,6 +5,7 @@ url 이름 뒤에 '?조건'을 붙이면 관리 목록을 그 조건으로 걸�
 from django.urls import reverse
 
 from core.models import is_approver
+from core.modules import active_set, module_of_path
 
 
 def nav_url(name):
@@ -14,10 +15,12 @@ def nav_url(name):
 
 
 def visible_nav(user):
-    """사이드바와 me API가 함께 쓴다: 권한이 있는 항목만 남기고 빈 묶음은 뺀다. → [(묶음명, [(라벨, 주소)])]"""
-    groups = []
+    """사이드바와 me API가 함께 쓴다: 권한이 있고 모듈이 켜진 항목만 남기고 빈 묶음은 뺀다. → [(묶음명, [(라벨, 주소)])]"""
+    groups, on = [], active_set()
     for name, items in NAV:
-        links = [(label, nav_url(url)) for label, url, perm in items if perm is None or (perm(user) if callable(perm) else user.has_perm(perm))]
+        links = [(label, href) for label, href, perm in ((label, nav_url(url), perm) for label, url, perm in items)
+                 if (perm is None or (perm(user) if callable(perm) else user.has_perm(perm)))
+                 and module_of_path(href.lstrip('/').partition('?')[0]) in on]
         if links:
             groups.append((name, links))
     return groups
@@ -73,5 +76,6 @@ NAV = [
                        ('사용자 정의 칸', 'admin:core_fielddef_changelist', 'core.view_fielddef'),
                        ('사용자', 'admin:auth_user_changelist', 'auth.view_user'),
                        ('감사 기록', 'app_audit', is_approver),
+                       ('모듈 켜기/끄기', 'admin:core_moduleswitch_changelist', lambda u: u.is_superuser),
                        ('전체 메뉴', 'admin:index', None)]),
 ]

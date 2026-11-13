@@ -8,6 +8,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from core.models import Attachment
+from core.modules import check_label
 from core.relations import is_registered
 from core.views import can_view_target
 
@@ -24,6 +25,7 @@ def _target(request, data):
         raise Http404
     if not is_registered(f'{app_label}.{model}') or ct.model_class() is None:
         raise Http404
+    check_label(request, f'{app_label}.{model}')
     if not request.user.has_perm(f'{app_label}.view_{model}'):
         raise PermissionDenied
     if not can_view_target(request.user, ct, pk):

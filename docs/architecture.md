@@ -93,6 +93,12 @@ React 19·TypeScript·Vite·Ant Design 새 화면. 개발 PC에서 `npm run buil
 - `core` → `qms`: 모듈 수준에서 import하지 않는다. 필요한 곳에서만 `apps.get_model('qms', ...)`(`Shipment.clean`의 4M 확인)이나 함수 안 지연 import(`core/admin.py`의 CAPA 링크·유사 사례·관련 기록)로 참조한다.
 - `personal`: core·qms 모델을 import하지 않는다. 권한 부여만 `qms/apps.py`의 `ensure_roles`가 한다.
 
+## 모듈 켜기/끄기
+
+- 어느 모델·주소가 어느 모듈인지는 `core/modules.py`의 `MODULES`·`BASE_MODELS`·`BASE_PATHS` 한 곳에서 정한다. 새 모델·새 주소를 만들면 여기에 등록해야 `core/tests_modules.py`의 전수 테스트가 통과한다.
+- 켜짐 상태는 `core.ModuleSwitch`(행이 없으면 켜짐). 요청마다 한 번 조회하고 캐시하지 않는다.
+- `core.middleware.ModuleGate`가 인증 뒤에 꺼진 모듈의 화면·API를 닫는다. 쿼리 인자로 기록 종류를 받는 첨부·메모 API는 뷰에서 `check_label`로 막는다. 메뉴는 `core/nav.py` `visible_nav`가, React는 `/api/auth/me/`의 `modules`로 걸러 낸다.
+
 ## 요청 흐름과 화면
 
 - 모든 화면이 `templates/admin/base_site.html`(회색 상단 바 + `qms_sidebar.html` 사이드바)을 상속한다. 예외는 인쇄용 화면(`print.html`, `nc_print.html`, `audit_pack.html`)과 htmx 조각 템플릿이다.

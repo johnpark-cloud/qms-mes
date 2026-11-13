@@ -921,3 +921,49 @@ class Attachment(models.Model):
 @receiver(post_delete, sender=Attachment)
 def _delete_attachment_file(sender, instance, **kwargs):
     transaction.on_commit(lambda: instance.file.delete(save=False))
+
+
+def _module_choices():
+    from core.modules import choices
+    return choices()
+
+
+class ModuleSwitch(models.Model):
+    """모듈 켜기/끄기(core/modules.py). 행이 없으면 켜짐. 시스템 관리자만 바꾼다(core/admin.py). 기본 플랫폼은 대상이 아니다."""
+    key = models.CharField('모듈', max_length=30, unique=True, choices=_module_choices)
+    enabled = models.BooleanField('켜짐', default=True)
+    changed_by = models.ForeignKey(settings.AUTH_USER_MODEL, models.PROTECT, null=True, blank=True, editable=False,
+                                   related_name='+', verbose_name='변경자')
+    changed_at = models.DateTimeField('변경 시각', auto_now=True)
+    history = HistoricalRecords()
+
+    class Meta:
+        verbose_name = verbose_name_plural = '모듈 켜기/끄기'
+        ordering = ['key']
+
+    def __str__(self):
+        return f"{self.get_key_display()} — {'켜짐' if self.enabled else '꺼짐'}"
+
+    def clean(self):
+        from core.modules import MODULES, active_set
+        if self.key not in MODULES:
+            raise ValidationError({'key': '끌 수 있는 모듈이 아닙니다. 기본 플랫폼은 끌 수 없습니다.'})
+        on = active_set() - {self.key} | ({self.key} if self.enabled else set())
+        if self.enabled:
+            missing = [MODULES[k].name for k in MODULES[self.key].requires if k not in on]
+            if missing:
+                raise ValidationError(f"먼저 켜야 하는 모듈: {', '.join(missing)}")
+        else:
+            users = [m.name for k, m in MODULES.items() if self.key in m.requires and k in on]
+            if users:
+                raise ValidationError(f"이 모듈을 쓰는 켜진 모듈이 있어 끌 수 없습니다: {', '.join(users)}")
+
+    def save(self, *args, **kwargs):
+        self.full_clean()  # 관리 화면 밖(셸·관리 명령)에서도 requires를 지킨다
+        super().save(*args, **kwargs)
+
+    def delete(self, *args, **kwargs):
+        # 행을 지우면 켜진 것이 되므로 켜기 규칙을 그대로 검사한다
+        self.enabled = True
+        self.clean()
+        return super().delete(*args, **kwargs)

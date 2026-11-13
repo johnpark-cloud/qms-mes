@@ -6,7 +6,7 @@
 
 | 목적 | 명령 | 비고 |
 | --- | --- | --- |
-| 단위 테스트 전체 | `.\.venv\Scripts\python manage.py test` | core·qms·personal 모두. 테스트용 DB를 따로 만들므로 `data/`의 운영 DB는 건드리지 않는다. 2026-11-13 기준 468개(SQLite에서는 PostgreSQL 전용 2개 건너뜀) |
+| 단위 테스트 전체 | `.\.venv\Scripts\python manage.py test` | core·qms·personal 모두. 테스트용 DB를 따로 만들므로 `data/`의 운영 DB는 건드리지 않는다. 2026-11-13 기준 481개(SQLite에서는 PostgreSQL 전용 2개 건너뜀) |
 | PostgreSQL에서 전체 | `.\.venv\Scripts\python manage.py test --noinput` | 사용자 환경변수 `QMS_DB_NAME`·`QMS_DB_USER`·`QMS_DB_PASSWORD`가 있으면 위 명령도 PostgreSQL에서 돈다(SQLite로 돌리려면 그 창에서 `Remove-Item Env:QMS_DB_NAME`). e2e 두 스크립트는 `QMS_DB_NAME`을 빼고 임시 SQLite를 쓴다. 테스트 DB `test_qms`를 만들고 지우므로 **한 번에 하나만** 실행한다(두 실행이 겹치면 서로의 테스트 DB를 지워 연결 오류가 난다). `PgBackupRestoreTest`는 PostgreSQL에서만 돈다 |
 | 앱 하나만 | `.\.venv\Scripts\python manage.py test qms` | 작업 중 빠른 확인용. 완료 판단에는 전체 실행이 필요하다 |
 | 테스트 하나만 | `.\.venv\Scripts\python manage.py test core.tests.ShellTest.test_logged_in_pages_not_stored` | |
@@ -33,6 +33,7 @@ e2e를 Git Bash에서 실행할 때 한글이 깨지면 `PYTHONIOENCODING=utf-8`
 | `core/tests_masters.py` | 기준정보: `MasterTest`(상위 부서 순환 거부, 사번·사업자번호는 입력했을 때만 중복 검사, 품질팀장만 추가·수정, 등록자 자동 기록, 메뉴), `PartnerTest`(거래처 구분 필수, 품질엔지니어는 인증서만 수정, 만료 임박 인증서가 기한 목록에 나옴), `FieldDefTest`(키 잠금, 선택지 필수, 종류별 값 검사, 사용 중지 칸 값 유지, 관리 화면 입력 칸·칸 배치), `AttachmentTest`(개인 기록 거부, 받기에 대상 기록 권한 필요, API 올리기·목록, 모르는 종류 거부, 백업에 첨부 포함), `LinkMastersTest`(미리보기는 안 바꿈, `--apply`는 백업 폴더 필수·백업 후 연결, 여러 후보·구분 불일치·못 찾음 보고, 이미 채운 칸 유지, 승인된 PPAP도 이력 남김, 심사원 이름 순서) |
 | `core/api/tests_relations.py` | `RelationsApiTest`: 연결 패널 API 묶음·권한 없는 묶음 숨김·기록 권한·개인 앱 제외·관리 화면 없는 기록(url 없음)·쪽 나누기·쿼리 수 |
 | `qms/tests.py` `DocumentNumberingTest` | 관리 화면 문서 추가의 자동 번호·개정 자동 채움 |
+| `core/tests_modules.py` | 모듈 켜기/끄기: `CoverageTest`(모든 URL·업무 모델이 대응표에 있음), `SwitchRuleTest`(행 없으면 켜짐, 기본 플랫폼 불가, 의존 모듈, 전부 꺼도 보류 인터록), `GateTest`(일반 404·관리자 조회만, API `module_inactive`, 관리 화면·첨부·메모·자동완성, 시스템 관리자만 전환, 메뉴·`/api/auth/me/`) |
 | `scripts/e2e_browser.py` | React 화면을 브라우저로: 번호 자동 부여(품번 등록), 로그인, 카드 수, 화면 편집·위젯 추가 유지, 휴대폰 폭, 로고, 다크 모드, 명령창, 검사기준서(붙여넣기·새 개정·인쇄), 감사 기록, 검사 입력(LOT 찾기·스캔·측정·판정·입고), 검사 목록·성적서 인쇄, 메모 사진 첨부, 메뉴, 기준정보(품번 BOM·공정 표·관리계획서·엑셀 일괄 등록), 세션 끊김 |
 | `scripts/e2e_check.py` | 로그인부터 화면별 HTTP 흐름, 정적 파일·디자인 토큰 제공 |
 

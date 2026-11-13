@@ -126,6 +126,15 @@
 | 품질 KPI(실패비용 포함)는 `qms.view_customerclaim`, 협력사 성적표는 `qms.view_scar`, SPC 관리도는 `qms.view_measurement`, 내 할 일 목록 위젯은 `core.view_nonconformance` 권한이 있어야 본다. 검사원은 KPI·협력사 화면을 볼 수 없다. | `qms/views.py`, `qms/widgets.py`, `core/nav.py` |
 | KPI는 소속 부서 것만 본다(`/kpi/` 화면과 내 할 일 KPI 위젯 모두). 부서는 역할 그룹 묶음이고 지금은 `품질`(품질엔지니어·품질팀장·검사원)뿐이다. PPM·직행률·8D·실패비용·불량유형 파레토는 품질, 공정 수율은 품질·생산 부서 KPI다. 품질팀장·시스템 관리자는 모든 부서 KPI를 본다. KPI 위젯은 `/kpi/`와 같은 `qms.view_customerclaim` 권한도 있어야 보인다. 부서를 늘리려면 `DEPARTMENTS`에 그룹을 더한다. | `qms/kpi.py` `DEPARTMENTS`·`KPI_DEPARTMENTS`·`can_see`, `qms/views.py` `kpi_view`, `qms/widgets.py` `kpi_allowed` |
 
+### 모듈 켜기/끄기
+
+| 규칙 | 위치 |
+| --- | --- |
+| 모듈은 시스템 관리자만 켜고 끈다(명시 권한이 있어도 일반 사용자는 불가). 기본 플랫폼(홈·LOT·부적합·보류·기준정보·시스템·개인)은 끌 수 없고, 스위치 행은 지우지 않는다. | `core/admin.py` `ModuleSwitchAdmin`, `core/models.py` `ModuleSwitch.clean` |
+| 의존 모듈: 4M 변경은 검사, 내부심사는 CAPA가 켜져 있어야 켠다. 켜진 의존 모듈이 있으면 그 대상은 끌 수 없다. | `core/modules.py` `requires`, `ModuleSwitch.clean` |
+| 꺼진 모듈의 화면·API는 일반 사용자에게 404(API는 `code: module_inactive`), 시스템 관리자는 GET만 되고 쓰기는 403이다. 첨부·메모·관련 기록·인쇄·자동완성도 대상 기록의 모듈로 판정한다. | `core/middleware.py` `ModuleGate`, `core/modules.py` `check_label` |
+| 모듈 설정은 업무 규칙을 바꾸지 않는다. 모든 모듈을 꺼도 LOT 보류 인터록은 동작한다. | `core/tests_modules.py` `test_hold_interlock_with_all_modules_off` |
+
 ## 11. 이력
 
 감사 기록 화면(`/app/audit`, API `GET /api/audit-log/`)은 승인자(`is_approver`: 품질팀장·시스템 관리자)만 본다. 개인정보 앱(`PRIVATE_APPS`, `personal` 등)의 이력은 보여 주지 않고, `password` 필드 변경은 가린다(`core/api/views.py` `AuditLogView`, `core/audit.py` `audited_models`·`SECRET_FIELDS`). 사이드바의 "감사 기록" 메뉴도 승인자에게만 나온다(`core/nav.py`).

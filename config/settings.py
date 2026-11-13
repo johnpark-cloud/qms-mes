@@ -73,6 +73,7 @@ MIDDLEWARE = [
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
     'simple_history.middleware.HistoryRequestMiddleware',
     'core.middleware.no_store_pages',
+    'core.middleware.ModuleGate',  # 꺼진 모듈 화면·API 닫기 (인증 뒤)
 ]
 
 ROOT_URLCONF = 'config.urls'

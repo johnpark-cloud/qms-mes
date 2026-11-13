@@ -13,7 +13,8 @@ from django.utils.html import format_html, format_html_join
 from simple_history.admin import SimpleHistoryAdmin
 
 from .models import (Attachment, BomLine, CodeValue, Department, FieldDef, Hold, ImportProfile, Item, Lot, LotLink, Nonconformance,
-                     NonconformancePhoto, NumberRule, Partner, PartnerCertificate, Process, RevisionLog, RoutingStep, Shipment, WorkOrder, WorkResult)
+                     ModuleSwitch, NonconformancePhoto, NumberRule, Partner, PartnerCertificate, Process, RevisionLog, RoutingStep, Shipment,
+                     WorkOrder, WorkResult)
 from .records import blockers, can_edit_locked, delete_record, is_locked
 from .rules import LOCKED_MSG, begin_edit, child_editable, finish_edit, missing_message, nc_locked_fields, sign_disposition
 
@@ -645,3 +646,32 @@ class RevisionLogAdmin(BaseAdmin):
 
     def get_model_perms(self, request):
         return {}  # 전체 메뉴에는 올리지 않는다. 주소로만 연다
+
+
+@admin.register(ModuleSwitch)
+class ModuleSwitchAdmin(BaseAdmin):
+    """모듈 켜기/끄기는 시스템 관리자만 한다. 품질팀장을 포함한 다른 역할은 권한이 있어도 열 수 없다."""
+    list_display = ('key', 'enabled', 'changed_by', 'changed_at')
+    request_links_enabled = False
+
+    def get_readonly_fields(self, request, obj=None):
+        return ('key',) if obj else ()
+
+    def has_module_permission(self, request):
+        return request.user.is_superuser
+
+    def has_view_permission(self, request, obj=None):
+        return request.user.is_superuser
+
+    def has_add_permission(self, request):
+        return request.user.is_superuser
+
+    def has_change_permission(self, request, obj=None):
+        return request.user.is_superuser
+
+    def has_delete_permission(self, request, obj=None):
+        return False  # 다시 켜려면 「켜짐」을 고른다. 변경 이력이 남는다
+
+    def save_model(self, request, obj, form, change):
+        obj.changed_by = request.user
+        super().save_model(request, obj, form, change)

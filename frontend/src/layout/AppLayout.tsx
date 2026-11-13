@@ -26,6 +26,15 @@ const MOVED: Record<string, string> = {
 }
 const to = (href: string) => MOVED[href] ?? href
 
+// React 경로의 첫 단계 → 모듈 키(core/modules.py). 없는 경로는 기본 플랫폼이라 끌 수 없다.
+const ROUTE_MODULE: Record<string, string> = {
+  specs: 'qms_inspection',
+  plans: 'qms_inspection',
+  inspect: 'qms_inspection',
+  inspections: 'qms_inspection',
+  'customer-rules': 'qms_claim',
+}
+
 export default function AppLayout() {
   const { pathname, search } = useLocation()
   const navigate = useNavigate()
@@ -50,6 +59,8 @@ export default function AppLayout() {
   if (me.isError) return <Alert type="error" title={me.error.message} showIcon style={{ margin: 16 }} />
 
   const user = me.data
+  // 서버가 API를 막으므로(404 module_inactive) 화면은 안내만 한다.
+  const off = user.modules?.[ROUTE_MODULE[pathname.split('/')[1]]] === false
   const recent = getRecent()
   const items = [
     ...(recent.length ? [{ key: 'recent', label: '최근 연 기록', children: recent.map((r) => ({ key: r.href, label: r.label })) }] : []),
@@ -99,7 +110,11 @@ export default function AppLayout() {
             defaultOpenKeys={['recent', ...(open.length ? open : [user.nav[0]?.group])]} />
         </Layout.Sider>
         <Layout.Content style={{ padding: 24, minWidth: 0 }}>
-          <Outlet />
+          {off ? (
+            <Alert type="info" showIcon title="비활성 모듈" description="이 화면이 속한 모듈이 꺼져 있습니다. 시스템 관리자에게 문의하세요." />
+          ) : (
+            <Outlet />
+          )}
         </Layout.Content>
       </Layout>
       <CommandPalette open={palette} onClose={() => setPalette(false)} />
