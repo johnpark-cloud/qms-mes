@@ -457,6 +457,11 @@ class ChangeRequest(Approvable):
         return (Inspection.objects.filter(lot__item=self.item_id, result=Inspection.PASS, inspected_at__gte=self.effective_at)
                 .order_by('inspected_at').first())
 
+    @property
+    def first_article_state(self):
+        """기록 화면용: 초품 합격 검사, 승인됐는데 아직 없으면 출하 차단 안내."""
+        return self.first_article or ('미확인 (출하 차단)' if self.approved_at else '')
+
     @classmethod
     def awaiting_first_article(cls, item):
         due = cls.objects.filter(item=item, approved_at__isnull=False, effective_at__lte=timezone.now())

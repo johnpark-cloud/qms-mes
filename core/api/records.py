@@ -3,7 +3,10 @@
 권한은 그 모델의 view_ 권한. 변경 이력도 view_ 권한이면 본다(미결 #6, 2026-11-13 사용자 결정).
 꺼진 모듈은 미들웨어가 주소의 label 인자로 막는다.
 """
+from urllib.parse import urlencode
+
 from django.apps import apps
+from django.contrib.contenttypes.models import ContentType
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.db.models import Q
 from django.forms import modelform_factory
@@ -14,10 +17,10 @@ from django.urls import reverse
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from core import audit, recordspec, rules
+from core import audit, modules, recordspec, rules
 from core.export import table_xlsx, xlsx_response
 from core.grid import record_version
-from core.models import Approvable, EditRequest, Nonconformance, is_approver
+from core.models import Approvable, EditRequest, Lot, Nonconformance, is_approver
 from core.records import can_edit_locked, is_locked
 from core.relations import record_url, status_of
 
@@ -90,6 +93,23 @@ def _can_request(obj, kind, user):
     return True
 
 
+CAPA_SOURCE = {'qms.customerclaim': '8D', 'qms.scar': 'SCAR', 'core.nonconformance': 'NC'}  # qms/admin.py capa_links와 같은 코드
+
+
+def _links(obj, user):
+    """「⋯」 메뉴 바로가기: LOT 이력 추적, CAPA 만들기(관리 화면 추가 폼, 출처 채움 — CAPA 모듈이 켜져 있을 때만)."""
+    label = obj._meta.label_lower
+    links = []
+    lot = obj if isinstance(obj, Lot) else obj.lot if label == 'qms.customerclaim' else None
+    if lot:
+        links.append({'label': 'LOT 이력 (추적)', 'url': '/trace/?' + urlencode({'lot': lot.number})})
+    if label in CAPA_SOURCE and modules.active('qms_capa') and user.has_perm('qms.add_capa'):
+        query = {'source': CAPA_SOURCE[label], 'source_type': ContentType.objects.get_for_model(obj).pk, 'source_id': obj.pk,
+                 'title': str(obj)[:200]}
+        links.append({'label': 'CAPA 만들기', 'url': reverse('admin:qms_capa_add') + '?' + urlencode(query)})
+    return links
+
+
 def _detail(obj, spec, user):
     model = type(obj)
     fields = []
@@ -114,6 +134,8 @@ def _detail(obj, spec, user):
             'can_dispose': isinstance(obj, Nonconformance) and not obj.closed_at and is_approver(user)
             and _perm(user, model, 'change'),
             'dispose': [recordspec.editor(obj, n) for n in rules.DISPOSE_FIELDS] if isinstance(obj, Nonconformance) else None,
+            'can_close': spec.close and not obj.closed_at and _perm(user, model, 'change'),
+            'links': _links(obj, user),
             'requests': {'edit': _can_request(obj, EditRequest.EDIT, user),
                          'delete': _can_request(obj, EditRequest.DELETE, user)}}
 
@@ -135,7 +157,7 @@ class RecordDetailView(APIView):
         values = request.data.get('values')
         if not isinstance(values, dict):
             raise ValidationError('values가 필요합니다.')
-        bad = {k: ['승인 서명으로만 바꿀 수 있습니다.' if k in recordspec.SIGN_FIELDS else '이 화면에서 바꿀 수 없는 칸입니다.']
+        bad = {k: ['승인 서명으로만 바꿀 수 있습니다.' if k in recordspec.sign_fields(spec) else '이 화면에서 바꿀 수 없는 칸입니다.']
                for k in values if k not in spec.edit}
         if bad:
             raise ValidationError(bad)
@@ -176,6 +198,19 @@ class RecordDisposeView(APIView):
         nc = get_object_or_404(model, pk=pk)
         data = {k: v for k, v in request.data.items() if k != 'password'}
         rules.dispose_nc(nc, request.user, request.data.get('password', ''), data)
+        return Response(_detail(model.objects.get(pk=pk), spec, request.user))
+
+
+class RecordCloseView(APIView):
+    schema = None
+
+    def post(self, request, label, pk):
+        """종결(REC-09): 설명서 close=True인 기록만. change_ 권한, 종결 규칙은 모델 clean."""
+        model, spec = _model(request.user, label)
+        if not spec.close:
+            raise Http404
+        require_perm(request.user, f'{model._meta.app_label}.change_{model._meta.model_name}')
+        rules.close_record(get_object_or_404(model, pk=pk), request.user)
         return Response(_detail(model.objects.get(pk=pk), spec, request.user))
 
 

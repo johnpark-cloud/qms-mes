@@ -1,7 +1,7 @@
 """admin·기존 뷰·API가 함께 쓰는 업무 규칙. 본문은 기존 admin·뷰 코드를 옮긴 것이다(docs/architecture-migration-plan.md 3.2)."""
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.contrib.contenttypes.models import ContentType
-from django.db import IntegrityError, transaction
+from django.db import IntegrityError, models, transaction
 from django.http import Http404
 from django.utils import timezone
 
@@ -289,3 +289,16 @@ def save_table(model, user, rows, fields, unique, version):
                     o.save()
         except IntegrityError:
             raise ValidationError({'rows': ['같은 값이 이미 있습니다. 값을 맞바꿀 때는 두 번에 나눠 저장하세요.']})
+
+
+def close_record(obj, user):
+    """「종결」(REC-09): 종결일을 서버가 넣고 모델 clean 규칙(8D 전 단계·SCAR 회신·CAPA 유효)이 같은 문구로 막는다."""
+    if obj.closed_at:
+        raise ValidationError('이미 종결된 기록입니다.')
+    field = obj._meta.get_field('closed_at')
+    obj.closed_at = timezone.now() if isinstance(field, models.DateTimeField) else timezone.localdate()
+    try:
+        save_with_lock(obj, user)
+    except ValidationError:
+        obj.closed_at = None
+        raise

@@ -24,6 +24,12 @@ class RecordsApiTest(TestCase):
         from core.models import Item, Lot, Nonconformance
         self.lot = Lot.objects.create(number='L-1', item=Item.objects.create(code='R1', name='양극재', item_type=Item.RAW))
         Nonconformance.objects.create(lot=self.lot, description='찍힘')  # 보류 자동 생성
+        from qms.models import Capa, ChangeRequest, CustomerClaim, CustomerRule, Scar
+        CustomerRule.objects.create(customer='H사')
+        CustomerClaim.objects.create(number='CL-1', customer='H사', lot=self.lot, description='치수')
+        Scar.objects.create(number='S-1', supplier='A소재', lot=self.lot, request='원인 회신', response_due=today)
+        Capa.objects.create(title='치수 대책', source='OTHER', action='지그', owner=self.root, due_date=today)
+        ChangeRequest.objects.create(number='CR-1', item=self.lot.item, category='MACHINE', description='설비 교체')
         self.client.force_login(self.root)
 
     def test_list_tabs_search_export(self):
@@ -55,7 +61,7 @@ class RecordsApiTest(TestCase):
         self.assertEqual(next(f for f in d['fields'] if f['key'] == 'inspection_type')['value'], '수입검사')
 
     def test_unregistered_model_404(self):
-        self.assertEqual(self.client.get('/api/records/qms.capa/').status_code, 404)
+        self.assertEqual(self.client.get('/api/records/auth.user/').status_code, 404)
         self.assertEqual(self.client.get('/api/records/personal.payslip/1/').status_code, 404)
         self.assertEqual(self.client.get('/api/records/nope/').status_code, 404)
 
@@ -179,7 +185,7 @@ class RecordsWriteApiTest(TestCase):
 
     def test_spec_edit_never_includes_sign_fields(self):
         for label, spec in recordspec.SPECS.items():
-            self.assertFalse(set(spec.edit) & recordspec.SIGN_FIELDS, label)
+            self.assertFalse(set(spec.edit) & recordspec.sign_fields(spec), label)
             self.assertTrue(set(spec.edit) <= set(spec.fields), label)
 
     def test_patch_needs_change_permission(self):
@@ -376,3 +382,111 @@ class RecordsNcApiTest(TestCase):
         r = self.client.post(f'/api/records/core.lot/{self.raw.pk}/dispose/', {'disposition': 'SCRAP', 'password': 'pw'},
                              content_type='application/json')
         self.assertEqual(r.status_code, 404)
+
+
+class RecordsCapaClaimApiTest(TestCase):
+    """Phase 8(B4): CAPA·클레임·SCAR·4M 변경 기록 화면. 종결은 「종결」 API로 모델 규칙 그대로 (REC-09)."""
+
+    def setUp(self):
+        from django.contrib.contenttypes.models import ContentType
+        from core.models import Item, Lot
+        from qms.models import Capa, ChangeRequest, CustomerClaim, CustomerRule, Scar
+        self.root = User.objects.create_superuser('root', password='pw')
+        self.today = timezone.localdate()
+        self.item = Item.objects.create(code='F1', name='셀', item_type=Item.FINISHED)
+        self.lot = Lot.objects.create(number='FG-1', item=self.item)
+        self.rule = CustomerRule.objects.create(customer='H사', containment_hours=12)
+        self.claim = CustomerClaim.objects.create(number='CL-1', customer='H사', lot=self.lot, description='치수')
+        self.scar = Scar.objects.create(number='S-1', supplier='A소재', lot=self.lot, request='원인 회신', response_due=self.today)
+        self.capa = Capa.objects.create(title='치수 대책', source='8D', action='지그', owner=self.root, due_date=self.today,
+                                        source_type=ContentType.objects.get_for_model(CustomerClaim), source_id=self.claim.pk)
+        self.cr = ChangeRequest.objects.create(number='CR-1', item=self.item, category='MACHINE', description='설비 교체')
+        self.client.force_login(self.root)
+
+    def detail(self, label, pk):
+        r = self.client.get(f'/api/records/{label}/{pk}/')
+        self.assertEqual(r.status_code, 200, r.content)
+        return r.json()
+
+    def patch(self, label, pk, values):
+        v = self.detail(label, pk)['version']
+        return self.client.patch(f'/api/records/{label}/{pk}/', {'values': values, 'version': v}, content_type='application/json')
+
+    def close(self, label, pk):
+        return self.client.post(f'/api/records/{label}/{pk}/close/', {}, content_type='application/json')
+
+    def test_links_open_new_record_screen(self):
+        for obj in (self.claim, self.scar, self.capa, self.cr, self.rule):
+            meta = obj._meta
+            self.assertEqual(record_url(obj), f'/app/r/{meta.app_label}/{meta.model_name}/{obj.pk}')
+            self.detail(meta.label_lower, obj.pk)
+
+    def test_capa_shows_source_and_claim_links(self):
+        d = self.detail('qms.capa', self.capa.pk)
+        src = next(f for f in d['fields'] if f['key'] == 'source_record')
+        self.assertEqual((src['label'], src['url']), ('출처 기록', record_url(self.claim)))
+        links = {x['label']: x['url'] for x in self.detail('qms.customerclaim', self.claim.pk)['links']}
+        self.assertIn('/admin/qms/capa/add/?source=8D', links['CAPA 만들기'])
+        self.assertEqual(links['LOT 이력 (추적)'], '/trace/?lot=FG-1')
+
+    def test_claim_8d_steps_and_close(self):
+        d = self.detail('qms.customerclaim', self.claim.pk)
+        f = {x['key']: x for x in d['fields']}
+        self.assertEqual(f['current_step']['value'], 'D1 팀 구성')
+        self.assertEqual([k for k in f if k.startswith('d') and k[1].isdigit()],
+                         ['d1_team', 'd2_problem', 'd3_containment', 'd4_root_cause', 'd5_corrective', 'd6_verification',
+                          'd7_prevention', 'd8_closure'])
+        self.assertTrue(d['can_close'])
+        r = self.close('qms.customerclaim', self.claim.pk)
+        self.assertEqual(r.status_code, 400)
+        self.assertEqual(r.json()['detail'], 'D1 팀 구성이(가) 비어 있어 종결할 수 없습니다.')
+        r = self.patch('qms.customerclaim', self.claim.pk, {'closed_at': '2026-01-01T00:00'})
+        self.assertEqual(r.json()['fields']['closed_at'], ['승인 서명으로만 바꿀 수 있습니다.'])
+        from qms.models import CustomerClaim
+        r = self.patch('qms.customerclaim', self.claim.pk, {k: f'{k} 내용' for k, _ in CustomerClaim.STEPS})
+        self.assertEqual(r.status_code, 200, r.content)
+        d = self.close('qms.customerclaim', self.claim.pk).json()
+        self.assertEqual((d['status'], d['can_close']), ('종결', False))
+        self.assertEqual(self.close('qms.customerclaim', self.claim.pk).json()['detail'], '이미 종결된 기록입니다.')
+
+    def test_scar_and_capa_close_rules(self):
+        r = self.close('qms.scar', self.scar.pk)
+        self.assertEqual(r.json()['detail'], '협력사 회신 없이 종결할 수 없습니다.')
+        self.assertEqual(self.patch('qms.scar', self.scar.pk, {'response': '열처리 조건 변경'}).status_code, 200)
+        self.assertEqual(self.close('qms.scar', self.scar.pk).status_code, 200)
+        self.scar.refresh_from_db()
+        self.assertEqual(self.scar.closed_at, self.today)
+        r = self.close('qms.capa', self.capa.pk)
+        self.assertEqual(r.json()['detail'], '유효성 확인 결과가 "유효"여야 종결할 수 있습니다. 무효면 새 CAPA를 만드세요.')
+        self.assertFalse(self.detail('qms.customerrule', self.rule.pk)['can_close'])
+        self.assertEqual(self.close('qms.customerrule', self.rule.pk).status_code, 404)
+        self.assertEqual(self.close('qms.changerequest', self.cr.pk).status_code, 404)
+
+    def test_close_needs_change_permission(self):
+        u = User.objects.create_user('v', password='pw', is_staff=True)
+        u.user_permissions.add(Permission.objects.get(codename='view_scar'))
+        self.client.force_login(u)
+        self.assertFalse(self.detail('qms.scar', self.scar.pk)['can_close'])
+        self.assertEqual(self.close('qms.scar', self.scar.pk).status_code, 403)
+
+    def test_change_request_ref_editable_and_first_article_state(self):
+        f = lambda: {x['key']: x['value'] for x in self.detail('qms.changerequest', self.cr.pk)['fields']}
+        self.assertEqual(f()['first_article_state'], '')
+        url = f'/api/records/qms.changerequest/{self.cr.pk}/approve/'
+        r = self.client.post(url, {'password': 'pw'}, content_type='application/json')
+        self.assertEqual(r.json()['detail'], '고객 통보 대상 변경은 고객 승인 문서번호가 있어야 승인할 수 있습니다.')
+        self.assertEqual(self.patch('qms.changerequest', self.cr.pk, {'customer_approval_ref': 'H-77'}).status_code, 200)
+        self.assertEqual(self.client.post(url, {'password': 'pw'}, content_type='application/json').status_code, 200)
+        self.assertEqual(f()['first_article_state'], '미확인 (출하 차단)')
+
+    def test_closing_allowed_when_module_off(self):
+        ModuleSwitch.objects.bulk_create([ModuleSwitch(key='qms_supplier', enabled=False)])  # 열린 SCAR 검사 우회: 이미 꺼진 상태
+        self.assertEqual(self.patch('qms.scar', self.scar.pk, {'response': '회신'}).status_code, 200)
+        self.assertEqual(self.close('qms.scar', self.scar.pk).status_code, 200)
+        r = self.client.post(f'/api/records/qms.scar/{self.scar.pk}/request/', {'kind': 'DELETE', 'reason': 'x', 'password': 'pw'},
+                             content_type='application/json')
+        self.assertEqual(r.status_code, 403)
+        u = User.objects.create_user('v', password='pw', is_staff=True)
+        u.user_permissions.add(*Permission.objects.filter(codename__in=['view_scar', 'change_scar']))
+        self.client.force_login(u)
+        self.assertEqual(self.close('qms.scar', self.scar.pk).status_code, 404)

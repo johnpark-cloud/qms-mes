@@ -24,7 +24,7 @@ interface Detail {
   ct: string; id: number; title: string; kind: string; status: string | null
   fields: Field[]; children: Child[]; side: string[]; admin_url: string; list_url: string
   version: number; locked: boolean; edit: Edit[]; can_change: boolean; can_approve: boolean
-  can_dispose: boolean; dispose: Edit[] | null
+  can_dispose: boolean; dispose: Edit[] | null; can_close: boolean; links: { label: string; url: string }[]
   requests: { edit: boolean; delete: boolean }
 }
 interface Hist { history_id: number; date: string; user: string; type: string; changes: { field: string; old: string; new: string }[] }
@@ -196,6 +196,18 @@ export default function RecordView() {
     fresh(await api<Detail>(base + 'dispose/', { method: 'POST', body: JSON.stringify(v) }))
     message.success('처분했습니다.')
   }
+  // 종결(core.rules.close_record): 8D 전 단계·SCAR 회신·CAPA 유효 규칙 문구는 서버 그대로 보인다
+  const close = () => Modal.confirm({
+    title: '종결할까요?', content: '종결 일시는 지금으로 기록됩니다.', okText: '종결', cancelText: '취소',
+    onOk: async () => {
+      try {
+        fresh(await api<Detail>(base + 'close/', { method: 'POST', body: '{}' }))
+        message.success('종결했습니다.')
+      } catch (e) {
+        message.error(e instanceof Error ? e.message : '종결하지 못했습니다.')
+      }
+    },
+  })
   const requestEdit = async (v: { reason: string; password: string }) => {
     const r = await api<{ error: string | null; decide_url: string | null }>(base + 'request/',
       { method: 'POST', body: JSON.stringify({ kind: 'EDIT', ...v }) })
@@ -236,12 +248,13 @@ export default function RecordView() {
               {d.requests.edit && !d.can_change && <Button onClick={() => setAsking(true)}>수정 요청</Button>}
               {d.can_approve && <Button onClick={() => setSigning(true)}>승인</Button>}
               {d.can_dispose && <Button onClick={() => setDisposing(true)}>처분</Button>}
+              {d.can_close && <Button onClick={close}>종결</Button>}
               {d.can_change && <Button type="primary" onClick={startEdit}>수정</Button>}
             </>
           )
         }
         menu={[
-          ...(d.ct === 'core.lot' ? [{ key: 'trace', label: <a href={`/trace/?lot=${encodeURIComponent(d.title)}`}>LOT 이력 (추적)</a> }] : []),
+          ...d.links.map((l) => ({ key: l.url, label: <a href={l.url}>{l.label}</a> })),
           { key: 'admin', label: <a href={d.admin_url}>관리 화면에서 열기</a> },
         ]}
         props={d.fields.map((f) => {

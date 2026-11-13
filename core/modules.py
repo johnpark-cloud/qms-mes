@@ -3,6 +3,7 @@
 BASE(홈·LOT·부적합·보류·기준정보·시스템·개인)는 끌 수 없다. 업무 규칙(인터록)은 모듈 설정과 무관하게 모델에서 동작한다.
 qms 모델을 import하지 않는다('app.model' 라벨만). 새 모델·새 주소는 여기에 등록해야 core/tests_modules.py 전수 테스트가 통과한다.
 """
+import re
 from typing import NamedTuple
 
 from django.core.exceptions import PermissionDenied
@@ -62,9 +63,9 @@ BASE_PATHS = (
 # 꺼진 모듈에서도 시스템 관리자가 열린 기록을 닫을 수 있는 쓰기 주소(MOD-07). 관리 화면은 변경 폼만, 추가·삭제는 열지 않는다.
 # 4M 초품은 검사 판정으로만 풀리므로 검사 입력을 연다(미결 #3: 수동 해제 규칙은 만들지 않는다).
 CLOSING = {
-    'qms_capa': ('admin/qms/capa/',),
-    'qms_claim': ('admin/qms/customerclaim/',),
-    'qms_supplier': ('admin/qms/scar/',),
+    'qms_capa': ('admin/qms/capa/', 'api/records/qms.capa/'),
+    'qms_claim': ('admin/qms/customerclaim/', 'api/records/qms.customerclaim/'),
+    'qms_supplier': ('admin/qms/scar/', 'api/records/qms.scar/'),
     'qms_audit': ('admin/qms/internalaudit/', 'admin/qms/auditfinding/'),
     'qms_inspection': ('inspect/', 'api/qms/inspect/'),
 }
@@ -112,8 +113,16 @@ def module_of_request(request, view_kwargs):
     return module_of_path(path) or BASE  # 등록되지 않은 주소는 전수 테스트가 잡는다
 
 
+def _closing_path(prefix, rest):
+    if prefix.startswith('admin/'):
+        return rest.endswith('/change/')
+    if prefix.startswith('api/records/'):  # 기록 화면: 상세 저장과 「종결」만. 요청·승인·삭제는 막는다
+        return re.fullmatch(r'\d+/(close/)?', rest) is not None
+    return True
+
+
 def closing_allowed(key, path):
-    return any(path.startswith(p) and (not p.startswith('admin/') or path.endswith('/change/')) for p in CLOSING.get(key, ()))
+    return any(path.startswith(p) and _closing_path(p, path[len(p):]) for p in CLOSING.get(key, ()))
 
 
 def open_records(key):

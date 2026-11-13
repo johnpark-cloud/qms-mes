@@ -170,7 +170,7 @@ class TodoApiTest(TestCase):
         t = w['data']
         self.assertEqual((t['claims'][0]['label'], t['claims'][0]['lot'], t['claims'][0]['overdue'], t['claims'][0]['due_label']),
                          (str(claim), str(lot), True, '봉쇄'))
-        self.assertEqual(t['claims'][0]['href'], f'/admin/qms/customerclaim/{claim.pk}/change/')
+        self.assertEqual(t['claims'][0]['href'], f'/app/r/qms/customerclaim/{claim.pk}')  # 새 기록 화면
         self.assertEqual(t['nc_mail_pending'][0]['href'], f'/nc/{nc.pk}/mail/')
         self.assertEqual(t['nc_notify_pending'][0]['label'], str(nc))
         self.assertEqual((t['edit_requests'][0]['requested_by'], t['edit_requests'][0]['href']), ('qe', f'/request/{er.pk}/decide/'))
