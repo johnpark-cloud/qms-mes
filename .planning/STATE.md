@@ -1,19 +1,19 @@
 ---
 gsd_state_version: "1.0"
-current_phase: 6
-current_phase_name: 범용 저장과 승인·수정·삭제 요청
+current_phase: 8
+current_phase_name: CAPA·클레임·SCAR·4M 변경
 status: planning
-stopped_at: Phase 5 complete
+stopped_at: Phase 7 complete
 last_updated: "2026-11-13T00:00:00.000Z"
 last_activity: 2026-11-13
-last_activity_desc: Phase 5(B1) 구현·검증 완료
+last_activity_desc: Phase 7(B3) 구현·검증 완료
 state_head: fb4d3be6d0178892e74247aff4858b54bfaafd18
 progress:
   total_phases: 10
-  completed_phases: 5
+  completed_phases: 7
   total_plans: 0
   completed_plans: 0
-  percent: 50
+  percent: 70
 ---
 
 # Project State
@@ -23,16 +23,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-11-12)
 
 **Core value:** 부적합·인터록 규칙이 어떤 화면 변경이나 모듈 설정에서도 약해지지 않고, 기록이 이력과 함께 보존된다.
-**Current focus:** Phase 6 (B2) — 범용 저장과 승인·수정·삭제 요청 (미결 #5 결정됨: `submit_edit_request`를 동작 변경 없이 `core/rules.py`로 옮긴다)
+**Current focus:** Phase 8 (B4) — CAPA·클레임·SCAR·4M 변경 새 기록 화면
 
 ## Current Position
 
-Phase: 6 of 10 (B2)
+Phase: 8 of 10 (B4)
 Plan: 0 of TBD in current phase
 Status: Ready
-Last activity: 2026-11-13 — Phase 5(B1) 완료: 기록 설명서·records API·새 기록 화면(문서·문서 개정·계측기·검사원 자격), record_url 단일화, 「새 화면으로」 링크. 변경 이력 탭은 view_ 권한자(미결 #6)
+Last activity: 2026-11-13 — Phase 7(B3) 완료: LOT·부적합·보류 기록 화면. 부적합 처분은 MRB 서명 API(rules.dispose_nc, 관리 화면과 같은 규칙), 처분 칸은 SIGN_FIELDS, 보류는 읽기 전용(PATCH 403)
 
-Progress: [█████░░░░░] 50%
+Progress: [███████░░░] 70%
 
 ## Performance Metrics
 
@@ -65,6 +65,8 @@ Recent decisions affecting current work:
 - [Roadmap]: 설명서 틀은 `core/recordspec.py`. 기존 `core/records.py`는 건드리지 않는다.
 - [Phase 2]: 4M 변경은 검사 모듈을 requires로 둔다(초품 해제가 검사 판정으로만 됨). 게이트는 꺼진 모듈 일반 404·관리자 GET만. 엑셀 보고서·/media/·위젯 필터는 A4.
 - [Phase 3]: 미결 #3 해결 — 수동 초품 해제 없음, 꺼진 모듈에서 시스템 관리자는 종결 폼·검사 입력만 쓰기 가능(`CLOSING`). 열린 기록 있으면 끄기 거부(`open_records`).
+- [Phase 5]: 미결 #6 — 변경 이력 탭은 모델 `view_` 권한자.
+- [Phase 6]: 미결 #5 — 수정·삭제 요청 로직을 `core/rules.py`로 옮김(동작 동일). 범용 저장은 `Spec.edit` 칸만, 서명 칸 거부, 파일 칸 제외.
 - [Roadmap]: 공통 완료 조건은 ROADMAP.md 「모든 단계 공통 완료 조건」에 한 번만 적는다.
 
 ### Pending Todos
@@ -73,8 +75,6 @@ None yet.
 
 ### Blockers/Concerns
 
-- [Phase 5 전] 미결 #6: 기록별 변경 이력 탭의 열람 권한(`view_` 기준 vs 품질팀장 전용).
-- [Phase 6 전] 미결 #5: `submit_edit_request`를 `core/rules.py`로 옮길지(리팩터링 승인 필요).
 - 조사 단계에서 셸이 동작하지 않아 테스트를 실행하지 못했다. 각 단계 착수 시 기준선(`manage.py test`, `scripts/e2e_check.py`, `makemigrations --check --dry-run`)을 실제로 돌려 기록한다.
 
 ## Deferred Items
