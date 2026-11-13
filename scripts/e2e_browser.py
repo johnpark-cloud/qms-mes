@@ -636,6 +636,19 @@ try:
             ok = False
         check('메뉴 → 기준정보 새 화면', ok, page.url)
 
+        # REC-03: 설명서 목록 → 기록 화면(칸·변경 이력 탭)
+        try:
+            page.goto('/app/r/qms/gauge')
+            page.locator('.ant-table-tbody tr', has_text='E2E-G1').click()
+            page.wait_for_url('**/app/r/qms/gauge/*')
+            page.locator('.record-props', has_text='E2E 마이크로미터').wait_for(timeout=5000)
+            page.get_by_role('tab', name='변경 이력').click()
+            page.get_by_text('생성').first.wait_for(timeout=5000)
+            ok = True
+        except Exception as e:
+            ok, page_err = False, str(e)[:80]
+        check('기록 화면: 계측기 목록 → 상세·변경 이력', ok, page.url if ok else page_err)
+
         # 세션이 끊기면 API를 부르는 화면이 로그인으로 보내야 한다 (client.ts 의 403 처리)
         page.context.clear_cookies()
         page.goto('/app/overview')

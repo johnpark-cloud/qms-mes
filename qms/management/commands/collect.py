@@ -11,10 +11,11 @@ from decimal import Decimal, InvalidOperation
 from pathlib import Path
 
 from django.conf import settings
-from django.core.management.base import BaseCommand
+from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
 
 from core.models import Lot
+from core.modules import active
 from qms.models import Inspection, InspectionSpec, Measurement
 
 TYPE_LABELS = {label: code for code, label in InspectionSpec.TYPES}
@@ -64,6 +65,8 @@ class Command(BaseCommand):
         parser.add_argument('--inbox', default=os.environ.get('QMS_INBOX_DIR', str(Path(settings.DATA_DIR) / 'inbox')))
 
     def handle(self, inbox, **opts):
+        if not active('qms_inspection'):  # 파일은 inbox에 그대로 둔다: 모듈을 다시 켜면 수집된다(MOD-12)
+            raise CommandError('검사 모듈이 꺼져 있어 수집하지 않습니다.')
         inbox = Path(inbox)
         for sub in ('done', 'error'):
             (inbox / sub).mkdir(parents=True, exist_ok=True)

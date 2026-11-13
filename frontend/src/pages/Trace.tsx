@@ -28,7 +28,7 @@ interface TraceData {
   descendants: TraceLot[]
 }
 
-const KIND = { created: '생성', inspection: '검사', work: '공정', nc: '부적합', disposition: '처분', shipment: '출하' }
+const KIND = { created: '생성', inspection: '검사', work: '공정', nc: '부적합', disposition: '처분', shipment: '출하', inactive: '비활성' }
 
 // React 로 옮긴 화면(/app/...)은 화면 전환 없이, 나머지는 기존 화면으로 연다.
 const Go = ({ url, children }: { url: string; children: React.ReactNode }) =>

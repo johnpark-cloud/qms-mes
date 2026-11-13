@@ -1,11 +1,13 @@
 """첫 화면 위젯. 계산은 qms.due·qms.kpi·personal.leave를 그대로 쓰고, 여기서는 고르고 배치만 한다."""
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Callable
 
 from django.urls import reverse
 from django.utils import timezone
 
 from core.models import Hold, is_approver
+from core.modules import active
+from core.relations import record_url
 from personal.leave import balance
 from personal.models import LeaveUse
 
@@ -55,7 +57,7 @@ def row(label, href=None, meta='', tone=None):
 
 
 def change(name, obj):
-    return reverse(f'admin:{name}_change', args=[obj.pk])
+    return record_url(obj)  # 주소 기준은 record_url 한 곳(REC-04)
 
 
 def held_rows(request, d):
@@ -193,6 +195,11 @@ WIDGETS = {w.key: w for w in [
     Widget('kpi_yield', '공정 수율', 'qms/widgets/kpi_yield.html', yield_context, kpi_allowed('yield')),
     Widget('leave', '연차 잔여', TILE, leave_context, everyone),
 ]}
+
+# 모듈에 속한 위젯은 그 모듈이 꺼지면 고를 수도 보일 수도 없다(MOD-10). 나머지는 기본 플랫폼
+for _key, _module in {'capa': 'qms_capa', 'gauges': 'qms_inspection', 'spc_alarms': 'qms_inspection', 'audits': 'qms_audit',
+                      'kpi_ppm': 'qms_kpi', 'kpi_fpy': 'qms_kpi', 'kpi_yield': 'qms_kpi'}.items():
+    WIDGETS[_key] = replace(WIDGETS[_key], allowed=lambda u, f=WIDGETS[_key].allowed, m=_module: active(m) and f(u))
 
 
 def todo_items(user):

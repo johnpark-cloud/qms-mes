@@ -22,7 +22,7 @@ from django.utils.http import content_disposition_header
 from django.views.decorators.http import require_POST
 
 from core.models import Item, Lot, Nonconformance
-from core.modules import check_label
+from core.modules import active_set, check_label, module_of_model
 from core.views import _get_record
 
 from . import kpi, spc
@@ -36,6 +36,7 @@ from .widgets import WIDGETS, layout_for, save_layout, todo_items, valid_layout
 @staff_member_required
 def excel_report(request, template_id, pk):
     tpl = get_object_or_404(ExcelTemplate, pk=template_id)
+    check_label(request, f'{tpl.target.app_label}.{tpl.target.model}')  # 꺼진 모듈 기록은 양식으로도 꺼내지 않는다(MOD-12)
     model, obj = _get_record(tpl.target.app_label, tpl.target.model, pk)  # 개인 자료(급여·연차)는 막는다
     if not request.user.has_perm(f'{model._meta.app_label}.view_{model._meta.model_name}'):
         raise PermissionDenied
@@ -380,7 +381,8 @@ def _pack_data(request):
               .select_related('lot', 'approved_by').prefetch_related('photos').order_by('detected_at'))
     d['ncs'] = ncs
     nc_ids = [n.pk for n in ncs]
-    can = lambda m: u.has_perm(f'qms.view_{m}')
+    on = active_set()
+    can = lambda m: u.has_perm(f'qms.view_{m}') and module_of_model(f'qms.{m}') in on  # 꺼진 모듈 절은 None(MOD-12)
     ct = ContentType.objects.get_for_model
     d['claims'] = list(CustomerClaim.objects.filter(nonconformance_id__in=nc_ids)) if can('customerclaim') else None
     d['scars'] = list(Scar.objects.filter(nonconformance_id__in=nc_ids)) if can('scar') else None

@@ -23,6 +23,7 @@ interface RelationsPayload {
   record: RelationItem & { model: string }
   incoming: RelationGroup[]
   outgoing: RelationGroup[]
+  inactive: number // 꺼진 모듈의 연결 기록 건수(목록은 열지 않는다)
 }
 interface GroupPage extends RelationGroup {
   page: number
@@ -97,11 +98,16 @@ export default function RelationsPanel({ ct, id }: { ct: string; id: number }) {
   const q = useQuery({ queryKey: ['relations', ct, id], queryFn: () => api<RelationsPayload>(`/api/relations/${ct}/${id}/`) })
   if (q.isError) return <Alert type="error" message={q.error instanceof ApiError ? q.error.detail : '연결을 불러오지 못했습니다.'} />
   if (!q.data) return <Spin />
-  const { incoming, outgoing } = q.data
-  const total = [...incoming, ...outgoing].reduce((n, g) => n + g.count, 0)
+  const { incoming, outgoing, inactive } = q.data
+  const total = [...incoming, ...outgoing].reduce((n, g) => n + g.count, 0) + inactive
   return (
     <section aria-label="연결">
       <Typography.Text strong>연결 {total}</Typography.Text>
+      {inactive > 0 && (
+        <div>
+          <Typography.Text type="secondary">비활성 모듈 기록 {inactive}건</Typography.Text>
+        </div>
+      )}
       {total === 0 && (
         <div>
           <Typography.Text type="secondary">연결된 기록이 없습니다.</Typography.Text>

@@ -5,10 +5,20 @@ from django.db.models import Exists, OuterRef
 from django.utils import timezone
 
 from core.models import EditRequest, Hold, Nonconformance, PartnerCertificate
+from core.modules import active_set
 
 from . import spc
 from .models import (AuditFinding, Capa, ChangeRequest, Characteristic, ControlPlan, CustomerClaim, DocumentRevision, Gauge,
                      Inspection, InspectionSpec, InternalAudit, Memo, PpapSubmission, Scar)
+
+
+# due_items 키 → 모듈. 꺼진 모듈의 묶음은 할 일·위젯·알림 메일에서 빈 목록이 된다(MOD-10). 나머지 키는 기본 플랫폼
+DUE_MODULE = {
+    'claims': 'qms_claim', 'scars': 'qms_supplier', 'capas': 'qms_capa', 'audits': 'qms_audit', 'findings': 'qms_audit',
+    'ppaps': 'qms_ppap', 'pending_ppaps': 'qms_ppap', 'gauges': 'qms_inspection', 'spc_alarms': 'qms_inspection',
+    'pending_specs': 'qms_inspection', 'pending_plans': 'qms_inspection', 'first_articles': 'qms_change',
+    'pending_changes': 'qms_change', 'pending_docs': 'qms_document',
+}
 
 
 def due_items(approver=False, user=None):
@@ -24,7 +34,7 @@ def due_items(approver=False, user=None):
              if c.status in ('기한 초과', '유효성 확인 대기') or c.due_date <= today + datetime.timedelta(days=3)]
     open_ncs = list(Nonconformance.objects.filter(closed_at__isnull=True).select_related('lot'))
     admin = user is None or user.is_superuser  # notify(user=None)는 관리자용 목록을 쓴다
-    return {
+    d = {
         'now': now,
         'today': today,
         'claims': claims,
@@ -59,6 +69,8 @@ def due_items(approver=False, user=None):
         'pending_changes': list(ChangeRequest.objects.filter(approved_at__isnull=True)) if approver else [],
         'pending_ppaps': list(PpapSubmission.objects.filter(approved_at__isnull=True)) if approver else [],
     }
+    on = active_set()
+    return d | {key: [] for key, module in DUE_MODULE.items() if module not in on}
 
 
 def recent_spc_alarms(now):

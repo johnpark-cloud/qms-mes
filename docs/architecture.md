@@ -44,6 +44,7 @@ docs/        구조·업무 규칙·테스트 문서, superpowers/ 설계·계�
 | `audit.py` | simple-history 이력을 감사 기록 화면용으로 읽는다(`audited_models`는 `PRIVATE_APPS` 제외, `row_payload`는 `password` 변경 제외) |
 | `rules.py` | admin·기존 뷰·API가 함께 쓰는 업무 규칙(잠금·삭제·승인 등). 규칙 본문은 한 곳에만 둔다 |
 | `relations.py` | 관계 레지스트리: 모델 `_meta`와 일반 연결(첨부·메모·증적·PPAP 요소·CAPA 출처)에서 어느 기록이든 그 기록을 가리키는 묶음(incoming)과 그 기록이 가리키는 묶음(outgoing)을 만든다. 새 표·외래키는 따로 등록하지 않는다. API `/api/relations/<app.model>/<id>/`(`core/api/views.py` `RelationsView`), 첨부 API `/api/attachments/`(`core/api/attachments.py`), 첨부 받기 `/attachments/<id>/`(`core/views.py` `attachment_download`) |
+| `recordspec.py` | 기록 설명서: 모델별 칸·목록 열·검색·탭·하위 표·오른쪽 열(`SPECS`). 등록하면 records API(`core/api/records.py`, `/api/records/<app.model>/`·`<id>/`·`<id>/history/`)와 새 기록 화면(`/app/r/:app/:model/:id`, `frontend/src/pages/records/`)이 따라오고, `core/relations.py` `record_url`이 링크 주소의 유일한 기준이다 |
 | `numbering.py` | 번호 규칙(`NumberRule` 틀 문자열) 해석: 틀 검사(`check_rule`), 다음 번호 계산(`next_number`), 긴 번호 풀이(`describe`), 개정 자동 채움(`next_revision`). 코드값은 `CodeValue` |
 | `api/` | DRF 기반 JSON API: 로그인·`/api/auth/me/`, 오류 응답 형식(`exceptions.py`), 모델 권한(`permissions.py`). 업무 규칙은 `core/rules.py`·모델 `save()`를 그대로 쓴다 |
 | `api/master.py` | 품번·BOM·라우팅 `/api/core/items/`(목록·`?export=xlsx`·생성·`<id>/` 조회·저장), 공정 `/api/core/processes/` 표 조회·저장, 번호 자동 부여 `/api/core/numbering/item-options/`(규칙·토큰별 선택지)·`/api/core/numbering/item-preview/`(다음 번호 미리보기), 엑셀 일괄 등록 `/api/core/import/profiles/`·`/api/core/import/`(`commit=0` 미리보기, `1` 확정). 저장 규칙은 `core/rules.py`(`save_item`·`save_table`)를 쓴다 |

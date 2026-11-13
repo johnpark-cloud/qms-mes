@@ -36,6 +36,7 @@ export default function CommandPalette({ open, onClose }: { open: boolean; onClo
     : settled ? (search.data?.results ?? []) : []
 
   const go = (h: Hit) => {
+    if (!h.url) return // 비활성 모듈 기록 건수 줄은 열 곳이 없다
     addRecent({ label: h.label, href: h.url })
     onClose()
     if (h.url.startsWith('/app/')) navigate(h.url.slice(4))

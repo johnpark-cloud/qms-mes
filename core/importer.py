@@ -8,6 +8,7 @@ from django.db import transaction
 from openpyxl import load_workbook
 
 from .models import Item, WorkOrder
+from .modules import MODULES, active, module_of_model
 
 
 def read_rows(uploaded, header_row):
@@ -70,6 +71,9 @@ TARGET_MODELS = {'item': Item, 'work_order': WorkOrder}  # 가져오기 권한 �
 def _process(profile, uploaded, dry_run):
     """run_import·preview_import 공용. (처리 건수, 오류 목록, 미리보기 행)을 돌려준다. dry_run이면 늘 되돌린다."""
     handler, errors, count, preview = HANDLERS[profile.target], [], 0, []
+    module = module_of_model(TARGET_MODELS[profile.target]._meta.label_lower)
+    if not active(module):  # 꺼진 모듈(작업지시 → 생산관리)로는 들여오지 않는다(MOD-12)
+        return 0, [f'{MODULES[module].name} 모듈이 꺼져 있어 가져올 수 없습니다.'], []
     try:
         rows = list(read_rows(uploaded, profile.header_row))
     except Exception:  # 빈 파일, 제목 행이 파일보다 아래, 확장자만 .xlsx, 글자 인코딩을 알 수 없는 CSV 등

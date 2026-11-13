@@ -16,6 +16,7 @@ from .models import (Attachment, BomLine, CodeValue, Department, FieldDef, Hold,
                      ModuleSwitch, NonconformancePhoto, NumberRule, Partner, PartnerCertificate, Process, RevisionLog, RoutingStep, Shipment,
                      WorkOrder, WorkResult)
 from .records import blockers, can_edit_locked, delete_record, is_locked
+from .recordspec import url_for
 from .rules import LOCKED_MSG, begin_edit, child_editable, finish_edit, missing_message, nc_locked_fields, sign_disposition
 
 admin.site.site_header = admin.site.site_title = 'QMS+MES'
@@ -105,6 +106,7 @@ class BaseAdmin(SimpleHistoryAdmin):
 
     def render_change_form(self, request, context, add=False, change=False, form_url='', obj=None):
         context['request_links_enabled'] = self.request_links_enabled
+        context['new_screen'] = obj is not None and url_for(obj)  # REC-12
         context['record_locked'] = obj is not None and is_locked(obj) and not can_edit_locked(obj, request.user)
         if obj is not None and obj.pk:
             context['related_lot'], groups = self.related(obj)

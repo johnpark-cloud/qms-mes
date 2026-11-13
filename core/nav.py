@@ -59,6 +59,7 @@ NAV = [
                     ('심사 자료 출력', 'audit_pack', 'core.view_nonconformance')]),
     ('고객 및 협력사', [('거래처', 'admin:core_partner_changelist', 'core.view_partner'),
                   ('고객 클레임(8D)', 'admin:qms_customerclaim_changelist', 'qms.view_customerclaim'),
+                  ('클레임 설정', 'admin:qms_customerrule_changelist', 'qms.view_customerrule'),  # 고객사별 8D 기한
                   ('협력사 시정요구(SCAR)', 'admin:qms_scar_changelist', 'qms.view_scar'),
                   ('PPAP', 'admin:qms_ppapsubmission_changelist', 'qms.view_ppapsubmission'),
                   ('협력사 평가', 'suppliers', 'qms.view_scar')]),
@@ -70,7 +71,6 @@ NAV = [
                        ('번호 규칙', 'admin:core_numberrule_changelist', 'core.view_numberrule'),
                        ('검사기준', 'admin:qms_inspectionspec_changelist', 'qms.view_inspectionspec'),
                        ('관리계획서', 'admin:qms_controlplan_changelist', 'qms.view_controlplan'),
-                       ('고객사별 8D 기한', 'admin:qms_customerrule_changelist', 'qms.view_customerrule'),
                        ('엑셀 일괄 등록', 'import', 'core.view_importprofile'),
                        ('부서', 'admin:core_department_changelist', 'core.view_department'),
                        ('사용자 정의 칸', 'admin:core_fielddef_changelist', 'core.view_fielddef'),

@@ -51,11 +51,11 @@ BASE_APPS = ('auth', 'personal')  # 사용자·권한, 개인 연차·급여
 BASE_PATHS = (
     'app/', 'me/', 'todo/', 'overview/', 'dashboard/', 'brand/', 'search/', 'trace/', 'nc/', 'attachments/', 'import/',
     'approve/', 'request/', 'print/', 'memo/', 'media/',
-    # shortcut: 엑셀 보고서·첨부 원본은 대상 기록의 모듈을 아직 보지 않는다. A4(MOD-12)에서 막는다.
+    # 엑셀 보고서는 뷰가 양식 대상 모델로 check_label 한다(MOD-12)
     'report/',
     'api/auth/', 'api/search/', 'api/items/', 'api/core/lots/', 'api/core/trace/', 'api/core/items/',
     'api/core/numbering/', 'api/core/processes/', 'api/core/import/', 'api/attachments/', 'api/relations/',
-    'api/revision-log/', 'api/audit-log/', 'api/schema/',
+    'api/revision-log/', 'api/audit-log/', 'api/schema/', 'api/records/',
     'api/qms/overview/', 'api/qms/todo/', 'api/qms/dashboard/', 'api/qms/memos/',
 )
 

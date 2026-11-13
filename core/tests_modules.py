@@ -159,7 +159,7 @@ class GateTest(TestCase):
         self.assertIn('/admin/core/lot/', hrefs())
         sidebar = self.client.get('/todo/').content.decode().partition('id="qms-sidebar"')[2].partition('</nav>')[0]
         self.assertIn('/admin/core/lot/', sidebar)
-        self.assertNotIn('/admin/qms/capa/', sidebar)  # 위젯·할 일 목록 필터는 A4
+        self.assertNotIn('/admin/qms/capa/', sidebar)
 
 
 class OffSafetyTest(TestCase):
@@ -234,3 +234,94 @@ class OffSafetyTest(TestCase):
         self.change()
         with self.assertRaisesMessage(ValidationError, '[4M 변경] CR-1'):
             Shipment.objects.create(lot=Lot.objects.create(number='L-2', item=self.item), customer='A사', qty=1)
+
+
+def force_off(*keys):
+    """열린 기록 검사(MOD-06)를 건너뛰고 끈다: 끈 뒤에 남은 기록이 화면에서 어떻게 보이는지 보려는 테스트용."""
+    ModuleSwitch.objects.bulk_create([ModuleSwitch(key=k, enabled=False) for k in keys])
+
+
+class ConsumerTest(TestCase):
+    """A4: 일상 화면에서 빠지고(MOD-10), 추적 화면은 건수로 남고(MOD-11), 일괄 작업은 거부(MOD-12), 클레임 설정 메뉴(MOD-13)."""
+
+    def setUp(self):
+        self.admin = User.objects.create_superuser('root', password='pw')
+        self.user = User.objects.create_user('lead', password='pw', is_staff=True)
+        self.user.groups.add(Group.objects.get(name='품질팀장'))
+        self.item = Item.objects.create(code='C1', name='셀', item_type=Item.FINISHED)
+        self.lot = Lot.objects.create(number='L-1', item=self.item)
+        self.capa = apps.get_model('qms', 'Capa').objects.create(
+            title='재발 방지', source='OTHER', action='조치', owner=self.admin, due_date=datetime.date.today())
+
+    def test_todo_widgets_overview_drop_off_module(self):
+        from qms.due import digest, due_items
+        from qms.overview import sections
+        from qms.widgets import WIDGETS
+        self.assertEqual(due_items()['capas'], [self.capa])
+        force_off('qms_audit', 'qms_capa')
+        d = due_items()
+        self.assertEqual((d['capas'], d['findings']), ([], []))
+        self.assertNotIn('CAPA', [t for t, _ in digest(d)])
+        self.assertFalse(WIDGETS['capa'].allowed(self.admin))
+        self.assertTrue(WIDGETS['held_lots'].allowed(self.admin))
+        titles = [c['title'] for _, cards in sections(self.admin) for c in cards]
+        self.assertIn('열린 부적합', titles)
+        self.assertNotIn('진행 중 CAPA', titles)
+        self.client.force_login(self.user)
+        todo = self.client.get('/api/qms/todo/').json()
+        self.assertNotIn('capa', [w['key'] for w in todo['available']])
+        lists = [w['data'] for w in todo['widgets'] if w['key'] == 'todo_lists']
+        self.assertEqual([x['capas'] for x in lists], [[]] * len(lists))
+
+    def test_trace_relations_search_count_inactive(self):
+        from .relations import relations_payload
+        from .search import search
+        from .timeline import lot_timeline
+        Shipment.objects.bulk_create([Shipment(lot=self.lot, customer='A사', qty=1)])  # 출하 규칙은 이 테스트의 관심 밖
+        force_off('mes', 'qms_audit', 'qms_capa')
+        events = lot_timeline(self.lot)
+        self.assertNotIn('shipment', [e['kind'] for e in events])
+        self.assertEqual(events[-1]['label'], '비활성 모듈 기록 1건')
+        rel = relations_payload(self.admin, self.lot)
+        self.assertNotIn('core.shipment', [g['model'] for g in rel['incoming']])
+        self.assertEqual(rel['inactive'], 1)
+        found = search(self.admin, self.capa.number)
+        self.assertEqual([r['label'] for r in found], ['비활성 모듈 기록 1건'])
+        self.assertIn('KPI', [r['label'] for r in search(self.admin, 'KPI')])
+        force_off('qms_kpi')
+        self.assertNotIn('KPI', [r['label'] for r in search(self.admin, 'KPI')])  # 꺼진 모듈의 동작은 검색에서 뺀다
+
+    def test_bulk_paths_follow_module(self):
+        import tempfile
+
+        from django.contrib.contenttypes.models import ContentType
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        from django.core.management import CommandError, call_command
+
+        from .importer import preview_import
+        from .models import ImportProfile
+        tpl = apps.get_model('qms', 'ExcelTemplate').objects.create(
+            name='CAPA 양식', target=ContentType.objects.get_for_model(self.capa), file='templates/x.xlsx', mapping={})
+        profile = ImportProfile.objects.create(name='작업지시', target='work_order', mapping={'number': 'A'})
+        force_off('mes', 'qms_change', 'qms_inspection', 'qms_audit', 'qms_capa')
+        self.client.force_login(self.user)
+        self.assertEqual(self.client.get(f'/report/{tpl.pk}/{self.capa.pk}/').status_code, 404)
+        r = preview_import(profile, SimpleUploadedFile('a.csv', b'A\nWO-1\n'))
+        self.assertIn('꺼져', r['errors'][0])
+        with tempfile.TemporaryDirectory() as inbox, self.assertRaisesMessage(CommandError, '꺼져'):
+            call_command('collect', inbox=inbox)
+
+    def test_audit_pack_hides_off_sections(self):
+        self.client.force_login(self.admin)
+        force_off('qms_audit', 'qms_capa')
+        r = self.client.get(f'/audit-pack/?item={self.item.pk}')
+        self.assertEqual(r.status_code, 200)  # 시스템 관리자는 조회
+        self.assertIsNone(r.context['capas'])
+
+    def test_claim_settings_menu(self):
+        from .nav import visible_nav
+        groups = dict(visible_nav(self.user))
+        self.assertIn(('클레임 설정', '/admin/qms/customerrule/'), groups['고객 및 협력사'])
+        self.assertNotIn('/admin/qms/customerrule/', [h for _, h in groups['기준정보 및 시스템 관리']])
+        force_off('qms_claim')
+        self.assertNotIn('/admin/qms/customerrule/', [h for links in dict(visible_nav(self.user)).values() for _, h in links])

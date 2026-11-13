@@ -7,7 +7,8 @@ import { fetchMe } from '../api/auth'
 
 interface Props {
   title: string
-  status?: '초안' | '승인됨' | '잠김' | '합격' | '불합격' | '미판정'
+  /** 정해진 상태는 색을 붙이고, 그 밖은 회색 */
+  status?: string
   /** 주요 버튼 1개. 나머지 동작은 menu(「⋯」)로 보낸다. */
   actions: ReactNode
   props: { label: string; node: ReactNode }[]
@@ -35,7 +36,7 @@ export default function RecordPage({ title, status, actions, props, children, si
       <div className="record-head">
         <h1 className="page-title">{title}</h1>
         {lead}
-        {status && !lead && <Tag color={COLOR[status]}>{status}</Tag>}
+        {status && !lead && <Tag color={COLOR[status as keyof typeof COLOR] ?? 'default'}>{status}</Tag>}
         <div className="record-actions">
           {actions}
           {record && (

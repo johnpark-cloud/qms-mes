@@ -1,10 +1,10 @@
 """재발 방지: 새 부적합·클레임과 비슷한 과거 종결 사례를 찾는다."""
 import re
 
-from django.urls import reverse
 from django.utils.html import format_html, format_html_join
 
 from core.models import Nonconformance
+from core.relations import record_url
 
 SCAN = 500  # shortcut: 최근 종결 500건만 훑는다, 이력이 많아져 놓치는 사례가 생기면 전문 검색(FTS)으로 교체
 
@@ -38,8 +38,7 @@ def similar_html(record):
         return '비슷한 과거 종결 사례 없음'
     return format_html('<ul style="margin:0;padding-left:1.2em">{}</ul>', format_html_join('', (
         '<li><a href="{}" target="_blank">{}</a> · {} · 처분 {}{}</li>'), (
-        (reverse('admin:qms_customerclaim_change', args=[c.pk]) if c else
-         reverse('admin:core_nonconformance_change', args=[p.pk]),
+        (record_url(c or p),
          c or p, p.description[:60], p.get_disposition_display(),
          format_html('<br>D4 근본 원인: {}<br>D7 재발 방지: {}', c.d4_root_cause[:120], c.d7_prevention[:120]) if c else '')
         for _, p, c in rows)))

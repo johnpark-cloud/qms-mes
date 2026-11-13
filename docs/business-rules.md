@@ -119,6 +119,7 @@
 | `/media/` 아래 파일(부적합 사진·메모 사진·거래처 인증서 등)은 로그인한 스태프만 받을 수 있다. | `config/urls.py` `/media/` |
 | 기록 첨부(`Attachment`)는 `/media/` 밖(`data/attachments/`)에 두고 `/attachments/<id>/`로만 받는다. 받으려면 `core.view_attachment` 권한과 첨부가 붙은 기록의 보기 권한이 모두 있어야 하고, 그 기록이 있어야 한다. 개인 앱(`PRIVATE_APPS`) 기록에는 붙일 수도 받을 수도 없다. 올리기(`/api/attachments/`)는 `core.add_attachment`와 대상 기록 보기 권한이 필요하다. 관리 화면에서는 첨부를 추가하지 않고, 삭제는 시스템 관리자만 한다. 첨부 행을 지우면 파일도 지운다. | `core/views.py` `can_view_target`·`attachment_download`, `core/api/attachments.py`, `core/models.py` `attachment_storage` |
 | 부서·거래처·사용자 정의 칸의 추가·수정은 품질팀장(과 시스템 관리자)만 한다. 품질엔지니어·검사원은 보기만 한다. | `qms/apps.py` `TEAM_LEAD_ONLY`, `ensure_roles` |
+| 새 기록 화면(`/app/r/<app>/<model>/<id>`)과 records API는 설명서(`core/recordspec.py` `SPECS`)에 등록된 모델만 연다(그 밖은 404). 목록·상세·변경 이력 탭은 그 모델의 `view_` 권한으로 서버가 검사한다(변경 이력 탭은 `view_` 권한자에게 보인다, 2026-11-13 사용자 결정). 전체 감사 기록 화면(`/app/audit`)은 그대로 품질팀장 전용이다. | `core/api/records.py`, `core/recordspec.py` |
 | 연결 패널(`/api/relations/<app.model>/<id>/`)은 그 기록 보기 권한이 있어야 열리고, 사용자가 볼 권한이 없는 표의 묶음은 개수도 알리지 않는다. 개인 앱·이력 표·사용자 계정은 연결 대상이 아니다. | `core/api/views.py` `RelationsView`, `core/relations.py` |
 | 엑셀 일괄 등록은 대상(품번·작업지시)의 추가·변경 권한이 모두 있어야 올릴 수 있다(기존 행을 덮어쓰므로). 각 행은 모델 검증(`full_clean`)을 거치고, 한 행이라도 틀리면 전체를 되돌린다. | `core/views.py` `import_view`, `core/importer.py` |
 | 인쇄·승인·삭제 요청 경로는 개인 자료와 계정·세션 등 시스템 기록(`personal`, `auth`, `admin`, `sessions`, `contenttypes`)을 열지 않는다. | `core/views.py` `_get_record` |
@@ -136,6 +137,7 @@
 | 열린 기록이 있는 모듈은 끌 수 없고 기록 번호를 보인다: 완료 안 된 작업지시, 미판정 검사, 초품 합격 전 4M(승인된 것), 미종결 CAPA·클레임·SCAR·내부심사, 미승인 PPAP. | `core/modules.py` `open_records`, `ModuleSwitch.clean` |
 | 꺼진 모듈에서도 시스템 관리자는 열린 기록을 닫을 수 있다: CAPA·클레임·SCAR·내부심사(지적) 관리 화면 변경 폼, 검사 입력(4M 초품 판정·재작업 재검사). 그 밖의 쓰기(추가·삭제 포함)는 403이다. 초품 수동 해제 규칙은 없다. | `core/modules.py` `CLOSING`, `blocked` |
 | 인터록 거부 메시지 앞에 원인 모듈과 기록 번호를 붙인다: `[부적합] NC-…`, `[4M 변경] CR-…`. | `core/models.py` `Lot.assert_usable`, `Shipment.clean` |
+| 꺼진 모듈 기록은 할 일·기한·알림·위젯·종합현황에서 빠지고, LOT 이력·검색·관련 기록에는 「비활성 모듈 기록 N건」으로만 보인다. 엑셀 보고서(404)·엑셀 일괄 등록(거부)·`collect`(거부, 파일 유지)·심사 대응 묶음(구역 제외)도 모듈 상태를 따른다. | `qms/due.py` `DUE_MODULE`, `qms/widgets.py`, `qms/overview.py`, `core/timeline.py`, `core/search.py`, `core/relations.py`, `qms/views.py`, `core/importer.py` |
 | 모듈 설정은 업무 규칙을 바꾸지 않는다. 모든 모듈을 꺼도 LOT 보류 인터록은 동작한다. | `core/tests_modules.py` `test_hold_interlock_with_all_modules_off` |
 
 ## 11. 이력

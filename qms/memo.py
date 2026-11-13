@@ -2,8 +2,6 @@
 from django import forms
 from django.apps import apps
 from django.contrib.contenttypes.models import ContentType
-from django.urls import reverse
-from django.utils.http import urlencode
 
 from core.views import MultiPhotoField
 
@@ -25,10 +23,9 @@ ATTACHABLE = {label for label, _ in TARGETS.values()} | {'qms.inspection', 'qms.
 
 
 def target_url(obj):
-    """기록 상세 화면 주소. LOT은 이력(타임라인) 화면."""
-    if obj._meta.label_lower == 'core.lot':
-        return f"{reverse('trace')}?{urlencode({'lot': obj.number})}"
-    return reverse(f'admin:{obj._meta.app_label}_{obj._meta.model_name}_change', args=[obj.pk])
+    """기록 상세 화면 주소. 기준은 core.relations.record_url 한 곳이다."""
+    from core.relations import record_url
+    return record_url(obj)
 
 
 def todays_audit(today):

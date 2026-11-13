@@ -9,7 +9,11 @@ from typing import NamedTuple
 
 from django.apps import apps
 from django.contrib.contenttypes.models import ContentType
-from django.urls import NoReverseMatch
+from django.urls import NoReverseMatch, reverse
+from django.utils.http import urlencode
+
+from .modules import active_set, module_of_model
+from .recordspec import url_for
 
 APPS = ('core', 'qms')
 EXCLUDE = {'core.importprofile', 'qms.dashboardlayout'}
@@ -78,13 +82,18 @@ def relations_for(model):
 
 
 def record_url(obj):
+    """기록 상세 주소의 유일한 기준(REC-04): 전용 React 화면 → 기록 설명서 화면 → LOT 이력 → 관리 화면."""
     pages = {'core.item': 'items', 'qms.inspectionspec': 'specs', 'qms.controlplan': 'plans', 'qms.inspection': 'inspections'}
-    page = pages.get(_label(obj))
-    if page:
-        return f'/app/{page}/{obj.pk}'
-    from qms.memo import target_url
+    label = _label(obj)
+    if label in pages:
+        return f'/app/{pages[label]}/{obj.pk}'
+    url = url_for(obj)
+    if url:
+        return url
+    if label == 'core.lot':
+        return f"{reverse('trace')}?{urlencode({'lot': obj.number})}"
     try:
-        return target_url(obj)
+        return reverse(f'admin:{obj._meta.app_label}_{obj._meta.model_name}_change', args=[obj.pk])
     except NoReverseMatch:  # 관리 화면이 없는 표(측정값 등)는 링크 없이 글자만
         return None
 
@@ -119,13 +128,16 @@ def _queryset(obj, rel):
     return rel.model._default_manager.filter(**{rel.field: obj.pk})
 
 
-def group_payload(user, obj, rel, page=None):
+def group_payload(user, obj, rel, page=None, on=None):
     """묶음 하나. 사용자가 그 표를 볼 권한이 없으면 None (개수도 알리지 않는다)."""
     meta = rel.model._meta
     if not user.has_perm(f'{meta.app_label}.view_{meta.model_name}'):
         return None
     qs = _queryset(obj, rel).select_related().order_by('-pk')
     count = qs.count()
+    if module_of_model(_label(rel.model)) not in (on if on is not None else active_set()):  # 꺼진 모듈: 건수만, 목록은 열지 않는다(MOD-11)
+        return {'key': rel.key, 'label': rel.label, 'model': _label(rel.model), 'field': rel.field,
+                'direction': rel.direction, 'count': count, 'items': [], 'inactive': True}
     rows = qs[:FIRST] if page is None else qs[(page - 1) * PAGE:page * PAGE]
     return {'key': rel.key, 'label': rel.label, 'model': _label(rel.model), 'field': rel.field,
             'direction': rel.direction, 'count': count, 'items': [item_payload(o) for o in rows]}
@@ -136,11 +148,14 @@ def pages(count):
 
 
 def relations_payload(user, obj):
-    groups = {'in': [], 'out': []}
+    groups, inactive, on = {'in': [], 'out': []}, 0, active_set()  # 묶음마다 조회하지 않는다
     for rel in relations_for(type(obj)):
-        g = group_payload(user, obj, rel)
-        if g and g['count']:
+        g = group_payload(user, obj, rel, on=on)
+        if g and g.get('inactive'):
+            inactive += g['count']
+        elif g and g['count']:
             groups[rel.direction].append(g)
     first = {m: i for i, m in enumerate(OPEN_FIRST)}
     groups['in'].sort(key=lambda g: (first.get(g['model'], len(first)), -g['count']))
-    return {'record': {'model': _label(obj), **item_payload(obj)}, 'incoming': groups['in'], 'outgoing': groups['out']}
+    return {'record': {'model': _label(obj), **item_payload(obj)}, 'incoming': groups['in'], 'outgoing': groups['out'],
+            'inactive': inactive}

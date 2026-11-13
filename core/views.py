@@ -27,6 +27,7 @@ from .timeline import lot_actions, lot_timeline
 from .models import (Approvable, Attachment, EditRequest, Hold, ImportProfile, Lot, Nonconformance, NonconformancePhoto, is_approver,
                      validate_photo)
 from .records import blockers, is_locked
+from .relations import record_url
 from .search import search as run_search
 
 
@@ -167,7 +168,7 @@ def edit_request(request, kind, app_label, model_name, pk):
         raise Http404
     if not request.user.has_perm(f'{app_label}.view_{model_name}'):
         raise PermissionDenied
-    back = reverse(f'admin:{app_label}_{model_name}_change', args=[pk])
+    back = record_url(obj) or reverse(f'admin:{app_label}_{model_name}_change', args=[pk])
     error = None
     if request.method == 'POST':
         reason = request.POST.get('reason', '').strip()
@@ -201,7 +202,7 @@ def edit_request_decide(request, pk):
         raise PermissionDenied('시스템 관리자만 처리할 수 있습니다.')
     req = get_object_or_404(EditRequest, pk=pk)
     obj, error = req.target, None
-    back = reverse(f'admin:{req.content_type.app_label}_{req.content_type.model}_change', args=[req.object_id])
+    back = (obj and record_url(obj)) or reverse(f'admin:{req.content_type.app_label}_{req.content_type.model}_change', args=[req.object_id])
     if request.method == 'POST' and req.status == EditRequest.PENDING:
         try:
             req.decide(request.user, 'approve' in request.POST, request.POST.get('reject_reason', '').strip())
@@ -225,7 +226,7 @@ def approve(request, app_label, model_name, pk):
         raise Http404
     if not is_approver(request.user):
         raise PermissionDenied('품질팀장만 승인할 수 있습니다.')
-    back = reverse(f'admin:{app_label}_{model_name}_change', args=[pk])
+    back = record_url(obj) or reverse(f'admin:{app_label}_{model_name}_change', args=[pk])
     if obj.is_approved:
         messages.info(request, '이미 승인된 기록입니다.')
         return redirect(back)
