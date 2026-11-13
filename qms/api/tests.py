@@ -228,6 +228,10 @@ class SpecApiTest(TestCase):
         self.assertEqual(r.status_code, 409)
         self.assertEqual(Characteristic.objects.get(pk=c.pk).name, c.name)
 
+    def test_edit_request_url_opens(self):  # 승인·잠긴 검사기준의 「수정 요청」 링크가 요청 화면으로 열린다
+        url = self.c(self.eng).get(f'/api/qms/specs/{self.spec.pk}/').json()['edit_request_url']
+        self.assertEqual(self.c(self.eng).get(url).status_code, 200)
+
     def test_put_field_errors_by_row(self):
         draft = self.new_draft()
         body = {'characteristics': [{'id': None, 'name': '가', 'lsl': 'abc'}], 'version': None}
@@ -633,6 +637,44 @@ class InspectionApiTest(TestCase):
         r = self.c().get(f'/api/qms/inspections/{bad.pk}/document/?export=xlsx')
         self.assertEqual(r.status_code, 200)
         self.assertIn('.xlsx', r['Content-Disposition'])
+
+    def test_detail_read_only_keys(self):
+        """B0: 공급사·수량·샘플링·승인자·항목 규격·CAPA를 더하고 기존 키는 그대로 둔다."""
+        self.lead.first_name = '김팀장'
+        self.lead.save()
+        self.user.first_name = '이검사'
+        self.user.save()
+        spec = self.specs['INCOMING']
+        InspectionSpec.objects.filter(pk=spec.pk).update(sampling='n=5')
+        bad = self.make(self.lots[1], 'INCOMING', '11.0')
+        capa = Capa.objects.create(title='두께 재발 방지', source='NC', action='x', owner=self.lead, due_date=timezone.localdate(),
+                                   source_type=ContentType.objects.get_for_model(Nonconformance), source_id=bad.nonconformance.pk)
+        c = self.c()
+        with self.assertNumQueries(8):  # 항목·CAPA 수와 상관없이 같다
+            d = c.get(f'/api/qms/inspections/{bad.pk}/').json()
+        self.assertEqual(set(d) >= {'id', 'title', 'status', 'lot', 'item', 'spec', 'inspector', 'inspected_at',
+                                    'nonconformance', 'measurements', 'templates', 'capa'}, True)
+        self.assertEqual((d['lot']['supplier'], d['lot']['qty'], d['lot']['number']), ('성일철강', '10', 'L-2'))
+        self.assertEqual(d['inspector'], '이검사')
+        self.assertEqual((d['spec']['sampling'], d['spec']['revision'], d['spec']['approved_by']), ('n=5', spec.revision, '김팀장'))
+        self.assertTrue(d['spec']['approved_at'])
+        m = d['measurements'][0]
+        self.assertEqual((m['value'], m['gauge'], m['spec_text'], m['passed']), ('11', 'G-01', '9.9 ~ 10.1 mm', False))
+        self.assertEqual((m['lsl'], m['usl'], m['unit'], m['is_variable'], m['special'], m['decimals'], m['gauge_name']),
+                         ('9.9', '10.1', 'mm', True, '', 1, '마이크로미터'))
+        self.assertEqual(d['capa'], [{'id': capa.pk, 'number': capa.number, 'url': f'/admin/qms/capa/{capa.pk}/change/'}])
+        ok = self.make(self.lots[0], 'INCOMING', '10.0')
+        self.assertEqual(self.c().get(f'/api/qms/inspections/{ok.pk}/').json()['capa'], [])
+
+    def test_detail_attribute_item_has_no_limits(self):
+        spec = InspectionSpec.objects.create(item=self.item, inspection_type=InspectionSpec.PROCESS)
+        c = Characteristic.objects.create(spec=spec, name='외관', special='CC')
+        spec.approved_by, spec.approved_at = self.lead, timezone.now()
+        spec.save()
+        i = submit_inspection(self.lots[2], spec, self.user, None, {c.pk: 'OK'})
+        m = self.c().get(f'/api/qms/inspections/{i.pk}/').json()['measurements'][0]
+        self.assertEqual((m['value'], m['lsl'], m['usl'], m['is_variable'], m['special'], m['decimals'], m['gauge_name']),
+                         ('OK', None, None, False, 'CC', None, ''))
 
     def test_permission(self):
         i = self.make(self.lots[0], 'INCOMING', '10.0')

@@ -71,7 +71,7 @@ def _detail(plan, user):
         'type_options': [{'value': '', 'label': '없음'}] + [{'value': v, 'label': label} for v, label in InspectionSpec.TYPES],
         'stage_options': [{'value': v, 'label': label} for v, label in ControlPlan.STAGES],
         'diff': compare_plans(prev, plan),
-        'edit_request_url': reverse('edit_request', args=['edit', 'qms', 'controlplan', plan.pk]),
+        'edit_request_url': reverse('edit_request', args=['EDIT', 'qms', 'controlplan', plan.pk]),
     }
 
 

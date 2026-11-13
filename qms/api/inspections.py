@@ -10,8 +10,8 @@ from rest_framework.views import APIView
 
 from core.api.permissions import require_perm
 from core.export import document_xlsx, table_xlsx, xlsx_response
-from core.models import Hold, Item, Lot
-from qms.models import ExcelTemplate, Gauge, Inspection, InspectionSpec
+from core.models import Hold, Item, Lot, Nonconformance
+from qms.models import Capa, ExcelTemplate, Gauge, Inspection, InspectionSpec
 from qms.rules import RECEIVE_MSG, measurement, receive_lot, submit_inspection
 
 from .specs import BAD_BODY, PAGE_SIZE, _bad
@@ -250,7 +250,28 @@ class InspectionListView(APIView):
 
 
 def _inspection(pk):
-    return get_object_or_404(Inspection.objects.select_related('lot__item', 'spec', 'inspector', 'nonconformance'), pk=pk)
+    return get_object_or_404(Inspection.objects.select_related('lot__item', 'spec__item', 'spec__approved_by', 'inspector',
+                                                               'nonconformance'), pk=pk)
+
+
+def _num(d):
+    return format(d.normalize(), 'f') if d is not None else None
+
+
+def _decimals(c):
+    """표시 자릿수 = 하한·상한 중 소수 자릿수가 큰 쪽. 계수형은 None."""
+    if not c.is_variable:
+        return None
+    return max(max(0, -d.normalize().as_tuple().exponent) for d in (c.lsl, c.usl) if d is not None)
+
+
+def _measurement(m):
+    c = m.characteristic
+    return {'name': c.name, 'spec_text': c.spec_text(),
+            'value': (_num(m.value) if c.is_variable else {True: 'OK', False: 'NG'}.get(m.ok)),
+            'gauge': m.gauge.number if m.gauge else '', 'passed': m.passed,
+            'lsl': _num(c.lsl), 'usl': _num(c.usl), 'unit': c.unit, 'is_variable': c.is_variable, 'special': c.special,
+            'decimals': _decimals(c), 'gauge_name': m.gauge.name if m.gauge else ''}
 
 
 class InspectionDetailView(APIView):
@@ -261,18 +282,21 @@ class InspectionDetailView(APIView):
         x = _inspection(pk)
         ct = ContentType.objects.get_for_model(Inspection)
         nc = x.nonconformance
+        capas = Capa.objects.filter(source_type=ContentType.objects.get_for_model(Nonconformance), source_id=nc.pk).order_by('pk') if nc else []
         return Response({
             'id': x.pk, 'title': str(x), 'status': x.get_result_display() or '미판정',
-            'lot': {'id': x.lot.pk, 'number': x.lot.number, 'trace_url': reverse('trace') + '?lot=' + x.lot.number},
-            'item': {'code': x.lot.item.code, 'name': x.lot.item.name}, 'spec': {'id': x.spec.pk, 'title': str(x.spec)},
+            'lot': {'id': x.lot.pk, 'number': x.lot.number, 'trace_url': reverse('trace') + '?lot=' + x.lot.number,
+                    'supplier': x.lot.supplier, 'qty': _qty(x.lot.qty)},
+            'item': {'code': x.lot.item.code, 'name': x.lot.item.name},
+            'spec': {'id': x.spec.pk, 'title': str(x.spec), 'sampling': x.spec.sampling, 'revision': x.spec.revision,
+                     'approved_by': _who(x.spec.approved_by),
+                     'approved_at': timezone.localtime(x.spec.approved_at).isoformat() if x.spec.approved_at else None},
             'inspector': _who(x.inspector), 'inspected_at': timezone.localtime(x.inspected_at).isoformat(),
             'nonconformance': {'id': nc.pk, 'number': nc.number,
                                'url': reverse('admin:core_nonconformance_change', args=[nc.pk])} if nc else None,
-            'measurements': [{'name': m.characteristic.name, 'spec_text': m.characteristic.spec_text(),
-                              'value': (format(m.value.normalize(), 'f') if m.value is not None else None)
-                              if m.characteristic.is_variable else {True: 'OK', False: 'NG'}.get(m.ok),
-                              'gauge': m.gauge.number if m.gauge else '', 'passed': m.passed}
-                             for m in x.measurements.select_related('characteristic', 'gauge').order_by('pk')],
+            'measurements': [_measurement(m) for m in x.measurements.select_related('characteristic', 'gauge').order_by('pk')],
+            'capa': [{'id': c.pk, 'number': c.number, 'url': reverse('admin:qms_capa_change', args=[c.pk])}
+                     for c in capas],
             'templates': [{'id': t.pk, 'name': t.name, 'url': reverse('excel_report', args=[t.pk, x.pk])}
                           for t in ExcelTemplate.objects.filter(target=ct)],
         })

@@ -90,7 +90,7 @@ def _detail(spec, user):
         'diff': compare_specs(prev, spec),
         'templates': [{'id': t.pk, 'name': t.name, 'url': reverse('excel_report', args=[t.pk, spec.pk])}
                       for t in ExcelTemplate.objects.filter(target=ct)],
-        'edit_request_url': reverse('edit_request', args=['edit', 'qms', 'inspectionspec', spec.pk]),
+        'edit_request_url': reverse('edit_request', args=['EDIT', 'qms', 'inspectionspec', spec.pk]),
     }
 
 
