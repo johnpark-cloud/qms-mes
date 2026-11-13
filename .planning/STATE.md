@@ -1,19 +1,19 @@
 ---
 gsd_state_version: "1.0"
-current_phase: 3
-current_phase_name: 모듈 끄기 안전장치
+current_phase: 4
+current_phase_name: 꺼진 모듈 소비처 필터와 클레임 설정 이동
 status: planning
-stopped_at: Phase 2 complete
+stopped_at: Phase 3 complete
 last_updated: "2026-11-13T00:00:00.000Z"
 last_activity: 2026-11-13
-last_activity_desc: Phase 2(A1) 구현·검증 완료
+last_activity_desc: Phase 3(A3) 구현·검증 완료
 state_head: fb4d3be6d0178892e74247aff4858b54bfaafd18
 progress:
   total_phases: 10
-  completed_phases: 2
+  completed_phases: 3
   total_plans: 0
   completed_plans: 0
-  percent: 20
+  percent: 30
 ---
 
 # Project State
@@ -23,16 +23,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-11-12)
 
 **Core value:** 부적합·인터록 규칙이 어떤 화면 변경이나 모듈 설정에서도 약해지지 않고, 기록이 이력과 함께 보존된다.
-**Current focus:** Phase 3 (A3) — 착수 전 미결 #3 사용자 승인 필요
+**Current focus:** Phase 4 (A4) — 꺼진 모듈 소비처 필터
 
 ## Current Position
 
-Phase: 3 of 10 (A3)
+Phase: 4 of 10 (A4)
 Plan: 0 of TBD in current phase
-Status: Blocked on decision #3
-Last activity: 2026-11-13 — Phase 2(A1) 완료: core/modules.py 대응표, ModuleSwitch, ModuleGate, 메뉴·me·React 「비활성 모듈」
+Status: Ready
+Last activity: 2026-11-13 — Phase 3(A3) 완료: 열린 기록 있으면 끄기 거부, 시스템 관리자 종결 허용, 인터록 메시지 원인 표시
 
-Progress: [██░░░░░░░░] 20%
+Progress: [███░░░░░░░] 30%
 
 ## Performance Metrics
 
@@ -64,6 +64,7 @@ Recent decisions affecting current work:
 - [Roadmap]: 모듈 행이 없으면 켜짐, 데이터 마이그레이션 없음.
 - [Roadmap]: 설명서 틀은 `core/recordspec.py`. 기존 `core/records.py`는 건드리지 않는다.
 - [Phase 2]: 4M 변경은 검사 모듈을 requires로 둔다(초품 해제가 검사 판정으로만 됨). 게이트는 꺼진 모듈 일반 404·관리자 GET만. 엑셀 보고서·/media/·위젯 필터는 A4.
+- [Phase 3]: 미결 #3 해결 — 수동 초품 해제 없음, 꺼진 모듈에서 시스템 관리자는 종결 폼·검사 입력만 쓰기 가능(`CLOSING`). 열린 기록 있으면 끄기 거부(`open_records`).
 - [Roadmap]: 공통 완료 조건은 ROADMAP.md 「모든 단계 공통 완료 조건」에 한 번만 적는다.
 
 ### Pending Todos
@@ -72,7 +73,6 @@ None yet.
 
 ### Blockers/Concerns
 
-- [Phase 3 전] 미결 #3: 검사 모듈이 꺼졌을 때 4M 초품 해제 경로. 업무 규칙 변경이라 사용자 승인 필요.
 - [Phase 5 전] 미결 #6: 기록별 변경 이력 탭의 열람 권한(`view_` 기준 vs 품질팀장 전용).
 - [Phase 6 전] 미결 #5: `submit_edit_request`를 `core/rules.py`로 옮길지(리팩터링 승인 필요).
 - 조사 단계에서 셸이 동작하지 않아 테스트를 실행하지 못했다. 각 단계 착수 시 기준선(`manage.py test`, `scripts/e2e_check.py`, `makemigrations --check --dry-run`)을 실제로 돌려 기록한다.
