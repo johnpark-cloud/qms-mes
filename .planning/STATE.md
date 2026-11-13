@@ -1,19 +1,19 @@
 ---
 gsd_state_version: "1.0"
-current_phase: 4
-current_phase_name: 꺼진 모듈 소비처 필터와 클레임 설정 이동
+current_phase: 6
+current_phase_name: 범용 저장과 승인·수정·삭제 요청
 status: planning
-stopped_at: Phase 3 complete
+stopped_at: Phase 5 complete
 last_updated: "2026-11-13T00:00:00.000Z"
 last_activity: 2026-11-13
-last_activity_desc: Phase 3(A3) 구현·검증 완료
+last_activity_desc: Phase 5(B1) 구현·검증 완료
 state_head: fb4d3be6d0178892e74247aff4858b54bfaafd18
 progress:
   total_phases: 10
-  completed_phases: 3
+  completed_phases: 5
   total_plans: 0
   completed_plans: 0
-  percent: 30
+  percent: 50
 ---
 
 # Project State
@@ -23,16 +23,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-11-12)
 
 **Core value:** 부적합·인터록 규칙이 어떤 화면 변경이나 모듈 설정에서도 약해지지 않고, 기록이 이력과 함께 보존된다.
-**Current focus:** Phase 4 (A4) — 꺼진 모듈 소비처 필터
+**Current focus:** Phase 6 (B2) — 범용 저장과 승인·수정·삭제 요청 (미결 #5 결정됨: `submit_edit_request`를 동작 변경 없이 `core/rules.py`로 옮긴다)
 
 ## Current Position
 
-Phase: 4 of 10 (A4)
+Phase: 6 of 10 (B2)
 Plan: 0 of TBD in current phase
 Status: Ready
-Last activity: 2026-11-13 — Phase 3(A3) 완료: 열린 기록 있으면 끄기 거부, 시스템 관리자 종결 허용, 인터록 메시지 원인 표시
+Last activity: 2026-11-13 — Phase 5(B1) 완료: 기록 설명서·records API·새 기록 화면(문서·문서 개정·계측기·검사원 자격), record_url 단일화, 「새 화면으로」 링크. 변경 이력 탭은 view_ 권한자(미결 #6)
 
-Progress: [███░░░░░░░] 30%
+Progress: [█████░░░░░] 50%
 
 ## Performance Metrics
 
