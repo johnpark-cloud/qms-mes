@@ -93,7 +93,7 @@ def _can_request(obj, kind, user):
     return True
 
 
-CAPA_SOURCE = {'qms.customerclaim': '8D', 'qms.scar': 'SCAR', 'core.nonconformance': 'NC'}  # qms/admin.py capa_links와 같은 코드
+CAPA_SOURCE = {'qms.customerclaim': '8D', 'qms.scar': 'SCAR', 'core.nonconformance': 'NC', 'qms.auditfinding': 'AUDIT'}  # qms/admin.py capa_links와 같은 코드
 
 
 def _links(obj, user):
@@ -110,6 +110,10 @@ def _links(obj, user):
     return links
 
 
+def _parent_locked(obj, spec):
+    return bool(spec.lock_parent) and is_locked(getattr(obj, spec.lock_parent))
+
+
 def _detail(obj, spec, user):
     model = type(obj)
     fields = []
@@ -122,14 +126,15 @@ def _detail(obj, spec, user):
         children.append({'key': c.accessor, 'label': c.label, 'columns': _columns(rel.model, c.fields),
                          'rows': [_row(o, c.fields) for o in rel.all().order_by(*c.order)]})
     meta = model._meta
-    locked = is_locked(obj)
+    by_parent = _parent_locked(obj, spec)
+    locked = by_parent or is_locked(obj)
     return {'ct': meta.label_lower, 'id': obj.pk, 'title': str(obj), 'kind': str(meta.verbose_name),
             'status': status_of(obj), 'fields': fields, 'children': children, 'side': list(spec.side),
             'admin_url': f'/admin/{meta.app_label}/{meta.model_name}/{obj.pk}/change/',
             'list_url': f'/app/r/{meta.app_label}/{meta.model_name}',
             'version': record_version(obj, ()), 'locked': locked,
             'edit': [recordspec.editor(obj, n) for n in spec.edit],
-            'can_change': bool(spec.edit) and _perm(user, model, 'change') and (not locked or can_edit_locked(obj, user)),
+            'can_change': bool(spec.edit) and _perm(user, model, 'change') and (not locked or not by_parent and can_edit_locked(obj, user)),
             'can_approve': isinstance(obj, Approvable) and not obj.is_approved and is_approver(user),
             'can_dispose': isinstance(obj, Nonconformance) and not obj.closed_at and is_approver(user)
             and _perm(user, model, 'change'),
@@ -161,7 +166,7 @@ class RecordDetailView(APIView):
                for k in values if k not in spec.edit}
         if bad:
             raise ValidationError(bad)
-        if is_locked(obj) and not can_edit_locked(obj, request.user):
+        if _parent_locked(obj, spec) or is_locked(obj) and not can_edit_locked(obj, request.user):
             raise rules.Locked(rules.LOCKED_MSG)
         if request.data.get('version') != record_version(obj, ()):
             return Response({'detail': str(rules.Stale())}, status=409)

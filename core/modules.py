@@ -66,7 +66,8 @@ CLOSING = {
     'qms_capa': ('admin/qms/capa/', 'api/records/qms.capa/'),
     'qms_claim': ('admin/qms/customerclaim/', 'api/records/qms.customerclaim/'),
     'qms_supplier': ('admin/qms/scar/', 'api/records/qms.scar/'),
-    'qms_audit': ('admin/qms/internalaudit/', 'admin/qms/auditfinding/'),
+    'qms_audit': ('admin/qms/internalaudit/', 'admin/qms/auditfinding/', 'api/records/qms.internalaudit/',
+                  'api/records/qms.auditfinding/'),
     'qms_inspection': ('inspect/', 'api/qms/inspect/'),
 }
 

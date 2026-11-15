@@ -30,6 +30,12 @@ class RecordsApiTest(TestCase):
         Scar.objects.create(number='S-1', supplier='A소재', lot=self.lot, request='원인 회신', response_due=today)
         Capa.objects.create(title='치수 대책', source='OTHER', action='지그', owner=self.root, due_date=today)
         ChangeRequest.objects.create(number='CR-1', item=self.lot.item, category='MACHINE', description='설비 교체')
+        from qms.models import AuditChecklist, AuditFinding, AuditItem, InternalAudit, PpapSubmission
+        cl = AuditChecklist.objects.create(name='IATF 내부심사')
+        AuditItem.objects.create(checklist=cl, clause='8.5.1', requirement='공정 관리')
+        audit = InternalAudit.objects.create(name='상반기 공정심사', checklist=cl, planned_date=today, auditor='홍길동')
+        AuditFinding.objects.create(audit=audit, clause='8.5.1', grade='OBS', description='작업표준 미게시')
+        PpapSubmission.objects.create(item=self.lot.item, customer='H사', reason='신규')  # 요소 18개 자동 생성
         self.client.force_login(self.root)
 
     def test_list_tabs_search_export(self):
@@ -490,3 +496,95 @@ class RecordsCapaClaimApiTest(TestCase):
         u.user_permissions.add(*Permission.objects.filter(codename__in=['view_scar', 'change_scar']))
         self.client.force_login(u)
         self.assertEqual(self.close('qms.scar', self.scar.pk).status_code, 404)
+
+
+class RecordsAuditPpapApiTest(TestCase):
+    """Phase 9(B5): 내부심사·체크리스트·심사 항목·PPAP 기록 화면. 지적 → CAPA, PPAP 요소는 승인 후 잠김 (REC-10)."""
+
+    def setUp(self):
+        from core.models import Item
+        from qms.models import AuditChecklist, AuditFinding, AuditItem, Document, InternalAudit, PpapSubmission
+        self.root = User.objects.create_superuser('root', password='pw')
+        self.today = timezone.localdate()
+        self.cl = AuditChecklist.objects.create(name='IATF 내부심사', standard='IATF 16949')
+        self.ai = AuditItem.objects.create(checklist=self.cl, clause='8.5.1', requirement='공정 관리')
+        self.audit = InternalAudit.objects.create(name='상반기 공정심사', checklist=self.cl, planned_date=self.today, auditor='홍길동')
+        self.finding = AuditFinding.objects.create(audit=self.audit, clause='8.5.1', grade='MINOR', description='작업표준 미게시')
+        self.item = Item.objects.create(code='F1', name='셀', item_type=Item.FINISHED)
+        self.ppap = PpapSubmission.objects.create(item=self.item, customer='H사', reason='신규', level=1)
+        self.doc = Document.objects.create(number='AAR-1', title='외관 승인', doc_type='보고서')
+        self.client.force_login(self.root)
+
+    def detail(self, label, pk):
+        r = self.client.get(f'/api/records/{label}/{pk}/')
+        self.assertEqual(r.status_code, 200, r.content)
+        return r.json()
+
+    def patch(self, label, pk, values):
+        v = self.detail(label, pk)['version']
+        return self.client.patch(f'/api/records/{label}/{pk}/', {'values': values, 'version': v}, content_type='application/json')
+
+    def close(self, label, pk):
+        return self.client.post(f'/api/records/{label}/{pk}/close/', {}, content_type='application/json')
+
+    def test_links_open_new_record_screen(self):
+        for obj in (self.cl, self.ai, self.audit, self.finding, self.ppap, self.ppap.elements.first()):
+            meta = obj._meta
+            self.assertEqual(record_url(obj), f'/app/r/{meta.app_label}/{meta.model_name}/{obj.pk}')
+            self.detail(meta.label_lower, obj.pk)
+        d = self.detail('qms.auditchecklist', self.cl.pk)
+        self.assertEqual(d['children'][0]['rows'][0]['url'], record_url(self.ai))
+
+    def test_finding_capa_button_and_link(self):
+        d = self.detail('qms.internalaudit', self.audit.pk)
+        rows = next(c for c in d['children'] if c['key'] == 'findings')['rows']
+        self.assertEqual(rows[0]['url'], record_url(self.finding))
+        links = {x['label']: x['url'] for x in self.detail('qms.auditfinding', self.finding.pk)['links']}
+        self.assertIn('/admin/qms/capa/add/?source=AUDIT', links['CAPA 만들기'])
+        from django.contrib.contenttypes.models import ContentType
+        from qms.models import AuditFinding, Capa
+        capa = Capa.objects.create(title='표준 게시', source='AUDIT', action='게시', owner=self.root, due_date=self.today,
+                                   source_type=ContentType.objects.get_for_model(AuditFinding), source_id=self.finding.pk)
+        f = {x['key']: x for x in self.detail('qms.auditfinding', self.finding.pk)['fields']}
+        self.assertEqual((f['capa']['value'], f['capa']['url']), (str(capa), record_url(capa)))
+
+    def test_audit_close_rules(self):
+        self.assertTrue(self.detail('qms.internalaudit', self.audit.pk)['can_close'])
+        self.assertEqual(self.close('qms.internalaudit', self.audit.pk).json()['detail'], '실시일 없이 종결할 수 없습니다.')
+        self.assertEqual(self.patch('qms.internalaudit', self.audit.pk, {'performed_at': self.today.isoformat()}).status_code, 200)
+        self.assertEqual(self.close('qms.internalaudit', self.audit.pk).json()['detail'],
+                         'CAPA가 연결되지 않은 중·경부적합 지적이 있어 종결할 수 없습니다.')
+        self.assertEqual(self.patch('qms.auditfinding', self.finding.pk, {'grade': 'OBS'}).status_code, 200)
+        d = self.close('qms.internalaudit', self.audit.pk).json()
+        self.assertEqual((d['status'], d['can_close']), ('종결', False))
+
+    def test_ppap_elements_table_and_lock_after_approval(self):
+        d = self.detail('qms.ppapsubmission', self.ppap.pk)
+        table = next(c for c in d['children'] if c['key'] == 'elements')
+        self.assertEqual(len(table['rows']), 18)
+        self.assertIn('증적 기록', [c['label'] for c in table['columns']])
+        el = self.ppap.elements.get(number=13)  # Level 1에서 제출(S) 요소
+        self.assertEqual(self.patch('qms.ppapelement', el.pk, {'note': '고객 지정 양식'}).status_code, 200)
+        url = f'/api/records/qms.ppapsubmission/{self.ppap.pk}/approve/'
+        r = self.client.post(url, {'password': 'pw'}, content_type='application/json')
+        self.assertIn('제출(S) 요소에 증적이 없습니다', r.json()['detail'])
+        type(el).objects.filter(pk=el.pk).update(document=self.doc)
+        self.assertEqual(self.client.post(url, {'password': 'pw'}, content_type='application/json').status_code, 200)
+        d = self.detail('qms.ppapelement', el.pk)
+        self.assertEqual((d['locked'], d['can_change']), (True, False))
+        r = self.patch('qms.ppapelement', el.pk, {'note': '바꿈'})
+        self.assertEqual(r.status_code, 409, r.content)
+        el.refresh_from_db()
+        self.assertEqual(el.note, '고객 지정 양식')
+
+    def test_audit_closing_allowed_when_module_off(self):
+        self.finding.grade = 'OBS'
+        self.finding.save()
+        ModuleSwitch.objects.bulk_create([ModuleSwitch(key='qms_audit', enabled=False)])
+        self.assertEqual(self.patch('qms.internalaudit', self.audit.pk, {'performed_at': self.today.isoformat()}).status_code, 200)
+        self.assertEqual(self.close('qms.internalaudit', self.audit.pk).status_code, 200)
+        self.assertEqual(self.client.get(f'/api/records/qms.ppapsubmission/{self.ppap.pk}/').status_code, 200)
+        u = User.objects.create_user('v', password='pw', is_staff=True)
+        u.user_permissions.add(*Permission.objects.filter(codename__in=['view_auditchecklist', 'change_auditchecklist']))
+        self.client.force_login(u)
+        self.assertEqual(self.client.get(f'/api/records/qms.auditchecklist/{self.cl.pk}/').status_code, 404)

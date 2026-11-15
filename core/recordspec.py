@@ -30,6 +30,7 @@ class Spec(NamedTuple):
     edit: tuple = ()  # 기록 화면에서 고칠 수 있는 칸(fields의 부분집합). 서명 칸은 넣지 않는다
     sign: tuple = ()  # 이 기록에서만 서명 칸인 것(SIGN_FIELDS에 더한다)
     close: bool = False  # 「종결」 버튼(POST …/close/): 서버가 종결일을 넣고 모델 clean 규칙이 막는다(REC-09)
+    lock_parent: str = ''  # 이 부모가 승인되면 잠긴다(예: PPAP 요소). 기록 화면에서는 시스템 관리자도 못 고친다(REC-10)
 
 
 # 승인 서명·판정 경로로만 바뀌는 칸. 범용 저장(PATCH)은 이 칸을 받지 않는다(REC-06).
@@ -40,7 +41,9 @@ SIGN_FIELDS = frozenset({'approved_by', 'approved_at', 'judgment', 'result', 'de
 LABELS = {'core.hold': {'lot': 'LOT', 'nonconformance': '부적합', 'created_at': '보류 일시', 'released_at': '해제 일시'},
           'qms.capa': {'source_record': '출처 기록', 'status': '상태'},
           'qms.customerclaim': {'current_step': '현재 단계', 'containment_due': '봉쇄(D3) 기한', 'corrective_due': '대책(D5) 기한'},
-          'qms.changerequest': {'first_article_state': '초품 합격'}}
+          'qms.changerequest': {'first_article_state': '초품 합격'},
+          'qms.ppapelement': {'record': '증적 기록'},
+          'qms.evidence': {'record': '증적 기록'}}
 
 
 def sign_fields(spec):
@@ -167,6 +170,56 @@ SPECS = {
               ('approved', '승인됨', lambda qs: qs.filter(approved_at__isnull=False))),
         order=('-effective_at', '-pk'),
         edit=('category', 'description', 'customer_notice', 'customer_approval_ref')),
+    'qms.internalaudit': Spec(  # 종결 규칙(실시일, CAPA 없는 중·경부적합)은 InternalAudit.clean 그대로
+        fields=('name', 'kind', 'scope', 'checklist', 'planned_date', 'auditor', 'auditee', 'auditor_user', 'auditee_dept',
+                'performed_at', 'closed_at'),
+        columns=('name', 'kind', 'planned_date', 'auditor', 'performed_at', 'closed_at'),
+        search=('name', 'auditor', 'auditee'),
+        tabs=(('open', '진행', lambda qs: qs.filter(closed_at__isnull=True)), ALL,
+              ('closed', '종결', lambda qs: qs.filter(closed_at__isnull=False))),
+        children=(Child('findings', '지적', ('clause', 'grade', 'description', 'capa'), ('pk',)),),
+        order=('-planned_date', '-pk'),
+        edit=('name', 'kind', 'scope', 'planned_date', 'auditor', 'auditee', 'performed_at'),
+        close=True),
+    'qms.auditfinding': Spec(  # CAPA 연결은 「CAPA 만들기」 → Capa.save가 지적에 건다
+        fields=('audit', 'clause', 'grade', 'description', 'capa'),
+        columns=('audit', 'clause', 'grade', 'capa'),
+        search=('clause', 'description', 'audit__name'),
+        edit=('clause', 'grade', 'description')),
+    'qms.auditchecklist': Spec(
+        fields=('name', 'standard'),
+        columns=('name', 'standard'),
+        search=('name', 'standard'),
+        children=(Child('items', '심사 항목', ('clause', 'requirement'), ('clause', 'pk')),),
+        side=('relations', 'files', 'history'),
+        order=('name',),
+        edit=('name', 'standard')),
+    'qms.audititem': Spec(
+        fields=('checklist', 'clause', 'requirement'),
+        columns=('checklist', 'clause', 'requirement'),
+        search=('clause', 'requirement', 'checklist__name'),
+        children=(Child('evidences', '증적', ('document', 'record', 'note'), ('pk',)),),
+        side=('relations', 'files', 'history'),
+        order=('checklist', 'clause'),
+        edit=('clause', 'requirement')),
+    # 제출일·고객 승인일(PSW 승인 후 기록 칸)은 승인 후 잠금 때문에 승인 뒤에는 관리 화면에서
+    'qms.ppapsubmission': Spec(
+        fields=('item', 'customer', 'partner', 'level', 'reason', 'due_date', 'submitted_at', 'customer_approved_at',
+                'approved_by', 'approved_at'),
+        columns=('item', 'customer', 'level', 'due_date', 'submitted_at', 'approved_at'),
+        search=('item__code', 'customer', 'reason'),
+        tabs=(ALL, ('draft', '초안', lambda qs: qs.filter(approved_at__isnull=True)),
+              ('approved', '승인됨', lambda qs: qs.filter(approved_at__isnull=False))),
+        children=(Child('elements', 'PPAP 요소', ('number', 'name', 'requirement', 'document', 'record', 'note'), ('number',)),),
+        edit=('customer', 'reason', 'due_date', 'submitted_at', 'customer_approved_at')),
+    'qms.ppapelement': Spec(  # 문서·증적 기록 연결(외래키)은 관리 화면
+        fields=('submission', 'number', 'name', 'requirement', 'document', 'record', 'note'),
+        columns=('submission', 'number', 'name', 'requirement'),
+        search=('name', 'submission__customer', 'submission__item__code'),
+        side=('relations', 'history'),
+        order=('submission', 'number'),
+        edit=('requirement', 'note'),
+        lock_parent='submission'),
 }
 
 
