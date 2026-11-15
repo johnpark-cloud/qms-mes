@@ -1,19 +1,19 @@
 ---
 gsd_state_version: "1.0"
-current_phase: 9
-current_phase_name: 내부심사·체크리스트·심사 항목·PPAP
+current_phase: 10
+current_phase_name: 작업지시·실적·출하·기준정보와 메뉴 정리
 status: planning
-stopped_at: Phase 8 complete
+stopped_at: Phase 9 complete
 last_updated: "2026-11-13T00:00:00.000Z"
 last_activity: 2026-11-13
-last_activity_desc: Phase 8(B4) 구현·검증 완료
+last_activity_desc: Phase 9(B5) 구현·검증 완료
 state_head: fb4d3be6d0178892e74247aff4858b54bfaafd18
 progress:
   total_phases: 10
-  completed_phases: 8
+  completed_phases: 9
   total_plans: 0
   completed_plans: 0
-  percent: 80
+  percent: 90
 ---
 
 # Project State
@@ -23,16 +23,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-11-12)
 
 **Core value:** 부적합·인터록 규칙이 어떤 화면 변경이나 모듈 설정에서도 약해지지 않고, 기록이 이력과 함께 보존된다.
-**Current focus:** Phase 9 (B5) — 내부심사·체크리스트·심사 항목·PPAP 새 기록 화면
+**Current focus:** Phase 10 (B6) — 작업지시·실적·출하·기준정보 새 기록 화면과 메뉴 정리
 
 ## Current Position
 
-Phase: 9 of 10 (B5)
+Phase: 10 of 10 (B6)
 Plan: 0 of TBD in current phase
 Status: Ready
-Last activity: 2026-11-13 — Phase 8(B4) 완료: CAPA·클레임·클레임 설정·SCAR·4M 변경 기록 화면. 종결 API(rules.close_record, 모델 clean 규칙), 서버 links(LOT 추적·CAPA 만들기), 기록별 서명 칸(Spec.sign), 꺼진 모듈 종결 허용 확장
+Last activity: 2026-11-16 — Phase 9(B5) 완료: 내부심사·심사 지적·체크리스트·심사 항목·PPAP·PPAP 요소 기록 화면. 내부심사 종결(close=True), 지적 → CAPA 만들기(AUDIT), PPAP 요소 승인 후 잠금(Spec.lock_parent), 꺼진 모듈 종결 허용 확장
 
-Progress: [████████░░] 80%
+Progress: [█████████░] 90%
 
 ## Performance Metrics
 
