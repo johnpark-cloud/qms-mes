@@ -7,22 +7,14 @@ import { ApiError } from '../api/client'
 import CommandPalette from '../components/CommandPalette'
 import { getRecent } from '../lib/recent'
 
-// 기존 화면 주소 중 React 로 옮긴 것은 새 주소로 보여 준다.
+// 서버가 못 바꾸는 옛 화면 주소(관리 화면 주소는 서버 app_href 가 이미 새 주소로 내려 준다)만 새 주소로 보여 준다.
 const MOVED: Record<string, string> = {
   '/todo/': '/app/todo',
   '/overview/': '/app/overview',
   '/inspect/': '/app/inspect',
-  '/admin/qms/inspectionspec/': '/app/specs',
-  '/admin/core/item/': '/app/items',
-  '/admin/core/process/': '/app/processes',
-  '/admin/qms/controlplan/': '/app/plans',
-  '/admin/qms/customerrule/': '/app/customer-rules',
   '/import/': '/app/import',
   '/trace/': '/app/trace',
   '/memo/inbox/': '/app/memos',
-  '/admin/qms/inspection/?spec__inspection_type__exact=INCOMING': '/app/inspections?tab=INCOMING',
-  '/admin/qms/inspection/?spec__inspection_type__exact=PROCESS': '/app/inspections?tab=PROCESS',
-  '/admin/qms/inspection/?spec__inspection_type__exact=OUTGOING': '/app/inspections?tab=OUTGOING',
 }
 const to = (href: string) => MOVED[href] ?? href
 
@@ -85,8 +77,8 @@ export default function AppLayout() {
         <Button aria-label="명령창 열기" onClick={() => setPalette(true)} className="palette-btn">
           검색 (Ctrl+K)
         </Button>
-        <span>{user.name}</span>
-        <a href="/todo/">기존 화면</a>
+        <span className="hide-sm">{user.name}</span>
+        <a href="/todo/" className="hide-sm">기존 화면</a>
         <Button
           onClick={async () => {
             try {
