@@ -6,12 +6,30 @@ from django.urls import reverse
 
 from core.models import is_approver
 from core.modules import active_set, module_of_path
+from core.recordspec import SPECS
+
+# 새 화면이 있는 관리 목록 → React 화면 (설명서가 있는 목록은 /app/r/<app>/<model>)
+APP_PAGES = {'/admin/core/item/': '/app/items', '/admin/core/process/': '/app/processes', '/admin/qms/inspectionspec/': '/app/specs',
+             '/admin/qms/controlplan/': '/app/plans', '/admin/qms/customerrule/': '/app/customer-rules',
+             '/admin/qms/inspection/': '/app/inspections'}
 
 
 def nav_url(name):
     """'url 이름?조건' → 실제 주소."""
     name, _, query = name.partition('?')
     return reverse(name) + (f'?{query}' if query else '')
+
+
+def app_href(href):
+    """메뉴 주소를 화면에 내보낼 주소로(REC-11). NAV는 관리 주소를 그대로 둔다: 전체 메뉴 묶음(core/admin.py)·모듈 판정·현재 메뉴 표시가 쓴다."""
+    path, _, query = href.partition('?')
+    if path in APP_PAGES:
+        kind = query.rpartition('spec__inspection_type__exact=')[2]  # 검사 목록 조건 → 탭
+        return APP_PAGES[path] + (f'?tab={kind}' if query else '')
+    parts = path.strip('/').split('/')
+    if len(parts) == 3 and parts[0] == 'admin' and f'{parts[1]}.{parts[2]}' in SPECS:
+        return f'/app/r/{parts[1]}/{parts[2]}'
+    return href
 
 
 def visible_nav(user):
@@ -74,8 +92,8 @@ NAV = [
                        ('엑셀 일괄 등록', 'import', 'core.view_importprofile'),
                        ('부서', 'admin:core_department_changelist', 'core.view_department'),
                        ('사용자 정의 칸', 'admin:core_fielddef_changelist', 'core.view_fielddef'),
-                       ('사용자', 'admin:auth_user_changelist', 'auth.view_user'),
+                       ('사용자', 'admin:auth_user_changelist', lambda u: u.is_superuser),  # 관리 화면은 시스템 관리자 메뉴
                        ('감사 기록', 'app_audit', is_approver),
                        ('모듈 켜기/끄기', 'admin:core_moduleswitch_changelist', lambda u: u.is_superuser),
-                       ('전체 메뉴', 'admin:index', None)]),
+                       ('전체 메뉴', 'admin:index', lambda u: u.is_superuser)]),
 ]

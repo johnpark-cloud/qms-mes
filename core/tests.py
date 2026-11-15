@@ -149,7 +149,7 @@ class ShellTest(TestCase):
         self.client.force_login(insp)
         html = side(self.client.get('/todo/').content.decode())
         self.assertIn('검사 입력', html)
-        self.assertIn('전체 메뉴', html)
+        self.assertNotIn('전체 메뉴', html)  # 관리 화면 첫 화면은 시스템 관리자 메뉴(REC-11)
         self.assertIn('aria-current="page"', html)  # /todo/ = 내 할 일
         self.assertNotIn('품질 KPI', html)  # 검사원은 KPI·협력사 화면 권한이 없다 (누르면 403)
         self.assertNotIn('협력사', html)

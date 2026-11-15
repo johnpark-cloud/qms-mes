@@ -149,17 +149,17 @@ class GateTest(TestCase):
     def test_menu_and_me_drop_inactive_module(self):
         self.as_user()
         hrefs = lambda: [i['href'] for g in self.client.get('/api/auth/me/').json()['nav'] for i in g['items']]
-        self.assertIn('/admin/qms/capa/', hrefs())
+        self.assertIn('/app/r/qms/capa', hrefs())
         switch_off('qms_audit', 'qms_capa')
         me = self.client.get('/api/auth/me/').json()
         self.assertFalse(me['modules']['qms_capa'])
         self.assertTrue(me['modules']['mes'])
-        self.assertNotIn('/admin/qms/capa/', hrefs())
-        self.assertNotIn('/admin/qms/internalaudit/', hrefs())
-        self.assertIn('/admin/core/lot/', hrefs())
+        self.assertNotIn('/app/r/qms/capa', hrefs())
+        self.assertNotIn('/app/r/qms/internalaudit', hrefs())
+        self.assertIn('/app/r/core/lot', hrefs())
         sidebar = self.client.get('/todo/').content.decode().partition('id="qms-sidebar"')[2].partition('</nav>')[0]
-        self.assertIn('/admin/core/lot/', sidebar)
-        self.assertNotIn('/admin/qms/capa/', sidebar)
+        self.assertIn('/app/r/core/lot', sidebar)
+        self.assertNotIn('/app/r/qms/capa', sidebar)
 
 
 class OffSafetyTest(TestCase):

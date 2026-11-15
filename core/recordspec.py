@@ -43,7 +43,8 @@ LABELS = {'core.hold': {'lot': 'LOT', 'nonconformance': '부적합', 'created_at
           'qms.customerclaim': {'current_step': '현재 단계', 'containment_due': '봉쇄(D3) 기한', 'corrective_due': '대책(D5) 기한'},
           'qms.changerequest': {'first_article_state': '초품 합격'},
           'qms.ppapelement': {'record': '증적 기록'},
-          'qms.evidence': {'record': '증적 기록'}}
+          'qms.evidence': {'record': '증적 기록'},
+          'core.workorder': {'progress': '진도율(%)'}}
 
 
 def sign_fields(spec):
@@ -220,6 +221,84 @@ SPECS = {
         order=('submission', 'number'),
         edit=('requirement', 'note'),
         lock_parent='submission'),
+    # 작업지시·실적·출하(REC-11): LOT·작업지시·공정 같은 외래키는 관리 화면에서만 — 보류·4M 인터록(모델 clean/save)이 그대로 막는다.
+    # 새 등록도 관리 화면 추가 폼. 기록 화면은 수량·납기 정정만(모델 clean: 양품+불량 ≤ 투입, 이전 공정 실적)
+    'core.workorder': Spec(
+        fields=('number', 'item', 'process', 'planned_qty', 'due_date', 'status', 'progress'),
+        columns=('number', 'item', 'planned_qty', 'due_date', 'status'),
+        search=('number', 'item__code', 'item__name'),
+        tabs=(('open', '진행', lambda qs: qs.exclude(status='DONE')), ALL, ('done', '완료', lambda qs: qs.filter(status='DONE'))),
+        children=(Child('results', '작업 실적', ('step', 'lot', 'input_qty', 'good_qty', 'defect_qty', 'started_at'),
+                        ('step__seq', 'started_at')),
+                  Child('lots', 'LOT', ('number', 'qty', 'created_at'), ('-created_at', '-pk'))),
+        edit=('planned_qty', 'due_date', 'status')),
+    'core.workresult': Spec(
+        fields=('work_order', 'step', 'lot', 'input_qty', 'good_qty', 'defect_qty', 'operator', 'started_at', 'ended_at'),
+        columns=('work_order', 'step', 'lot', 'good_qty', 'defect_qty', 'started_at'),
+        search=('work_order__number', 'lot__number'),
+        order=('-started_at', '-pk'),
+        edit=('input_qty', 'good_qty', 'defect_qty')),
+    'core.shipment': Spec(
+        fields=('lot', 'customer', 'partner', 'qty', 'shipped_at'),
+        columns=('lot', 'customer', 'qty', 'shipped_at'),
+        search=('lot__number', 'customer'),
+        order=('-shipped_at', '-pk'),
+        edit=('customer', 'qty')),
+    # 기준정보: 코드·대상처럼 다른 기록이 가리키는 칸, 외래키, JSON(선택지·매핑)은 관리 화면에서
+    'core.partner': Spec(
+        fields=('code', 'name', 'is_customer', 'is_supplier', 'is_outsource', 'is_calibrator', 'qc_name', 'qc_phone',
+                'qc_email', 'status', 'grade', 'evaluated_on', 'active', 'note'),
+        columns=('code', 'name', 'is_customer', 'is_supplier', 'status', 'grade'),
+        search=('code', 'name', 'qc_name'),
+        tabs=(ALL, ('customer', '고객', lambda qs: qs.filter(is_customer=True)),
+              ('supplier', '공급', lambda qs: qs.filter(is_supplier=True))),
+        children=(Child('certificates', '인증', ('standard', 'cert_no', 'valid_until', 'file'), ('valid_until',)),),
+        order=('code',),
+        edit=('name', 'is_customer', 'is_supplier', 'is_outsource', 'is_calibrator', 'qc_name', 'qc_phone', 'qc_email',
+              'status', 'grade', 'evaluated_on', 'active', 'note')),
+    'core.department': Spec(
+        fields=('code', 'name', 'parent', 'manager', 'sort', 'active', 'note'),
+        columns=('code', 'name', 'parent', 'manager', 'active'),
+        search=('code', 'name'),
+        children=(Child('children', '하위 부서', ('code', 'name', 'manager'), ('sort', 'code')),),
+        order=('sort', 'code'),
+        edit=('name', 'sort', 'active', 'note')),
+    'core.codevalue': Spec(
+        fields=('group', 'code', 'name', 'parent', 'item_type', 'sort', 'active'),
+        columns=('group', 'code', 'name', 'parent', 'active'),
+        search=('code', 'name'),
+        children=(Child('children', '하위 코드', ('code', 'name', 'active'), ('sort', 'code')),),
+        side=('relations', 'history'),
+        order=('group', 'sort', 'code'),
+        edit=('name', 'item_type', 'sort', 'active')),
+    'core.numberrule': Spec(
+        fields=('name', 'target', 'pattern', 'sort', 'active'),
+        columns=('name', 'target', 'pattern', 'active'),
+        search=('name', 'pattern'),
+        side=('relations', 'history'),
+        order=('target', 'sort'),
+        edit=('name', 'pattern', 'sort', 'active')),
+    'core.fielddef': Spec(
+        fields=('target', 'key', 'label', 'kind', 'choices', 'required', 'sort', 'active'),
+        columns=('target', 'key', 'label', 'kind', 'active'),
+        search=('key', 'label'),
+        side=('relations', 'history'),
+        order=('target', 'sort'),
+        edit=('label', 'required', 'sort', 'active')),
+    'qms.exceltemplate': Spec(
+        fields=('name', 'target', 'file', 'mapping'),
+        columns=('name', 'target', 'file'),
+        search=('name',),
+        side=('relations', 'history'),
+        order=('name',),
+        edit=('name',)),
+    'core.importprofile': Spec(
+        fields=('name', 'target', 'header_row', 'mapping'),
+        columns=('name', 'target', 'header_row'),
+        search=('name',),
+        side=('relations', 'history'),
+        order=('name',),
+        edit=('name', 'header_row')),
 }
 
 

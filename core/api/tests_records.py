@@ -10,6 +10,29 @@ from core.models import ModuleSwitch
 from core.relations import record_url
 
 
+def mes_fixture():
+    """Phase 10 설명서마다 기록 하나씩: 작업지시·실적·출하·기준정보."""
+    from django.contrib.contenttypes.models import ContentType
+    from core.models import (CodeValue, Department, FieldDef, ImportProfile, Item, Lot, NumberRule, Partner, Process,
+                             RoutingStep, Shipment, WorkOrder, WorkResult)
+    from qms.models import ExcelTemplate
+    item = Item.objects.create(code='F1', name='셀', item_type=Item.FINISHED)
+    step = RoutingStep.objects.create(item=item, seq=10, process=Process.objects.create(code='P10', name='조립'))
+    wo = WorkOrder.objects.create(number='WO-1', item=item, planned_qty=100)
+    lot = Lot.objects.create(number='FL-1', item=item, work_order=wo)
+    WorkResult.objects.create(work_order=wo, step=step, lot=lot, input_qty=10, good_qty=9, defect_qty=1)
+    Shipment.objects.create(lot=lot, customer='H사', qty=5)
+    Partner.objects.create(code='H', name='H사', is_customer=True)
+    Department.objects.create(code='QA', name='품질')
+    CodeValue.objects.create(group=CodeValue.CATEGORY, code='CL', name='셀')
+    NumberRule.objects.create(name='품번', target='ITEM', pattern='{일련3}', sort=90)
+    FieldDef.objects.create(target=ContentType.objects.get_for_model(Item), key='color', label='색상')
+    ExcelTemplate.objects.create(name='출하성적서', target=ContentType.objects.get_for_model(Shipment),
+                                 file=SimpleUploadedFile('t.xlsx', b'x'), mapping={})
+    ImportProfile.objects.create(name='품번 양식', target='item', mapping={'code': '코드'})
+    return wo
+
+
 class RecordsApiTest(TestCase):
     def setUp(self):
         from qms.models import Document, DocumentRevision, Gauge, Qualification
@@ -36,6 +59,7 @@ class RecordsApiTest(TestCase):
         audit = InternalAudit.objects.create(name='상반기 공정심사', checklist=cl, planned_date=today, auditor='홍길동')
         AuditFinding.objects.create(audit=audit, clause='8.5.1', grade='OBS', description='작업표준 미게시')
         PpapSubmission.objects.create(item=self.lot.item, customer='H사', reason='신규')  # 요소 18개 자동 생성
+        mes_fixture()
         self.client.force_login(self.root)
 
     def test_list_tabs_search_export(self):
@@ -588,3 +612,91 @@ class RecordsAuditPpapApiTest(TestCase):
         u.user_permissions.add(*Permission.objects.filter(codename__in=['view_auditchecklist', 'change_auditchecklist']))
         self.client.force_login(u)
         self.assertEqual(self.client.get(f'/api/records/qms.auditchecklist/{self.cl.pk}/').status_code, 404)
+
+
+class RecordsMesMasterApiTest(TestCase):
+    """Phase 10(B6): 작업지시·실적·출하·기준정보 기록 화면, 보류 인터록 유지, /admin/ 없는 메뉴 (REC-11)."""
+
+    def setUp(self):
+        self.root = User.objects.create_superuser('root', password='pw')
+        self.wo = mes_fixture()
+        self.result = self.wo.results.get()
+        self.lot = self.wo.lots.get()
+        self.ship = self.lot.shipments.get()
+        self.client.force_login(self.root)
+
+    def detail(self, label, pk):
+        r = self.client.get(f'/api/records/{label}/{pk}/')
+        self.assertEqual(r.status_code, 200, r.content)
+        return r.json()
+
+    def patch(self, label, pk, values):
+        v = self.detail(label, pk)['version']
+        return self.client.patch(f'/api/records/{label}/{pk}/', {'values': values, 'version': v}, content_type='application/json')
+
+    def test_links_open_new_record_screen(self):
+        from django.apps import apps
+        for label in ('core.workorder', 'core.workresult', 'core.shipment', 'core.partner', 'core.department',
+                      'core.codevalue', 'core.numberrule', 'core.fielddef', 'qms.exceltemplate', 'core.importprofile'):
+            obj = apps.get_model(label).objects.first()
+            self.assertEqual(record_url(obj), f'/app/r/{label.replace(".", "/")}/{obj.pk}')
+            self.detail(label, obj.pk)
+            self.assertEqual(self.client.get(f'/api/records/{label}/').status_code, 200)
+        d = self.detail('core.workorder', self.wo.pk)
+        kids = {c['key']: c for c in d['children']}
+        self.assertEqual(kids['results']['rows'][0]['url'], record_url(self.result))
+        self.assertEqual(kids['lots']['rows'][0]['url'], record_url(self.lot))
+
+    def test_quantity_fix_keeps_model_rules(self):
+        r = self.patch('core.workresult', self.result.pk, {'good_qty': '20'})
+        self.assertEqual(r.status_code, 400, r.content)
+        self.assertIn('양품+불량 수량이 투입 수량보다 많습니다.', r.content.decode())
+        self.assertEqual(self.patch('core.workresult', self.result.pk, {'good_qty': '8'}).status_code, 200)
+        r = self.patch('core.shipment', self.ship.pk, {'lot': self.lot.pk})  # LOT(인터록 칸)은 기록 화면에서 못 바꾼다
+        self.assertEqual(r.status_code, 400, r.content)
+
+    def test_held_lot_still_blocked(self):
+        from django.core.exceptions import ValidationError
+        from core.models import Nonconformance, Shipment, WorkResult
+        nc = Nonconformance.objects.create(lot=self.lot, description='찍힘')
+        msg = f'[부적합] {nc.number}: {self.lot.number}은(는) 보류 중이라 출하할 수 없습니다.'
+        with self.assertRaisesMessage(ValidationError, msg):
+            Shipment.objects.create(lot=self.lot, customer='H사', qty=1)
+        with self.assertRaisesMessage(ValidationError, '보류 중이라 실적 등록할 수 없습니다.'):
+            WorkResult.objects.create(work_order=self.wo, step=self.result.step, lot=self.lot, input_qty=1, good_qty=1)
+        self.assertEqual(self.patch('core.shipment', self.ship.pk, {'qty': '4'}).status_code, 200)  # 지난 출하 정정은 그대로
+
+    def test_menu_has_no_admin_links_for_users(self):
+        from django.contrib.auth.models import Group
+        hrefs = lambda: {i['label']: i['href'] for g in self.client.get('/api/auth/me/').json()['nav'] for i in g['items']}
+        root = hrefs()
+        self.assertEqual(root['작업지시'], '/app/r/core/workorder')
+        self.assertEqual(root['출하'], '/app/r/core/shipment')
+        self.assertEqual(root['수입검사'], '/app/inspections?tab=INCOMING')
+        self.assertEqual(root['품번·BOM·라우팅'], '/app/items')
+        self.assertEqual(root['클레임 설정'], '/app/customer-rules')
+        self.assertEqual({k for k, v in root.items() if v.startswith('/admin/')}, {'사용자', '모듈 켜기/끄기', '전체 메뉴'})
+        lead = User.objects.create_user('lead', password='pw', is_staff=True)
+        lead.groups.add(Group.objects.get(name='품질팀장'))
+        self.client.force_login(lead)
+        links = hrefs()
+        self.assertIn('부적합', links)
+        self.assertEqual([k for k, v in links.items() if v.startswith('/admin/')], [])
+        side = self.client.get('/todo/').content.decode().partition('id="qms-sidebar"')[2].partition('</nav>')[0]
+        self.assertIn('href="/app/r/core/nonconformance"', side)
+        self.assertNotIn('href="/admin/', side)
+
+    def test_admin_stays_for_system_admin(self):
+        for url in ('/admin/', '/admin/core/workorder/', f'/admin/core/workorder/{self.wo.pk}/change/', '/admin/core/shipment/',
+                    '/admin/core/partner/', '/admin/auth/user/'):
+            self.assertEqual(self.client.get(url).status_code, 200, url)
+
+    def test_mes_off_closes_record_screen(self):
+        ModuleSwitch.objects.bulk_create([ModuleSwitch(key='mes', enabled=False)])
+        u = User.objects.create_user('v', password='pw', is_staff=True)
+        u.user_permissions.add(*Permission.objects.filter(codename__in=['view_workorder', 'view_partner']))
+        self.client.force_login(u)
+        self.assertEqual(self.client.get(f'/api/records/core.workorder/{self.wo.pk}/').status_code, 404)
+        self.assertEqual(self.client.get('/api/records/core.partner/').status_code, 200)  # 기준정보는 끌 수 없다
+        labels = [i['label'] for g in self.client.get('/api/auth/me/').json()['nav'] for i in g['items']]
+        self.assertNotIn('작업지시', labels)
