@@ -25,6 +25,7 @@ urlpatterns = [
     path('revision-log/<int:pk>/approve/',views.RevisionLogApproveView.as_view()),
     path('audit-log/', views.AuditLogView.as_view()),
     path('records/<str:label>/', records.RecordListView.as_view()),
+    path('records/<str:label>/new/', records.RecordNewView.as_view()),
     path('records/<str:label>/<int:pk>/', records.RecordDetailView.as_view()),
     path('records/<str:label>/<int:pk>/history/', records.RecordHistoryView.as_view()),
     path('records/<str:label>/<int:pk>/approve/', records.RecordApproveView.as_view()),

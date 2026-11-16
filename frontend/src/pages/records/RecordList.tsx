@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
 import { Spin } from 'antd'
 import { useCallback } from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
+import { Link, useNavigate, useParams } from 'react-router-dom'
 import { api } from '../../api/client'
 import DataList from '../../components/DataList'
 
@@ -9,7 +9,7 @@ import DataList from '../../components/DataList'
 interface Row { id: number; url: string | null; status: string | null; cells: Record<string, string> }
 interface ListPage {
   title: string; tabs: { key: string; label: string }[]; columns: { key: string; label: string }[]
-  count: number; page: number; has_more: boolean; results: Row[]; can_add: boolean
+  count: number; page: number; has_more: boolean; results: Row[]; can_add: boolean; new_url: string
 }
 
 export default function RecordList() {
@@ -37,7 +37,7 @@ export default function RecordList() {
         exportHref={(tab, q) => `${base}?tab=${tab}&q=${encodeURIComponent(q)}&export=xlsx`}
         onOpen={(r) => nav(`/r/${app}/${model}/${r.id}`)}
         rowKey={(r) => r.id}
-        toolbar={h.can_add ? <a href={`/admin/${app}/${model}/add/`}>새로 만들기</a> : undefined}
+        toolbar={h.can_add ? (h.new_url.startsWith('/app/') ? <Link to={h.new_url.slice(4)}>새로 만들기</Link> : <a href={h.new_url}>새로 만들기</a>) : undefined}
       />
     </div>
   )

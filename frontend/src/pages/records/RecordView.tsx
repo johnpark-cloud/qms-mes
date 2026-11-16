@@ -16,7 +16,7 @@ interface Field { key: string; label: string; value: string; url: string | null 
 interface Row { id: number; url: string | null; status: string | null; cells: Record<string, string> }
 interface Child { key: string; label: string; columns: { key: string; label: string }[]; rows: Row[] }
 type Value = string | number | boolean | null
-interface Edit {
+export interface Edit {
   key: string; label: string; type: 'str' | 'text' | 'int' | 'date' | 'bool' | 'choice'; value: Value; required: boolean
   choices: { value: string; label: string }[] | null
 }
@@ -57,12 +57,12 @@ function History({ label, id }: { label: string; id: number }) {
 
 // Form.Item이 넣어 주는 value·checked·onChange·id를 입력 칸에 그대로 넘긴다
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-function Editor({ e, ...rest }: { e: Edit; [k: string]: any }) {
+export function Editor({ e, ...rest }: { e: Edit; [k: string]: any }) {
   if (e.type === 'bool') return <Checkbox {...rest} />
   if (e.type === 'int') return <InputNumber style={{ width: '100%' }} {...rest} />
   if (e.type === 'date') return <Input type="date" {...rest} />
   if (e.type === 'text') return <Input.TextArea autoSize={{ minRows: 2, maxRows: 8 }} {...rest} />
-  if (e.type === 'choice') return <Select options={e.choices ?? []} {...rest} />
+  if (e.type === 'choice') return <Select options={e.choices ?? []} showSearch optionFilterProp="label" allowClear={!e.required} {...rest} />
   return <Input {...rest} />
 }
 

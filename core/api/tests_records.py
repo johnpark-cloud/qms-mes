@@ -700,3 +700,68 @@ class RecordsMesMasterApiTest(TestCase):
         self.assertEqual(self.client.get('/api/records/core.partner/').status_code, 200)  # 기준정보는 끌 수 없다
         labels = [i['label'] for g in self.client.get('/api/auth/me/').json()['nav'] for i in g['items']]
         self.assertNotIn('작업지시', labels)
+
+
+class RecordsCreateApiTest(TestCase):
+    """기록 화면 새로 만들기: 설명서 create 칸만, add_ 권한, 모델 규칙(보류 인터록) 유지."""
+
+    def setUp(self):
+        self.root = User.objects.create_superuser('root', password='pw')
+        self.wo = mes_fixture()
+        self.lot = self.wo.lots.get()
+        self.step = self.wo.results.get().step
+        self.client.force_login(self.root)
+
+    def post(self, label, values):
+        return self.client.post(f'/api/records/{label}/', {'values': values}, content_type='application/json')
+
+    def test_new_form_lists_create_fields_with_fk_choices(self):
+        r = self.client.get('/api/records/core.workresult/new/')
+        self.assertEqual(r.status_code, 200, r.content)
+        f = {e['key']: e for e in r.json()['fields']}
+        self.assertEqual(list(f), ['work_order', 'step', 'lot', 'input_qty', 'good_qty', 'defect_qty'])
+        self.assertEqual(f['work_order']['type'], 'choice')
+        self.assertIn({'value': str(self.wo.pk), 'label': 'WO-1'}, f['work_order']['choices'])
+        self.assertFalse(f['lot']['required'])
+        self.assertEqual(self.client.get('/api/records/core.fielddef/new/').status_code, 404)  # create 없는 설명서
+        self.assertEqual(self.client.get('/api/records/core.workorder/').json()['new_url'], '/app/r/core/workorder/new')
+        self.assertEqual(self.client.get('/api/records/core.fielddef/').json()['new_url'], '/admin/core/fielddef/add/')
+
+    def test_create_work_order_and_result(self):
+        from core.models import WorkOrder, WorkResult
+        r = self.post('core.workorder', {'number': 'WO-2', 'item': str(self.wo.item_id), 'planned_qty': '50'})
+        self.assertEqual(r.status_code, 201, r.content)
+        wo = WorkOrder.objects.get(number='WO-2')
+        self.assertEqual(r.json(), {'id': wo.pk, 'url': record_url(wo)})
+        self.assertEqual(wo.history.count(), 1)
+        r = self.post('core.workresult', {'work_order': str(wo.pk), 'step': str(self.step.pk), 'input_qty': '5', 'good_qty': '5'})
+        self.assertEqual(r.status_code, 201, r.content)
+        self.assertEqual(WorkResult.objects.get(pk=r.json()['id']).operator, self.root)
+
+    def test_model_rules_still_apply(self):
+        from core.models import Nonconformance, Shipment
+        r = self.post('core.workresult', {'work_order': str(self.wo.pk), 'step': str(self.step.pk), 'input_qty': '1', 'good_qty': '2'})
+        self.assertEqual(r.status_code, 400)
+        self.assertIn('양품+불량 수량이 투입 수량보다 많습니다.', r.content.decode())
+        r = self.post('core.shipment', {'lot': str(self.lot.pk), 'customer': 'H사', 'qty': '1', 'shipped_at': '2020-01-01'})
+        self.assertEqual(r.status_code, 400)  # create에 없는 칸
+        Nonconformance.objects.create(lot=self.lot, description='찍힘')
+        n = Shipment.objects.count()
+        r = self.post('core.shipment', {'lot': str(self.lot.pk), 'customer': 'H사', 'qty': '1'})
+        self.assertEqual(r.status_code, 400)
+        self.assertIn('보류 중이라 출하할 수 없습니다.', r.content.decode())
+        self.assertEqual(Shipment.objects.count(), n)
+
+    def test_master_data_sets_created_by(self):
+        from core.models import Partner
+        r = self.post('core.partner', {'code': 'S1', 'name': '공급사', 'is_supplier': True})
+        self.assertEqual(r.status_code, 201, r.content)
+        self.assertEqual(Partner.objects.get(code='S1').created_by, self.root)
+
+    def test_needs_add_permission(self):
+        u = User.objects.create_user('v', password='pw', is_staff=True)
+        u.user_permissions.add(*Permission.objects.filter(codename__in=['view_workorder', 'change_workorder']))
+        self.client.force_login(u)
+        self.assertEqual(self.client.get('/api/records/core.workorder/new/').status_code, 403)
+        r = self.post('core.workorder', {'number': 'WO-3', 'item': str(self.wo.item_id), 'planned_qty': '1'})
+        self.assertEqual(r.status_code, 403)

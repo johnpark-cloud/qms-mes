@@ -78,7 +78,51 @@ class RecordListView(APIView):
                          'columns': _columns(model, spec.columns), 'count': count, 'page': page,
                          'has_more': start + PAGE_SIZE < count,
                          'results': [_row(o, spec.columns) for o in qs[start:start + PAGE_SIZE]],
-                         'can_add': request.user.has_perm(f'{model._meta.app_label}.add_{model._meta.model_name}')})
+                         'can_add': request.user.has_perm(f'{model._meta.app_label}.add_{model._meta.model_name}'),
+                         'new_url': _new_url(model, spec)})
+
+    def post(self, request, label):
+        """새로 만들기: 설명서 create 칸만, full_clean(칸별 오류) → 저장. 보류 인터록 등은 모델 clean/save가 막는다."""
+        model, spec = _create_spec(request.user, label)
+        values = request.data.get('values')
+        if not isinstance(values, dict):
+            raise ValidationError('values가 필요합니다.')
+        bad = {k: ['이 화면에서 넣을 수 없는 칸입니다.'] for k in values if k not in spec.create}
+        if bad:
+            raise ValidationError(bad)
+        blank = {k: v for k, v in model_to_dict(model(), fields=spec.create).items() if v is not None}  # 모델 기본값(불량 0 등)
+        form = modelform_factory(model, fields=spec.create)({**blank, **values})
+        if not form.is_valid():
+            raise ValidationError({k: list(v) for k, v in form.errors.items()})
+        obj = form.instance
+        for name in ('created_by', 'operator'):  # 관리 화면 MasterAdmin.save_model과 같이 만든 사람을 남긴다
+            if any(f.name == name for f in model._meta.fields) and not getattr(obj, f'{name}_id'):
+                setattr(obj, name, request.user)
+        rules.save_with_lock(obj, request.user)
+        return Response({'id': obj.pk, 'url': record_url(obj)}, status=201)
+
+
+def _new_url(model, spec):
+    meta = model._meta
+    return f'/app/r/{meta.app_label}/{meta.model_name}/new' if spec.create else f'/admin/{meta.app_label}/{meta.model_name}/add/'
+
+
+def _create_spec(user, label):
+    model, spec = _model(user, label)
+    if not spec.create:
+        raise Http404
+    require_perm(user, f'{model._meta.app_label}.add_{model._meta.model_name}')
+    return model, spec
+
+
+class RecordNewView(APIView):
+    schema = None
+
+    def get(self, request, label):
+        model, spec = _create_spec(request.user, label)
+        form = modelform_factory(model, fields=spec.create)()
+        return Response({'title': str(model._meta.verbose_name), 'list_url': f'/app/r/{model._meta.app_label}/{model._meta.model_name}',
+                         'fields': [recordspec.creator(model, n, form) for n in spec.create]})
 
 
 def _perm(user, model, action):

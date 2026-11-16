@@ -1,6 +1,7 @@
 """React 화면(/app/)을 실제 브라우저로 끝까지 확인한다 (임시 DB 사용).
 시스템 Python의 Playwright가 필요하다: python scripts\\e2e_browser.py
 """
+import re
 import os, subprocess, sys, tempfile, time, urllib.request
 
 from playwright.sync_api import sync_playwright
@@ -684,6 +685,21 @@ try:
         except Exception as e:
             ok, page_err = False, str(e)[:80]
         check('기록 화면: 부적합 MRB 처분', ok, page.url if ok else page_err)
+
+        # 기록 화면 새로 만들기: 목록 「새로 만들기」 → 입력 → 저장 → 새 기록 화면
+        try:
+            page.goto('/app/r/core/department')
+            page.get_by_role('link', name='새로 만들기').click()
+            page.wait_for_url('**/app/r/core/department/new')
+            page.locator('#code').fill('E2E-DEPT')
+            page.locator('#name').fill('E2E 부서')
+            page.get_by_role('button', name='저장').click()
+            page.wait_for_url(re.compile(r'/app/r/core/department/\d+$'))
+            page.locator('.record-props', has_text='E2E 부서').wait_for(timeout=5000)
+            ok = True
+        except Exception as e:
+            ok, page_err = False, str(e)[:80]
+        check('기록 화면: 새로 만들기', ok, page.url if ok else page_err)
 
         # 세션이 끊기면 API를 부르는 화면이 로그인으로 보내야 한다 (client.ts 의 403 처리)
         page.context.clear_cookies()

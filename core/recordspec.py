@@ -31,6 +31,7 @@ class Spec(NamedTuple):
     sign: tuple = ()  # 이 기록에서만 서명 칸인 것(SIGN_FIELDS에 더한다)
     close: bool = False  # 「종결」 버튼(POST …/close/): 서버가 종결일을 넣고 모델 clean 규칙이 막는다(REC-09)
     lock_parent: str = ''  # 이 부모가 승인되면 잠긴다(예: PPAP 요소). 기록 화면에서는 시스템 관리자도 못 고친다(REC-10)
+    create: tuple = ()  # 기록 화면 「새로 만들기」 칸(외래키 가능). 비면 관리 화면 추가 폼. 규칙은 모델 clean/save가 막는다
 
 
 # 승인 서명·판정 경로로만 바뀌는 칸. 범용 저장(PATCH)은 이 칸을 받지 않는다(REC-06).
@@ -231,19 +232,22 @@ SPECS = {
         children=(Child('results', '작업 실적', ('step', 'lot', 'input_qty', 'good_qty', 'defect_qty', 'started_at'),
                         ('step__seq', 'started_at')),
                   Child('lots', 'LOT', ('number', 'qty', 'created_at'), ('-created_at', '-pk'))),
-        edit=('planned_qty', 'due_date', 'status')),
+        edit=('planned_qty', 'due_date', 'status'),
+        create=('number', 'item', 'process', 'planned_qty', 'due_date')),
     'core.workresult': Spec(
         fields=('work_order', 'step', 'lot', 'input_qty', 'good_qty', 'defect_qty', 'operator', 'started_at', 'ended_at'),
         columns=('work_order', 'step', 'lot', 'good_qty', 'defect_qty', 'started_at'),
         search=('work_order__number', 'lot__number'),
         order=('-started_at', '-pk'),
-        edit=('input_qty', 'good_qty', 'defect_qty')),
+        edit=('input_qty', 'good_qty', 'defect_qty'),
+        create=('work_order', 'step', 'lot', 'input_qty', 'good_qty', 'defect_qty')),
     'core.shipment': Spec(
         fields=('lot', 'customer', 'partner', 'qty', 'shipped_at'),
         columns=('lot', 'customer', 'qty', 'shipped_at'),
         search=('lot__number', 'customer'),
         order=('-shipped_at', '-pk'),
-        edit=('customer', 'qty')),
+        edit=('customer', 'qty'),
+        create=('lot', 'partner', 'customer', 'qty')),
     # 기준정보: 코드·대상처럼 다른 기록이 가리키는 칸, 외래키, JSON(선택지·매핑)은 관리 화면에서
     'core.partner': Spec(
         fields=('code', 'name', 'is_customer', 'is_supplier', 'is_outsource', 'is_calibrator', 'qc_name', 'qc_phone',
@@ -255,14 +259,17 @@ SPECS = {
         children=(Child('certificates', '인증', ('standard', 'cert_no', 'valid_until', 'file'), ('valid_until',)),),
         order=('code',),
         edit=('name', 'is_customer', 'is_supplier', 'is_outsource', 'is_calibrator', 'qc_name', 'qc_phone', 'qc_email',
-              'status', 'grade', 'evaluated_on', 'active', 'note')),
+              'status', 'grade', 'evaluated_on', 'active', 'note'),
+        create=('code', 'name', 'is_customer', 'is_supplier', 'is_outsource', 'is_calibrator', 'qc_name', 'qc_phone',
+                'qc_email', 'note')),
     'core.department': Spec(
         fields=('code', 'name', 'parent', 'manager', 'sort', 'active', 'note'),
         columns=('code', 'name', 'parent', 'manager', 'active'),
         search=('code', 'name'),
         children=(Child('children', '하위 부서', ('code', 'name', 'manager'), ('sort', 'code')),),
         order=('sort', 'code'),
-        edit=('name', 'sort', 'active', 'note')),
+        edit=('name', 'sort', 'active', 'note'),
+        create=('code', 'name', 'parent', 'manager', 'sort', 'note')),
     'core.codevalue': Spec(
         fields=('group', 'code', 'name', 'parent', 'item_type', 'sort', 'active'),
         columns=('group', 'code', 'name', 'parent', 'active'),
@@ -270,14 +277,16 @@ SPECS = {
         children=(Child('children', '하위 코드', ('code', 'name', 'active'), ('sort', 'code')),),
         side=('relations', 'history'),
         order=('group', 'sort', 'code'),
-        edit=('name', 'item_type', 'sort', 'active')),
+        edit=('name', 'item_type', 'sort', 'active'),
+        create=('group', 'code', 'name', 'parent', 'item_type', 'sort')),
     'core.numberrule': Spec(
         fields=('name', 'target', 'pattern', 'sort', 'active'),
         columns=('name', 'target', 'pattern', 'active'),
         search=('name', 'pattern'),
         side=('relations', 'history'),
         order=('target', 'sort'),
-        edit=('name', 'pattern', 'sort', 'active')),
+        edit=('name', 'pattern', 'sort', 'active'),
+        create=('name', 'target', 'pattern', 'sort')),
     'core.fielddef': Spec(
         fields=('target', 'key', 'label', 'kind', 'choices', 'required', 'sort', 'active'),
         columns=('target', 'key', 'label', 'kind', 'active'),
@@ -364,6 +373,19 @@ def editor(obj, name):
         kind = 'str'
     return {'key': name, 'label': str(f.verbose_name), 'type': kind, 'value': v, 'required': not f.blank,
             'choices': [{'value': k, 'label': str(n)} for k, n in f.choices] if f.choices else None}
+
+
+CHOICE_LIMIT = 500  # shortcut: 외래키 선택지는 앞 500개만 — 기록이 더 많아지면 검색 API로 바꾼다
+
+
+def creator(model, name, form):
+    """새로 만들기 칸 하나. 외래키는 폼 queryset(limit_choices_to 반영)을 선택지로."""
+    f = model._meta.get_field(name)
+    if not f.is_relation:
+        return editor(model(), name)
+    qs = form.fields[name].queryset[:CHOICE_LIMIT]
+    return {'key': name, 'label': str(f.verbose_name), 'type': 'choice', 'value': None, 'required': not f.blank,
+            'choices': [{'value': str(o.pk), 'label': str(o)} for o in qs]}
 
 
 def cells(obj, names):

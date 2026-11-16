@@ -29,6 +29,7 @@ import SpecPage from './pages/specs/SpecPage'
 import SpecPrint from './pages/specs/SpecPrint'
 import Memos from './pages/Memos'
 import RecordList from './pages/records/RecordList'
+import RecordNew from './pages/records/RecordNew'
 import RecordView from './pages/records/RecordView'
 import Todo from './pages/Todo'
 import Trace from './pages/Trace'
@@ -80,6 +81,7 @@ function App() {
               <Route path="memos" element={<Memos />} />
               <Route path="audit" element={<AuditLog />} />
               <Route path="r/:app/:model" element={<RecordList />} />
+              <Route path="r/:app/:model/new" element={<RecordNew />} />
               <Route path="r/:app/:model/:id" element={<RecordView />} />
             </Route>
             <Route path="*" element={<Navigate to="/todo" replace />} />
