@@ -516,6 +516,29 @@ class InspectApiTest(TestCase):
         self.assertIn('교정 기한', r.json()['detail'])
         self.assertEqual(self.counts(), before)
 
+    def test_submit_per_item_gauges(self):
+        g2 = Gauge.objects.create(number='G-02', name='버니어', last_calibrated=timezone.localdate())
+        before = self.counts()
+        r = self.submit(gauge=None)  # 항목별도 기본도 없으면 항목 이름으로 거부
+        self.assertEqual(r.status_code, 400)
+        self.assertIn('두께', r.json()['detail'])
+        for bad in ([1], {'x': g2.pk}, {str(self.thk.pk): 'a'}):
+            self.assertEqual(self.submit(gauges=bad).status_code, 400, bad)
+        r = self.submit(gauges={str(self.thk.pk): 10**9})
+        self.assertEqual((r.status_code, r.json()['detail']), (400, '계측기를 찾을 수 없습니다.'))
+        g2.last_calibrated = timezone.localdate() - datetime.timedelta(days=g2.interval_days + 1)
+        g2.save()
+        r = self.submit(gauges={str(self.thk.pk): g2.pk})  # 항목별 계측기도 교정 기한을 본다
+        self.assertEqual(r.status_code, 400)
+        self.assertIn('교정 기한', r.json()['detail'])
+        self.assertEqual(self.counts(), before)
+        g2.last_calibrated = timezone.localdate()
+        g2.save()
+        r = self.submit(gauge=None, gauges={str(self.thk.pk): g2.pk})
+        self.assertEqual(r.status_code, 201)
+        ms = {m.characteristic_id: m.gauge_id for m in Measurement.objects.filter(inspection_id=r.json()['id'])}
+        self.assertEqual(ms, {self.thk.pk: g2.pk, self.look.pk: None})
+
     def test_submit_bad_body_400(self):
         before = self.counts()
         self.assertEqual(self.c().post('/api/qms/inspect/submit/', [], format='json').status_code, 400)

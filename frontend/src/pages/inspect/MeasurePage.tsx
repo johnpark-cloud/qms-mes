@@ -24,6 +24,7 @@ export default function MeasurePage() {
   const [values, setValues] = useState<Record<string, string>>({})
   const [results, setResults] = useState<Record<string, boolean | null>>({})
   const [gauge, setGauge] = useState<number | null>(null)
+  const [gauges, setGauges] = useState<Record<string, number>>({}) // 항목별 계측기. 없는 항목은 위 기본 계측기
   const [defectType, setDefectType] = useState<string | undefined>()
   const [defectQty, setDefectQty] = useState('1')
   const [saving, setSaving] = useState(false)
@@ -118,6 +119,7 @@ export default function MeasurePage() {
           lot,
           spec,
           gauge,
+          gauges,
           values,
           defect_type: defectType,
           defect_qty: defectQty.trim(),
@@ -148,7 +150,7 @@ export default function MeasurePage() {
           <Select
             style={{ width: '100%' }}
             allowClear
-            placeholder="계측기"
+            placeholder="기본 계측기(항목별로 바꿀 수 있음)"
             value={gauge ?? undefined}
             onChange={(v) => setGauge(v ?? null)}
             options={f.gauges}
@@ -195,6 +197,27 @@ export default function MeasurePage() {
                     </Button>
                   ))}
                 </Space.Compact>
+              ),
+          },
+          {
+            title: '계측기',
+            render: (_, c) =>
+              c.is_variable && (
+                <Select
+                  style={{ width: 200 }}
+                  allowClear
+                  placeholder="기본 계측기"
+                  value={gauges[c.id] ?? gauge ?? undefined}
+                  onChange={(v) =>
+                    setGauges((p) => {
+                      const n = { ...p }
+                      if (v == null) delete n[c.id]
+                      else n[c.id] = v
+                      return n
+                    })
+                  }
+                  options={f.gauges}
+                />
               ),
           },
           { title: '결과', render: (_, c) => <Verdict r={results[String(c.id)]} /> },

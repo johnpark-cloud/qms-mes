@@ -34,12 +34,15 @@ def _qty(raw):
     return v if v.is_finite() and v >= 0 else Decimal(0)
 
 
-def submit_inspection(lot, spec, user, gauge, values, defect_type='', defect_qty=None):
+def submit_inspection(lot, spec, user, gauge, values, defect_type='', defect_qty=None, gauges=None):
     """판정: 검사·측정값을 만들고 finalize()로 판정한다. 하나라도 거부되면 전부 되돌린다.
-    values는 {Characteristic.pk: 입력 문자열}. 실패하면 ValidationError."""
+    values는 {Characteristic.pk: 입력 문자열}. gauges는 {Characteristic.pk: Gauge}(항목별 계측기, 없으면 gauge). 실패하면 ValidationError."""
+    gauges = gauges or {}
     # 사람이 재는 판정에만 계측기를 강제한다(설비 수집 collect·관리 화면 소급 입력은 제외). 계측기를 등록한 뒤부터 (자격과 같은 점진 도입)
-    if gauge is None and Gauge.objects.exists() and any(c.is_variable for c in spec.characteristics.all()):
-        raise ValidationError('계량형 항목이 있으면 계측기를 골라야 합니다.')
+    if Gauge.objects.exists():
+        missing = [c.name for c in spec.characteristics.all() if c.is_variable and gauges.get(c.pk, gauge) is None]
+        if missing:
+            raise ValidationError(f'계량형 항목이 있으면 계측기를 골라야 합니다: {", ".join(missing)}')
     with transaction.atomic():
         insp = Inspection.objects.create(lot=lot, spec=spec, inspector=user)
         for char in spec.characteristics.all():
@@ -47,7 +50,7 @@ def submit_inspection(lot, spec, user, gauge, values, defect_type='', defect_qty
             if m is None:
                 raise ValidationError(f'{char.name}: 값을 입력하세요.')
             m.inspection = insp
-            m.gauge = gauge if char.is_variable else None
+            m.gauge = gauges.get(char.pk, gauge) if char.is_variable else None
             m.save()
         insp.finalize()
         nc = insp.nonconformance

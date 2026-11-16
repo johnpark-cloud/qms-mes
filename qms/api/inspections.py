@@ -194,10 +194,22 @@ class SubmitView(APIView):
             if gauge is None:
                 return _bad('계측기를 찾을 수 없습니다.', 'gauge')
         lot, spec = get_object_or_404(Lot, pk=lot_id), get_object_or_404(InspectionSpec, pk=spec_id)
+        gauges = {}  # 항목별 계측기 {검사항목 id: 계측기 id}. 비면 위 gauge를 모든 계량형 항목에 쓴다
+        raw = d.get('gauges') or {}
+        if not isinstance(raw, dict):
+            return _bad(BAD_BODY, 'gauges')
+        for k, v in raw.items():
+            cid, gid = _int(k), _int(v)
+            if cid is None or gid is None:
+                return _bad(BAD_BODY, 'gauges')
+            g = Gauge.objects.filter(pk=gid).first()
+            if g is None:
+                return _bad('계측기를 찾을 수 없습니다.', 'gauges')
+            gauges[cid] = g
         qty = d.get('defect_qty')
         qty = str(qty) if isinstance(qty, (int, float)) and not isinstance(qty, bool) else (qty if isinstance(qty, str) else None)
         try:
-            insp = submit_inspection(lot, spec, request.user, gauge, _values(d['values']), _str(d.get('defect_type')), qty)
+            insp = submit_inspection(lot, spec, request.user, gauge, _values(d['values']), _str(d.get('defect_type')), qty, gauges)
         except ValidationError as e:
             return _bad(' '.join(e.messages))
         nc = insp.nonconformance

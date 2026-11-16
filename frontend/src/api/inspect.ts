@@ -71,6 +71,7 @@ export const submitInspection = (body: {
   lot: number
   spec: number
   gauge: number | null
+  gauges?: Record<string, number>
   values: Record<string, string>
   defect_type?: string
   defect_qty?: string
