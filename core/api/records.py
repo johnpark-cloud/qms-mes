@@ -180,7 +180,7 @@ def _detail(obj, spec, user):
     locked = by_parent or is_locked(obj)
     return {'ct': meta.label_lower, 'id': obj.pk, 'title': str(obj), 'kind': str(meta.verbose_name),
             'status': status_of(obj), 'fields': fields, 'children': children, 'side': list(spec.side),
-            'admin_url': f'/admin/{meta.app_label}/{meta.model_name}/{obj.pk}/change/',
+            'admin_url': f'/admin/{meta.app_label}/{meta.model_name}/{obj.pk}/change/' if user.is_superuser else None,
             'list_url': f'/app/r/{meta.app_label}/{meta.model_name}',
             'version': record_version(obj, ()), 'locked': locked,
             'edit': [recordspec.editor(obj, n) for n in spec.edit],

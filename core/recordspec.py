@@ -27,7 +27,9 @@ class Spec(NamedTuple):
     children: tuple = ()
     side: tuple = ('relations', 'memo', 'files', 'history')
     order: tuple = ('-pk',)
-    edit: tuple = ()  # 기록 화면에서 고칠 수 있는 칸(fields의 부분집합). 서명 칸은 넣지 않는다
+    # 기록 화면에서 고칠 수 있는 칸(fields의 부분집합, 외래키 가능). 서명·처분·보류 인터록 칸, 자동 번호, 붙어 있는 부모(문서·심사·PPAP 등),
+    # 출하·실적의 LOT(보류 인터록), 정체를 바꾸는 칸(LOT·작업지시의 품번, 코드값·부서·거래처 코드), 파일·JSON 칸은 넣지 않는다. 규칙은 모델 clean/save가 막는다
+    edit: tuple = ()
     sign: tuple = ()  # 이 기록에서만 서명 칸인 것(SIGN_FIELDS에 더한다)
     close: bool = False  # 「종결」 버튼(POST …/close/): 서버가 종결일을 넣고 모델 clean 규칙이 막는다(REC-09)
     lock_parent: str = ''  # 이 부모가 승인되면 잠긴다(예: PPAP 요소). 기록 화면에서는 시스템 관리자도 못 고친다(REC-10)
@@ -90,7 +92,7 @@ SPECS = {
               ('expired', '만료', lambda qs: qs.filter(valid_until__lt=_today()))),
         side=('relations', 'files', 'history'),
         order=('-valid_until', '-pk'),
-        edit=('inspection_type', 'valid_until', 'basis')),
+        edit=('inspection_type', 'valid_until', 'basis', 'user')),
     'core.lot': Spec(
         fields=('number', 'item', 'work_order', 'is_serial', 'qty', 'supplier', 'partner', 'created_at'),
         columns=('number', 'item', 'qty', 'supplier', 'created_at'),
@@ -99,7 +101,7 @@ SPECS = {
         children=(Child('nonconformances', '부적합', ('number', 'defect_type', 'disposition', 'closed_at'), ('-detected_at', '-pk')),
                   Child('holds', '보류', ('nonconformance', 'created_at', 'released_at'), ('-created_at', '-pk'))),
         order=('-created_at', '-pk'),
-        edit=('number', 'is_serial', 'qty', 'supplier')),
+        edit=('number', 'is_serial', 'qty', 'supplier', 'work_order', 'partner')),
     'core.nonconformance': Spec(
         fields=('number', 'origin', 'lot', 'process', 'detected_by', 'detected_at', 'defect_type', 'defect_qty', 'inspected_qty',
                 'description', 'measured_value', 'special_char', 'contained_qty', 'sorting_result', 'customer_notify',
@@ -113,9 +115,9 @@ SPECS = {
                   Child('photos', '사진', ('caption', 'file', 'uploaded_at'), ('pk',))),
         order=('-detected_at', '-pk'),
         sign=('disposition', 'customer_approval_ref'),  # MRB 처분(rules.dispose_nc)으로만
-        # LOT·발견 일시는 보류 인터록 칸이라 관리 화면에서만 (종결 뒤에는 모델이 막는다)
+        # LOT·발견 일시는 보류 인터록 칸, 비용은 처분 칸이라 넣지 않는다 (종결 뒤에는 모델이 막는다)
         edit=('origin', 'defect_type', 'defect_qty', 'inspected_qty', 'description', 'measured_value', 'special_char',
-              'contained_qty', 'sorting_result', 'customer_notify', 'customer_notified_on')),
+              'contained_qty', 'sorting_result', 'customer_notify', 'customer_notified_on', 'process', 'detected_by', 'capa_required')),
     'core.hold': Spec(  # 읽기 전용: 부적합 등록으로 생기고 처분으로만 풀린다
         fields=('lot', 'nonconformance', 'created_at', 'released_at'),
         columns=('lot', 'nonconformance', 'created_at', 'released_at'),
@@ -132,7 +134,7 @@ SPECS = {
         search=('number', 'title', 'root_cause', 'action'),
         tabs=(('open', '진행', lambda qs: qs.filter(closed_at__isnull=True)), ALL,
               ('closed', '종결', lambda qs: qs.filter(closed_at__isnull=False))),
-        edit=('title', 'source', 'root_cause', 'action', 'due_date', 'done_at', 'verified_at', 'verification_note'),
+        edit=('title', 'source', 'root_cause', 'action', 'due_date', 'done_at', 'verified_at', 'verification_note', 'owner', 'effective', 'verified_by'),
         close=True),
     'qms.customerclaim': Spec(
         fields=('number', 'customer', 'partner', 'lot', 'description', 'defect_qty', 'received_at', 'nonconformance',
@@ -144,7 +146,7 @@ SPECS = {
               ('closed', '종결', lambda qs: qs.filter(closed_at__isnull=False))),
         order=('-received_at', '-pk'),
         edit=('customer', 'description', 'defect_qty', 'd1_team', 'd2_problem', 'd3_containment', 'd4_root_cause',
-              'd5_corrective', 'd6_verification', 'd7_prevention', 'd8_closure'),
+              'd5_corrective', 'd6_verification', 'd7_prevention', 'd8_closure', 'partner', 'lot', 'received_at'),
         close=True),
     'qms.customerrule': Spec(
         fields=('customer', 'partner', 'containment_hours', 'corrective_days'),
@@ -152,7 +154,7 @@ SPECS = {
         search=('customer',),
         side=('relations', 'history'),
         order=('customer',),
-        edit=('customer', 'containment_hours', 'corrective_days')),
+        edit=('customer', 'containment_hours', 'corrective_days', 'partner')),
     'qms.scar': Spec(
         fields=('number', 'supplier', 'partner', 'lot', 'nonconformance', 'request', 'issued_at', 'response_due', 'response',
                 'responded_at', 'closed_at'),
@@ -161,7 +163,7 @@ SPECS = {
         tabs=(('open', '진행', lambda qs: qs.filter(closed_at__isnull=True)), ALL,
               ('closed', '종결', lambda qs: qs.filter(closed_at__isnull=False))),
         order=('-issued_at', '-pk'),
-        edit=('supplier', 'request', 'issued_at', 'response_due', 'response', 'responded_at'),
+        edit=('supplier', 'request', 'issued_at', 'response_due', 'response', 'responded_at', 'partner', 'lot', 'nonconformance'),
         close=True),
     'qms.changerequest': Spec(  # 출하 차단(초품 합격 전)은 Shipment.clean 그대로
         fields=('number', 'item', 'category', 'description', 'customer_notice', 'customer_approval_ref', 'effective_at',
@@ -171,7 +173,7 @@ SPECS = {
         tabs=(ALL, ('draft', '초안', lambda qs: qs.filter(approved_at__isnull=True)),
               ('approved', '승인됨', lambda qs: qs.filter(approved_at__isnull=False))),
         order=('-effective_at', '-pk'),
-        edit=('category', 'description', 'customer_notice', 'customer_approval_ref')),
+        edit=('category', 'description', 'customer_notice', 'customer_approval_ref', 'item', 'effective_at')),
     'qms.internalaudit': Spec(  # 종결 규칙(실시일, CAPA 없는 중·경부적합)은 InternalAudit.clean 그대로
         fields=('name', 'kind', 'scope', 'checklist', 'planned_date', 'auditor', 'auditee', 'auditor_user', 'auditee_dept',
                 'performed_at', 'closed_at'),
@@ -181,13 +183,13 @@ SPECS = {
               ('closed', '종결', lambda qs: qs.filter(closed_at__isnull=False))),
         children=(Child('findings', '지적', ('clause', 'grade', 'description', 'capa'), ('pk',)),),
         order=('-planned_date', '-pk'),
-        edit=('name', 'kind', 'scope', 'planned_date', 'auditor', 'auditee', 'performed_at'),
+        edit=('name', 'kind', 'scope', 'planned_date', 'auditor', 'auditee', 'performed_at', 'checklist', 'auditor_user', 'auditee_dept'),
         close=True),
     'qms.auditfinding': Spec(  # CAPA 연결은 「CAPA 만들기」 → Capa.save가 지적에 건다
         fields=('audit', 'clause', 'grade', 'description', 'capa'),
         columns=('audit', 'clause', 'grade', 'capa'),
         search=('clause', 'description', 'audit__name'),
-        edit=('clause', 'grade', 'description')),
+        edit=('clause', 'grade', 'description', 'capa')),
     'qms.auditchecklist': Spec(
         fields=('name', 'standard'),
         columns=('name', 'standard'),
@@ -213,14 +215,14 @@ SPECS = {
         tabs=(ALL, ('draft', '초안', lambda qs: qs.filter(approved_at__isnull=True)),
               ('approved', '승인됨', lambda qs: qs.filter(approved_at__isnull=False))),
         children=(Child('elements', 'PPAP 요소', ('number', 'name', 'requirement', 'document', 'record', 'note'), ('number',)),),
-        edit=('customer', 'reason', 'due_date', 'submitted_at', 'customer_approved_at')),
+        edit=('customer', 'reason', 'due_date', 'submitted_at', 'customer_approved_at', 'item', 'partner', 'level')),
     'qms.ppapelement': Spec(  # 문서·증적 기록 연결(외래키)은 관리 화면
         fields=('submission', 'number', 'name', 'requirement', 'document', 'record', 'note'),
         columns=('submission', 'number', 'name', 'requirement'),
         search=('name', 'submission__customer', 'submission__item__code'),
         side=('relations', 'history'),
         order=('submission', 'number'),
-        edit=('requirement', 'note'),
+        edit=('requirement', 'note', 'document'),
         lock_parent='submission'),
     # 작업지시·실적·출하(REC-11): LOT·작업지시·공정 같은 외래키는 관리 화면에서만 — 보류·4M 인터록(모델 clean/save)이 그대로 막는다.
     # 새 등록도 관리 화면 추가 폼. 기록 화면은 수량·납기 정정만(모델 clean: 양품+불량 ≤ 투입, 이전 공정 실적)
@@ -232,21 +234,21 @@ SPECS = {
         children=(Child('results', '작업 실적', ('step', 'lot', 'input_qty', 'good_qty', 'defect_qty', 'started_at'),
                         ('step__seq', 'started_at')),
                   Child('lots', 'LOT', ('number', 'qty', 'created_at'), ('-created_at', '-pk'))),
-        edit=('planned_qty', 'due_date', 'status'),
+        edit=('planned_qty', 'due_date', 'status', 'process'),
         create=('number', 'item', 'process', 'planned_qty', 'due_date')),
     'core.workresult': Spec(
         fields=('work_order', 'step', 'lot', 'input_qty', 'good_qty', 'defect_qty', 'operator', 'started_at', 'ended_at'),
         columns=('work_order', 'step', 'lot', 'good_qty', 'defect_qty', 'started_at'),
         search=('work_order__number', 'lot__number'),
         order=('-started_at', '-pk'),
-        edit=('input_qty', 'good_qty', 'defect_qty'),
+        edit=('input_qty', 'good_qty', 'defect_qty', 'operator', 'started_at', 'ended_at'),
         create=('work_order', 'step', 'lot', 'input_qty', 'good_qty', 'defect_qty')),
     'core.shipment': Spec(
         fields=('lot', 'customer', 'partner', 'qty', 'shipped_at'),
         columns=('lot', 'customer', 'qty', 'shipped_at'),
         search=('lot__number', 'customer'),
         order=('-shipped_at', '-pk'),
-        edit=('customer', 'qty'),
+        edit=('customer', 'qty', 'partner', 'shipped_at'),
         create=('lot', 'partner', 'customer', 'qty')),
     # 기준정보: 코드·대상처럼 다른 기록이 가리키는 칸, 외래키, JSON(선택지·매핑)은 관리 화면에서
     'core.partner': Spec(
@@ -268,7 +270,7 @@ SPECS = {
         search=('code', 'name'),
         children=(Child('children', '하위 부서', ('code', 'name', 'manager'), ('sort', 'code')),),
         order=('sort', 'code'),
-        edit=('name', 'sort', 'active', 'note'),
+        edit=('name', 'sort', 'active', 'note', 'parent', 'manager'),
         create=('code', 'name', 'parent', 'manager', 'sort', 'note')),
     'core.codevalue': Spec(
         fields=('group', 'code', 'name', 'parent', 'item_type', 'sort', 'active'),
@@ -277,7 +279,7 @@ SPECS = {
         children=(Child('children', '하위 코드', ('code', 'name', 'active'), ('sort', 'code')),),
         side=('relations', 'history'),
         order=('group', 'sort', 'code'),
-        edit=('name', 'item_type', 'sort', 'active'),
+        edit=('name', 'item_type', 'sort', 'active', 'parent'),
         create=('group', 'code', 'name', 'parent', 'item_type', 'sort')),
     'core.numberrule': Spec(
         fields=('name', 'target', 'pattern', 'sort', 'active'),
@@ -356,14 +358,23 @@ def value_of(obj, name):
 
 
 def editor(obj, name):
-    """수정 칸 하나의 입력 종류와 원래 값."""
+    """수정 칸 하나의 입력 종류와 원래 값. 외래키는 폼 queryset(limit_choices_to 반영) 앞 CHOICE_LIMIT개 + 지금 값."""
     f = obj._meta.get_field(name)
     v = getattr(obj, name)
+    if f.is_relation:
+        from django.forms import modelform_factory
+        objs = list(modelform_factory(type(obj), fields=[name])().fields[name].queryset[:CHOICE_LIMIT])
+        if v is not None and v not in objs:
+            objs.insert(0, v)
+        return {'key': name, 'label': str(f.verbose_name), 'type': 'choice', 'value': str(v.pk) if v else None,
+                'required': not f.blank, 'choices': [{'value': str(o.pk), 'label': str(o)} for o in objs]}
     if f.choices:
         kind = 'choice'
     elif isinstance(f, models.BooleanField):
         kind = 'bool'
-    elif isinstance(f, models.DateField) and not isinstance(f, models.DateTimeField):
+    elif isinstance(f, models.DateTimeField):
+        kind, v = 'datetime', timezone.localtime(v).strftime('%Y-%m-%dT%H:%M') if v else None
+    elif isinstance(f, models.DateField):
         kind, v = 'date', v.isoformat() if v else None
     elif isinstance(f, (models.IntegerField, models.DecimalField)):
         kind = 'int'  # 숫자 입력(소수 포함)

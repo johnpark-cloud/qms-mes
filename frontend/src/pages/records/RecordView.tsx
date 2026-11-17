@@ -17,12 +17,12 @@ interface Row { id: number; url: string | null; status: string | null; cells: Re
 interface Child { key: string; label: string; columns: { key: string; label: string }[]; rows: Row[] }
 type Value = string | number | boolean | null
 export interface Edit {
-  key: string; label: string; type: 'str' | 'text' | 'int' | 'date' | 'bool' | 'choice'; value: Value; required: boolean
+  key: string; label: string; type: 'str' | 'text' | 'int' | 'date' | 'datetime' | 'bool' | 'choice'; value: Value; required: boolean
   choices: { value: string; label: string }[] | null
 }
 interface Detail {
   ct: string; id: number; title: string; kind: string; status: string | null
-  fields: Field[]; children: Child[]; side: string[]; admin_url: string; list_url: string
+  fields: Field[]; children: Child[]; side: string[]; admin_url: string | null; list_url: string
   version: number; locked: boolean; edit: Edit[]; can_change: boolean; can_approve: boolean
   can_dispose: boolean; dispose: Edit[] | null; can_close: boolean; links: { label: string; url: string }[]
   requests: { edit: boolean; delete: boolean }
@@ -61,6 +61,7 @@ export function Editor({ e, ...rest }: { e: Edit; [k: string]: any }) {
   if (e.type === 'bool') return <Checkbox {...rest} />
   if (e.type === 'int') return <InputNumber style={{ width: '100%' }} {...rest} />
   if (e.type === 'date') return <Input type="date" {...rest} />
+  if (e.type === 'datetime') return <Input type="datetime-local" {...rest} />
   if (e.type === 'text') return <Input.TextArea autoSize={{ minRows: 2, maxRows: 8 }} {...rest} />
   if (e.type === 'choice') return <Select options={e.choices ?? []} showSearch optionFilterProp="label" allowClear={!e.required} {...rest} />
   return <Input {...rest} />
@@ -255,7 +256,7 @@ export default function RecordView() {
         }
         menu={[
           ...d.links.map((l) => ({ key: l.url, label: <a href={l.url}>{l.label}</a> })),
-          { key: 'admin', label: <a href={d.admin_url}>관리 화면에서 열기</a> },
+          ...(d.admin_url ? [{ key: 'admin', label: <a href={d.admin_url}>관리 화면에서 열기</a> }] : []),
         ]}
         props={d.fields.map((f) => {
           const e = editable.get(f.key)

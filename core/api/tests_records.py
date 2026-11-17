@@ -250,7 +250,36 @@ class RecordsWriteApiTest(TestCase):
         r = self.patch('qms.documentrevision', self.rev.pk, {'revision': '9'})  # 문서·개정 고유 조건
         self.assertEqual(r.status_code, 400, r.content)
 
+    def test_edit_fk_datetime_and_admin_link_superuser_only(self):
+        from core.models import Item, Lot, Nonconformance, Partner
+        from qms.models import CustomerClaim
+        p = Partner.objects.create(code='P1', name='H사', is_customer=True)
+        lot = Lot.objects.create(number='L-1', item=Item.objects.create(code='R1', name='x', item_type=Item.RAW))
+        claim = CustomerClaim.objects.create(number='CL-1', customer='H사', lot=lot, description='치수')
+        self.assertIsNone(self.detail('qms.gauge', self.g.pk)['admin_url'])  # 관리 화면 링크는 시스템 관리자만
+        self.client.force_login(self.root)
+        d = self.detail('qms.customerclaim', claim.pk)
+        self.assertEqual(d['admin_url'], f'/admin/qms/customerclaim/{claim.pk}/change/')
+        e = {x['key']: x for x in d['edit']}
+        self.assertEqual(e['partner']['type'], 'choice')
+        self.assertIn(str(p.pk), [c['value'] for c in e['partner']['choices']])
+        self.assertEqual((e['lot']['type'], e['lot']['value']), ('choice', str(lot.pk)))
+        self.assertEqual(e['received_at']['type'], 'datetime')
+        self.assertFalse({'number', 'nonconformance'} & set(e))  # 자동 번호·자동 연결은 그대로
+        r = self.patch('qms.customerclaim', claim.pk, {'partner': str(p.pk), 'received_at': '2026-11-01T09:30'})
+        self.assertEqual(r.status_code, 200, r.content)
+        claim.refresh_from_db()
+        self.assertEqual(claim.partner, p)
+        self.assertEqual(timezone.localtime(claim.received_at).strftime('%Y-%m-%d %H:%M'), '2026-11-01 09:30')
+        nc = Nonconformance.objects.create(lot=lot, description='찍힘')
+        e = {x['key'] for x in self.detail('core.nonconformance', nc.pk)['edit']}
+        self.assertTrue({'process', 'detected_by', 'capa_required'} <= e)
+        self.assertFalse({'number', 'lot', 'detected_at', 'disposition', 'customer_approval_ref', 'cost'} & e)  # 인터록·처분 칸
+
     def test_spec_edit_never_includes_sign_fields(self):
+        from core import rules
+        from core.models import Nonconformance
+        self.assertFalse(set(recordspec.SPECS['core.nonconformance'].edit) & {*rules.DISPOSE_FIELDS, *Nonconformance.INTERLOCK})
         for label, spec in recordspec.SPECS.items():
             self.assertFalse(set(spec.edit) & recordspec.sign_fields(spec), label)
             self.assertTrue(set(spec.edit) <= set(spec.fields), label)
