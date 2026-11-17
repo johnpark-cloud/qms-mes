@@ -1,0 +1,125 @@
+# 메뉴 구조와 하나씩 검토하는 순서
+
+메뉴 정의: `core/nav.py`의 `NAV`. 사이드바·전체 메뉴(관리 첫 화면)·me API가 이 목록 하나를 쓴다.
+권한이 없거나 모듈이 꺼진 항목은 보이지 않고, 항목이 하나도 남지 않은 묶음은 빠진다(`visible_nav`).
+
+## 1. 화면 종류
+
+| 종류 | 주소 | 코드 위치 |
+| --- | --- | --- |
+| 기록 화면 (새 화면) | `/app/r/<앱>/<모델>` 목록 → `/new` 새로 만들기 → `/<번호>` 상세 | `core/recordspec.py` SPECS, `core/api/records.py`, `frontend/src/pages/records/` |
+| 전용 새 화면 | `/app/items`, `/app/specs`, `/app/inspections` 등 | `frontend/src/pages/` 각 폴더, `frontend/src/main.tsx` 경로 |
+| 서버 화면 | `/nc/new/`, `/audit-pack/`, `/kpi/`, `/suppliers/` | `core/views.py`, `qms/views.py`, 템플릿 `*/templates/` |
+| 관리 화면 | `/admin/...` | `core/admin.py`, `qms/admin.py` (시스템 관리자용) |
+
+메뉴의 관리 주소는 `app_href`가 새 화면 주소로 바꾼다. 기록 화면 설명서(SPECS)가 있는 모델은 `/app/r/...`로 연다.
+`/todo/`, `/overview/`, `/inspect/`, `/import/`, `/trace/`, `/memo/inbox/`도 새 화면이 대신 연다(`frontend/src/layout/AppLayout.tsx`).
+
+## 2. 메뉴 나무
+
+`[화면 종류] 메뉴 — 필요 권한 → 그 안에서 이어지는 작은 화면`
+
+### 1) 통합 업무 홈 (늘 펼침)
+- [전용] 내 할 일 `/app/todo` — 모두 → 카드마다 해당 기록 상세로 이동
+- [전용] 공장 종합현황 `/app/overview` — 모두 → 칸 배치 저장(`/dashboard/save/`)
+- [전용] 미분류 메모 `/app/memos` — `qms.view_memo` → 메모를 기록에 연결
+- [전용] 연차·급여 `/app/me` — 모두(본인 기록만)
+
+### 2) 생산관리 (MES)
+- [기록] 작업지시 — `core.view_workorder` → 상세 아래 표: 작업 실적, LOT
+- [기록] 작업 실적 — `core.view_workresult`
+- [기록] LOT — `core.view_lot` → 상세 아래 표: 부적합, 보류
+- [전용] 추적성 조회(LOT 이력) `/app/trace` — `core.view_lot`
+- [기록] 출하 — `core.view_shipment`
+
+### 3) 품질관리 (QMS)
+- [전용] 검사 입력 `/app/inspect` — `qms.add_inspection` → LOT·검사기준 고르기 → 측정 입력 `/app/inspect/<LOT>/<기준>`
+- [전용] 수입·공정·출하검사 `/app/inspections?tab=…` — `qms.view_inspection` → 검사 기록 상세 → 인쇄
+- [기록] 계측기·교정 — `qms.view_gauge`
+- [기록] 검사원 자격 — `qms.view_qualification`
+
+### 4) 품질보증 및 개선
+- [서버] 부적합 등록 `/nc/new/` — `core.add_nonconformance`
+- [기록] 부적합 — `core.view_nonconformance` → 상세 아래 표: 보류, 사진 / 처분(MRB 승인)·메일·사진 ZIP
+- [기록] 보류 — `core.view_hold`
+- [기록] 시정조치(CAPA) — `qms.view_capa`
+- [기록] 4M 변경 — `qms.view_changerequest`
+- [기록] 문서 — `qms.view_document` → 상세 아래 표: 개정 이력
+- [기록] 심사 — `qms.view_internalaudit` → 상세 아래 표: 발견사항
+- [기록] 심사 체크리스트·증적 — `qms.view_auditchecklist` → 심사 항목 → 증적
+- [서버] 심사 자료 출력 `/audit-pack/` — `core.view_nonconformance` → 사진·첨부 ZIP
+
+### 5) 고객 및 공급자
+- [기록] 거래처 — `core.view_partner` → 상세 아래 표: 인증서 / 담당자 여러 명, 구분 체크 상자, 코드 자동 부여
+- [기록] 고객 클레임(8D) — `qms.view_customerclaim`
+- [전용] 고객사별 8D 기한 `/app/customer-rules` — `qms.view_customerrule`
+- [기록] 공급자 시정조치 요구(SCAR) — `qms.view_scar`
+- [기록] PPAP — `qms.view_ppapsubmission` → 상세 아래 표: PPAP 요소
+- [서버] 공급자 평가 `/suppliers/` — `qms.view_scar`
+
+### 6) 분석 및 보고서
+- [서버] 품질 KPI `/kpi/` — `qms.view_customerclaim`
+- [기록] 엑셀 보고서 양식 — `qms.view_exceltemplate`
+
+### 7) 기준정보 및 시스템 관리
+- [전용] 품목·BOM·라우팅 `/app/items` — `core.view_item` → 품목 상세(BOM·라우팅 탭)
+- [전용] 공정 `/app/processes` — `core.view_process`
+- [기록] 번호 코드값 — `core.view_codevalue` → 하위 코드
+- [기록] 번호 규칙 — `core.view_numberrule`
+- [전용] 검사기준 `/app/specs` — `qms.view_inspectionspec` → 기준 상세 → 새 개정·인쇄
+- [전용] 관리계획서 `/app/plans` — `qms.view_controlplan` → 계획서 상세 → 새 개정·인쇄
+- [전용] 엑셀 일괄 등록 `/app/import` — `core.view_importprofile`
+- [기록] 부서 — `core.view_department` → 하위 부서
+- [기록] 사용자 정의 칸 — `core.view_fielddef`
+- [관리] 사용자 `/admin/auth/user/` — 시스템 관리자
+- [전용] 변경 이력 조회 `/app/audit` — 승인권자(`is_approver`)
+- [관리] 모듈 켜기/끄기 — 시스템 관리자
+- [관리] 전체 메뉴 `/admin/` — 시스템 관리자
+
+모든 기록 상세의 오른쪽 탭(관련 기록·메모·첨부·변경 이력)과 「⋯」 메뉴(관리 화면에서 열기·삭제(요청))는 공통이다.
+
+## 3. 검토 순서
+
+큰 틀부터 보고, 다른 메뉴가 기대는 기준정보를 먼저 본 뒤 업무 흐름 순서로 내려간다.
+한 단계를 끝내고 고친 것을 커밋한 다음 다음 단계로 간다.
+
+| 단계 | 검토 대상 | 먼저 보는 이유 |
+| --- | --- | --- |
+| 0 | 공통 틀: 로그인, 사이드바(권한별로 보이는 메뉴), 검색, 기록 화면 3종(목록·새로 만들기·상세), 오른쪽 탭 | 메뉴 대부분이 같은 기록 화면 틀을 쓴다. 여기서 고치면 전부에 적용된다 |
+| 1 | 시스템 관리: 사용자·부서·모듈 켜기/끄기·사용자 정의 칸 | 역할과 권한이 맞아야 나머지 메뉴를 역할별로 확인할 수 있다 |
+| 2 | 기준정보: 품목·BOM·라우팅 → 공정 → 거래처 → 번호 코드값·번호 규칙 | 작업지시·검사·부적합이 이 값을 고른다 |
+| 3 | 품질 기준: 검사기준 → 관리계획서 → 계측기·교정 → 검사원 자격 | 검사 입력의 인터록(승인 기준, 교정 기한, 자격)이 여기에 기댄다 |
+| 4 | 생산: 작업지시 → 작업 실적 → LOT → 추적성 조회 → 출하 | 물건이 흐르는 순서. 보류 인터록(투입·실적·출하 차단)을 함께 본다 |
+| 5 | 검사: 검사 입력 → 수입·공정·출하검사 목록·상세·인쇄 | 불합격 → 부적합 자동 등록까지 이어서 본다 |
+| 6 | 품질보증: 부적합 등록 → 부적합(처분) → 보류 → CAPA → 4M 변경 | 부적합 한 건을 등록부터 종결까지 따라간다 |
+| 7 | 고객·공급자: 고객 클레임(8D) → 고객사별 8D 기한 → SCAR → PPAP → 공급자 평가 | 외부와 주고받는 기록 |
+| 8 | 문서·심사: 문서 → 심사 → 심사 체크리스트·증적 → 심사 자료 출력 | 앞 단계 기록을 증적으로 모으는 화면이라 마지막에 본다 |
+| 9 | 분석: 품질 KPI → 엑셀 보고서 양식 → 변경 이력 조회 | 앞 단계에서 쌓인 데이터로 숫자가 맞는지 본다 |
+| 10 | 홈: 내 할 일 → 공장 종합현황 → 미분류 메모 → 연차·급여 | 모든 메뉴의 할 일·현황이 모이는 곳이라 맨 마지막 |
+
+## 4. 메뉴 하나를 볼 때 확인할 것
+
+1. **들어가기:** 사이드바에서 열리는가. 권한 없는 역할에게는 메뉴가 안 보이고 주소로 열어도 거부되는가.
+2. **목록:** 열 이름, 정렬, 필터, 검색, 엑셀 받기, 빈 목록 문구.
+3. **새로 만들기:** 꼭 필요한 칸만 있는가, 필수 표시, 자동 번호, 오류 문구가 칸 옆에 나오는가.
+4. **상세:** 기본정보 칸, 아래 표(하위 기록), 오른쪽 탭(관련 기록·메모·첨부·변경 이력), 「⋯」 메뉴.
+5. **수정·승인:** 수정, 승인 서명 후 잠금, 수정 요청·삭제 요청 흐름, 시스템 관리자만 삭제.
+6. **연결:** 다른 메뉴로 가는 링크가 맞는 기록을 여는가(예: LOT → 부적합 → CAPA).
+7. **업무 규칙:** `docs/business-rules.md`에서 그 메뉴에 걸린 규칙이 화면에서도 막히는가.
+8. **용어·디자인:** ISO 9001·IATF 16949 용어(`docs/` 용어 정렬), `DESIGN.md` 규칙, 좁은 화면.
+
+## 5. 진행표
+
+| 단계 | 메뉴 | 확인일 | 고칠 것 |
+| --- | --- | --- | --- |
+| 0 | 공통 틀 | | |
+| 1 | 시스템 관리 | | |
+| 2 | 기준정보 | | |
+| 3 | 품질 기준 | | |
+| 4 | 생산 | | |
+| 5 | 검사 | | |
+| 6 | 품질보증 | | |
+| 7 | 고객·공급자 | | |
+| 8 | 문서·심사 | | |
+| 9 | 분석 | | |
+| 10 | 홈 | | |
