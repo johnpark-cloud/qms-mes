@@ -290,7 +290,7 @@ try:
         try:
             page.locator('.ant-select').first.click()
             page.locator('.ant-select-item-option', has_text='E2E-G1').click()
-            thick = page.locator('tbody tr', has_text='두께').locator('input')
+            thick = page.locator('tbody tr', has_text='두께').locator('input[inputmode="decimal"]')
             thick.fill('10.0')
             page.get_by_text('합격', exact=True).wait_for(timeout=5000)
             thick.fill('11')
@@ -455,7 +455,7 @@ try:
             page.locator('.ant-select').first.click()
             page.locator('.ant-select-item-option', has_text='E2E-G1').click()
             page.locator('tbody tr', has_text='외관').get_by_role('button', name='OK', exact=True).click()
-            page.locator('tbody tr', has_text='두께').locator('input').fill('11')
+            page.locator('tbody tr', has_text='두께').locator('input[inputmode="decimal"]').fill('11')
             page.get_by_role('button', name='판정').click()
             page.get_by_text('불합격 항목이 있습니다').wait_for(timeout=5000)
             n = api_get(page, '/api/qms/inspections/?tab=INCOMING&q=E2E-IN-2')['count']
