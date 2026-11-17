@@ -21,6 +21,7 @@ urlpatterns = [
     path('core/import/profiles/', master.ImportProfileListView.as_view()),
     path('core/import/', master.ImportView.as_view()),
     path('attachments/', attachments.AttachmentListView.as_view()),
+    path('attachments/<int:pk>/', attachments.AttachmentDetailView.as_view()),
     path('relations/<str:label>/<int:pk>/', views.RelationsView.as_view(), name='relations'),
     path('revision-log/<int:pk>/approve/',views.RevisionLogApproveView.as_view()),
     path('audit-log/', views.AuditLogView.as_view()),

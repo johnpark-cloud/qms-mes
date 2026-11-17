@@ -1,5 +1,5 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { Alert, Button, Select, Spin, Typography } from 'antd'
+import { Alert, Button, Popconfirm, Select, Spin, Typography } from 'antd'
 import { useRef, useState } from 'react'
 import { ApiError, api } from '../api/client'
 
@@ -12,6 +12,7 @@ interface AttachmentRow {
   uploaded_by: string
   uploaded_at: string
   size: number | null
+  can_delete: boolean
 }
 interface AttachmentList {
   results: AttachmentRow[]
@@ -19,7 +20,7 @@ interface AttachmentList {
   kinds: { value: string; label: string }[]
 }
 
-// 기록에 붙은 파일(성적서·사진·도면 등). 목록과 올리기만 한다. 지우기는 관리 화면(시스템 관리자)에서.
+// 기록에 붙은 파일(성적서·사진·도면 등). 목록·올리기·지우기(올린 사람·시스템 관리자, 승인된 기록은 서버가 막는다).
 export default function AttachmentPanel({ ct, id }: { ct: string; id: number }) {
   const qc = useQueryClient()
   const key = ['attachments', ct, id]
@@ -43,12 +44,27 @@ export default function AttachmentPanel({ ct, id }: { ct: string; id: number }) 
       await api('/api/attachments/', { method: 'POST', body })
       setFile(null)
       if (fileRef.current) fileRef.current.value = ''
-      await qc.invalidateQueries({ queryKey: key })
-      await qc.invalidateQueries({ queryKey: ['relations', ct, id] })
+      await refresh()
     } catch (e) {
       setErr(e instanceof ApiError ? e.detail : '올리지 못했습니다.')
     } finally {
       setBusy(false)
+    }
+  }
+
+  const refresh = async () => {
+    await qc.invalidateQueries({ queryKey: key })
+    await qc.invalidateQueries({ queryKey: ['relations', ct, id] })
+    await qc.invalidateQueries({ queryKey: ['record-history', ct, id] })
+  }
+
+  const remove = async (pk: number) => {
+    setErr('')
+    try {
+      await api(`/api/attachments/${pk}/`, { method: 'DELETE' })
+      await refresh()
+    } catch (e) {
+      setErr(e instanceof ApiError ? e.detail : '지우지 못했습니다.')
     }
   }
 
@@ -69,6 +85,12 @@ export default function AttachmentPanel({ ct, id }: { ct: string; id: number }) 
                   {a.kind_label} · {a.uploaded_by || '—'} · {a.uploaded_at.slice(0, 10)}
                   {a.size === null && ' · 파일 없음'}
                 </Typography.Text>
+                {a.can_delete && (
+                  <Popconfirm title="이 파일을 지울까요?" description="파일은 지워지고 이력에 이름만 남습니다." okText="지우기" cancelText="취소"
+                    onConfirm={() => remove(a.id)}>
+                    <Button type="link" danger size="small">지우기</Button>
+                  </Popconfirm>
+                )}
               </div>
             </li>
           ))}
@@ -93,9 +115,9 @@ export default function AttachmentPanel({ ct, id }: { ct: string; id: number }) 
           <Button type="primary" disabled={!file} loading={busy} onClick={() => void upload()}>
             올리기
           </Button>
-          {err && <Alert type="error" message={err} role="alert" />}
         </div>
       )}
+      {err && <Alert type="error" message={err} role="alert" />}
     </div>
   )
 }

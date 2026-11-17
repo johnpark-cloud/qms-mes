@@ -158,6 +158,7 @@ export default function MemoPanel({ ct, id, link = false }: { ct?: string; id?: 
     setEditing(null)
     void queryClient.invalidateQueries({ queryKey: ['memos'] })
     void queryClient.invalidateQueries({ queryKey: ['todo'] }) // 내 할 일의 '미분류 메모' 건수
+    void queryClient.invalidateQueries({ queryKey: ['record-history'] }) // 기록 화면 변경 이력 탭의 메모 줄
   }
   if (q.isError) return <Alert type="error" message={q.error instanceof ApiError ? q.error.detail : '메모를 불러오지 못했습니다.'} />
   if (!q.data) return <Spin />

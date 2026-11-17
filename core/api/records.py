@@ -3,6 +3,7 @@
 권한은 그 모델의 view_ 권한. 변경 이력도 view_ 권한이면 본다(미결 #6, 2026-11-13 사용자 결정).
 꺼진 모듈은 미들웨어가 주소의 label 인자로 막는다.
 """
+from datetime import datetime
 from urllib.parse import urlencode
 
 from django.apps import apps
@@ -27,6 +28,7 @@ from core.relations import record_url, status_of
 from .permissions import require_perm
 
 PAGE_SIZE = 50
+SIDE_TYPES = {'생성': '추가', '변경': '변경', '삭제': '삭제'}
 
 
 def _model(user, label):
@@ -285,4 +287,18 @@ class RecordHistoryView(APIView):
     def get(self, request, label, pk):
         model, _ = _model(request.user, label)
         get_object_or_404(model, pk=pk)
-        return Response({'results': [audit.row_payload(h) for h in audit.rows(model, pk)[:PAGE_SIZE]]})
+        rows = [audit.row_payload(h) for h in audit.rows(model, pk)[:PAGE_SIZE]]
+        # 이 기록에 붙은 첨부·메모의 이력도 같이 보인다(보기 권한이 있을 때). 메모를 다른 기록으로 옮기면 옮긴 뒤 줄은 그쪽에 나온다.
+        from core.models import Attachment
+        from qms.models import Memo
+        ct = ContentType.objects.get_for_model(model)
+        for side, name, perm in ((Attachment, '첨부', 'core.view_attachment'), (Memo, '메모', 'qms.view_memo')):
+            if not request.user.has_perm(perm):
+                continue
+            qs = side.history.filter(content_type_id=ct.pk, object_id=pk).select_related('history_user').order_by('-history_date')
+            for h in qs[:PAGE_SIZE]:
+                r = audit.row_payload(h)
+                r.update(kind=name, type=f"{name} {SIDE_TYPES[r['type']]}: {r['object_repr']}")
+                rows.append(r)
+        rows.sort(key=lambda r: datetime.fromisoformat(r['date']), reverse=True)
+        return Response({'results': rows[:PAGE_SIZE]})

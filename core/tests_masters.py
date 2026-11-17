@@ -217,6 +217,62 @@ class AttachmentTest(TestCase):
         p = Partner.objects.create(code='P1', name='가', is_supplier=True)
         self.assertEqual(self.client.get('/api/attachments/', {'ct': 'core.partner', 'id': p.pk}).status_code, 403)
 
+    def test_api_delete_uploader_or_superuser(self):
+        insp, other = staff('insp', '검사원'), staff('insp2', '검사원')
+        a = self.attach(uploaded_by=insp)
+        path = Path(a.file.path)
+        self.client.force_login(other)  # 남이 올린 첨부는 못 지운다
+        self.assertEqual(self.client.delete(f'/api/attachments/{a.pk}/').status_code, 403)
+        body = self.client.get('/api/attachments/', {'ct': 'core.item', 'id': self.item.pk}).json()
+        self.assertFalse(body['results'][0]['can_delete'])
+        self.client.force_login(insp)
+        self.assertTrue(self.client.get('/api/attachments/', {'ct': 'core.item', 'id': self.item.pk}).json()['results'][0]['can_delete'])
+        with self.captureOnCommitCallbacks(execute=True):
+            self.assertEqual(self.client.delete(f'/api/attachments/{a.pk}/').status_code, 204)
+        self.assertFalse(Attachment.objects.exists())
+        self.assertFalse(path.exists())
+        h = Attachment.history.filter(history_type='-').get()
+        self.assertEqual((h.title, h.history_user), ('도면.pdf', insp))  # 지운 사람·파일 이름은 이력에 남는다
+        b = self.attach(uploaded_by=insp)
+        self.client.force_login(User.objects.create_superuser('root', password='pw'))
+        with self.captureOnCommitCallbacks(execute=True):
+            self.assertEqual(self.client.delete(f'/api/attachments/{b.pk}/').status_code, 204)
+        self.assertEqual(self.client.delete('/api/attachments/999999/').status_code, 404)
+
+    def test_api_delete_blocked_on_approved_record(self):
+        nc = Nonconformance.objects.create(lot=Lot.objects.create(number='L9', item=self.item), description='찍힘')
+        Nonconformance.objects.filter(pk=nc.pk).update(approved_at=timezone.now())
+        a = Attachment.objects.create(content_type=ContentType.objects.get_for_model(Nonconformance), object_id=nc.pk,
+                                      file=SimpleUploadedFile('a.pdf', b'x'))
+        self.client.force_login(User.objects.create_superuser('root', password='pw'))
+        r = self.client.delete(f'/api/attachments/{a.pk}/')
+        self.assertEqual((r.status_code, r.json()['detail']), (400, '승인된 기록의 첨부는 지울 수 없습니다.'))
+        self.assertTrue(Attachment.objects.filter(pk=a.pk).exists())
+
+    def test_record_history_includes_attachments_and_memos(self):
+        from qms.models import Memo
+        root = User.objects.create_superuser('root', password='pw')
+        p = Partner.objects.create(code='P1', name='가', is_supplier=True)
+        ct = ContentType.objects.get_for_model(Partner)
+        self.client.force_login(root)
+        self.client.post('/api/attachments/', {'ct': 'core.partner', 'id': p.pk, 'file': SimpleUploadedFile('인증서.pdf', b'x')})
+        with self.captureOnCommitCallbacks(execute=True):
+            self.client.delete(f'/api/attachments/{Attachment.objects.get().pk}/')
+        m = Memo(body='성적서 요청', content_type=ct, object_id=p.pk, author=root)
+        m._history_date = timezone.now() + datetime.timedelta(seconds=1)  # Windows 시계 해상도로 같은 시각이 나오지 않게
+        m.save()
+        Memo.objects.create(body='다른 기록', content_type=ct, object_id=p.pk + 1000, author=root)
+        res = self.client.get(f'/api/records/core.partner/{p.pk}/history/').json()['results']
+        types = [r['type'] for r in res]
+        self.assertEqual(types, ['메모 추가: 심사원: 성적서 요청',
+                                 '첨부 삭제: 인증서.pdf', '첨부 추가: 인증서.pdf', '생성'])
+        lead = staff('lead', '품질팀장')  # 첨부·메모 보기 권한이 없으면 그 줄은 빠진다
+        lead.user_permissions.remove(*lead.user_permissions.all())
+        from django.contrib.auth.models import Permission
+        Group.objects.get(name='품질팀장').permissions.remove(*Permission.objects.filter(codename__in=['view_attachment', 'view_memo']))
+        self.client.force_login(lead)
+        self.assertEqual([r['type'] for r in self.client.get(f'/api/records/core.partner/{p.pk}/history/').json()['results']], ['생성'])
+
     def test_backup_copies_attachments(self):
         self.attach()
         live, dest = Path(self._tmp), Path(tempfile.mkdtemp())

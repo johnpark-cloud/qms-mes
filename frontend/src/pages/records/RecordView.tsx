@@ -27,7 +27,7 @@ interface Detail {
   can_dispose: boolean; dispose: Edit[] | null; can_close: boolean; links: { label: string; url: string }[]
   requests: { edit: boolean; delete: boolean }
 }
-interface Hist { history_id: number; date: string; user: string; type: string; changes: { field: string; old: string; new: string }[] }
+interface Hist { history_id: number; kind?: string; date: string; user: string; type: string; changes: { field: string; old: string; new: string }[] }
 
 /** /app/ 안 주소는 라우터로, 그 밖(관리 화면·파일)은 그냥 링크 */
 export function Go({ url, children }: { url: string | null; children: ReactNode }) {
@@ -44,7 +44,7 @@ function History({ label, id }: { label: string; id: number }) {
   return (
     <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
       {rows.map((h) => (
-        <li key={h.history_id} style={{ marginBottom: 12 }}>
+        <li key={`${h.kind ?? ''}${h.history_id}`} style={{ marginBottom: 12 }}>
           <div>{h.date.slice(0, 16).replace('T', ' ')} · {h.user} · {h.type}</div>
           {h.changes.map((c) => (
             <Typography.Text key={c.field} type="secondary" style={{ display: 'block' }}>{c.field}: {c.old || '—'} → {c.new || '—'}</Typography.Text>
