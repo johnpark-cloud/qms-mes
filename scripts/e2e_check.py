@@ -193,8 +193,8 @@ try:
     check('출하성적서에 용량 결과', '용량' in get('/print/core/shipment/3/'))
 
     # 대시보드 · 디자인
-    check('품질 KPI 화면 (불량유형 파레토)', '이물' in get('/kpi/'))
-    check('협력사 성적표 화면', '협력사 성적표' in get('/suppliers/'))
+    check('품질 KPI 화면 (부적합 유형 파레토)', '이물' in get('/kpi/'))
+    check('공급자 성적표 화면', '공급자 성적표' in get('/suppliers/'))
     check('Fiori 디자인 CSS 적용·제공', 'qms/fiori.css' in get('/todo/') and '--f-brand' in get('/static/qms/fiori.css'))
 
     # 공정 라우팅 · 작업 실적: 공정 건너뛰기 차단

@@ -114,7 +114,7 @@ class BaseAdmin(SimpleHistoryAdmin):
         return super().render_change_form(request, context, add, change, form_url, obj)
 
     def related(self, obj):
-        """상세 화면 '관련 기록': (LOT, [(제목, 쿼리셋, 목록 필터)]). LOT이 있으면 LOT 이력 조회 링크를 함께 보인다."""
+        """상세 화면 '관련 기록': (LOT, [(제목, 쿼리셋, 목록 필터)]). LOT이 있으면 추적성 조회(LOT 이력) 링크를 함께 보인다."""
         return None, []
 
     def save_model(self, request, obj, form, change):
@@ -574,11 +574,11 @@ class NonconformanceAdmin(ReportLinksMixin, BaseAdmin):
             kwargs['initial'] = request.user.pk
         return super().formfield_for_foreignkey(db_field, request, **kwargs)
 
-    @admin.display(description='품번 · 협력사')
+    @admin.display(description='품번 · 공급자')
     def lot_info(self, obj):
         if not obj.lot_id:
             return 'LOT을 고르고 저장하면 표시됩니다.'
-        return format_html('{}<span class="nc-incoming"> · 협력사: {}</span>', obj.lot.item, obj.lot.supplier or '-')
+        return format_html('{}<span class="nc-incoming"> · 공급자: {}</span>', obj.lot.item, obj.lot.supplier or '-')
 
     @admin.display(description='CAPA')
     def capa(self, obj):

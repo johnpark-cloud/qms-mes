@@ -53,10 +53,10 @@ def search(user, q):
             for o in found[:LIMIT]:
                 add(o.number, kind, _admin(app, model, o))
         if lots is not None:
-            # 협력사는 LOT의 자유 입력 칸이라 별도 모델이 없다
+            # 공급자는 LOT의 자유 입력 칸이라 별도 모델이 없다
             sup = lots.filter(supplier__icontains=q).values_list('supplier', flat=True).distinct()[:LIMIT]
             for s in sup:
-                add(s, '협력사', reverse('suppliers'))
+                add(s, '공급자', reverse('suppliers'))
     if hidden:
         out.insert(0, {'label': f'비활성 모듈 기록 {hidden}건', 'sub': '모듈이 꺼져 있어 열 수 없습니다', 'url': '', 'exact': False})
     return out[:LIMIT]

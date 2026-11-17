@@ -1,5 +1,5 @@
 {% extends "admin/base_site.html" %}
-{% block page_actions %}<div class="page-head__actions"><a class="button ghost" href="{% url 'todo' %}">내 할 일</a><a class="button ghost" href="{% url 'trace' %}">LOT 이력 조회</a></div>{% endblock %}
+{% block page_actions %}<div class="page-head__actions"><a class="button ghost" href="{% url 'todo' %}">내 할 일</a><a class="button ghost" href="{% url 'trace' %}">추적성 조회(LOT 이력)</a></div>{% endblock %}
 {% block content %}
 <p class="help">DB에 등록된 작업지시·실적·검사·부적합 기록만 집계합니다. 설비 실시간 값은 없습니다. 카드를 누르면 해당 목록이 열립니다.</p>
 {% for name, cards in sections %}

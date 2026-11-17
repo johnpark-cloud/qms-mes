@@ -11,7 +11,7 @@
 | 앱 하나만 | `.\.venv\Scripts\python manage.py test qms` | 작업 중 빠른 확인용. 완료 판단에는 전체 실행이 필요하다 |
 | 테스트 하나만 | `.\.venv\Scripts\python manage.py test core.tests.ShellTest.test_logged_in_pages_not_stored` | |
 | 화면 흐름(e2e) | `.\.venv\Scripts\python scripts\e2e_check.py` | 임시 폴더에 새 DB를 만들고 포트 8765에 서버를 띄워 실제 HTTP로 인터록·화면을 점검한다. 2026-11-12 기준 76개 |
-| 브라우저 흐름(React `/app/`) | `python scripts\e2e_browser.py` | **시스템 Python**(`.venv` 아님)으로 실행한다. Playwright가 `.venv`에 없고 의존성을 추가하지 않기 때문이다(`python -m playwright`). 번호 자동 부여(품번 등록)도 점검한다. 임시 폴더에 새 DB를 만들고 포트 8766에 서버를 띄워 실제 브라우저로 로그인, 종합현황 카드 수(API와 같은지), 내 할 일 "화면 편집" → 위젯 추가 후 새로고침, 390px 폭 가로 스크롤, 로고(없으면 글자·넣으면 왼쪽 위 그림), 다크 모드 배경색, 명령창(결과 없음 Enter·localStorage 차단), 검사기준서(새 기준서 → Rev.1, 목록 줄 수·엑셀 받기, 10줄 붙여넣기 저장, 잠긴 기준서 붙여넣기 거부, 새 개정, 인쇄 화면 PDF A4 1쪽·초안 표시), 감사 기록 화면, 검사 입력(검사 대기 목록, 품명 일부로 LOT 찾기 목록, 스캔 → 측정 화면, 입력 즉시 합격/규격 이탈, 판정 두 번 눌러도 1건, 불합격 → 부적합 번호, 없는 LOT → 입고 창), 검사 목록 탭 → 기록 페이지, 검사 기록 판정 띠·측정값 표 9열·「⋯」 메뉴의 삭제 한 곳, 메모 칸 크기 고정·사진 첨부 저장, 검사 기록 연결 탭(LOT)·첨부 탭 올리기, 검사 성적서 PDF A4 1쪽, 메뉴 → 새 화면, 검사 목록 요약·메뉴 강조, 즉시 확인 전 판정 → 불량유형 먼저, 기준정보(품번 BOM 붙여넣기 저장, 공정 표 줄 추가, 관리계획서 새 개정·검사기준 초안, 관리계획서 PDF A4 가로 1쪽, 엑셀 일괄 등록 미리보기→확정, 메뉴 → 기준정보 새 화면), 기록 화면(계측기 목록 → 상세·변경 이력 탭, 수정 → 저장 → 변경 이력, 부적합 MRB 처분 → 종결, 부서 새로 만들기 → 저장 → 기록 화면), 세션 끊김 시 로그인 이동을 점검한다. 2026-11-16 기준 48개(48/48 통과). Playwright는 `requirements.txt`에 넣지 않는다 |
+| 브라우저 흐름(React `/app/`) | `python scripts\e2e_browser.py` | **시스템 Python**(`.venv` 아님)으로 실행한다. Playwright가 `.venv`에 없고 의존성을 추가하지 않기 때문이다(`python -m playwright`). 번호 자동 부여(품번 등록)도 점검한다. 임시 폴더에 새 DB를 만들고 포트 8766에 서버를 띄워 실제 브라우저로 로그인, 종합현황 카드 수(API와 같은지), 내 할 일 "화면 편집" → 위젯 추가 후 새로고침, 390px 폭 가로 스크롤, 로고(없으면 글자·넣으면 왼쪽 위 그림), 다크 모드 배경색, 명령창(결과 없음 Enter·localStorage 차단), 검사기준서(새 기준서 → Rev.1, 목록 줄 수·엑셀 받기, 10줄 붙여넣기 저장, 잠긴 기준서 붙여넣기 거부, 새 개정, 인쇄 화면 PDF A4 1쪽·초안 표시), 변경 이력 조회 화면, 검사 입력(검사 대기 목록, 품명 일부로 LOT 찾기 목록, 스캔 → 측정 화면, 입력 즉시 합격/규격 이탈, 판정 두 번 눌러도 1건, 불합격 → 부적합 번호, 없는 LOT → 입고 창), 검사 목록 탭 → 기록 페이지, 검사 기록 판정 띠·측정값 표 9열·「⋯」 메뉴의 삭제 한 곳, 메모 칸 크기 고정·사진 첨부 저장, 검사 기록 연결 탭(LOT)·첨부 탭 올리기, 검사 성적서 PDF A4 1쪽, 메뉴 → 새 화면, 검사 목록 요약·메뉴 강조, 즉시 확인 전 판정 → 부적합 유형 먼저, 기준정보(품번 BOM 붙여넣기 저장, 공정 표 줄 추가, 관리계획서 새 개정·검사기준 초안, 관리계획서 PDF A4 가로 1쪽, 엑셀 일괄 등록 미리보기→확정, 메뉴 → 기준정보 새 화면), 기록 화면(계측기 목록 → 상세·변경 이력 탭, 수정 → 저장 → 변경 이력, 부적합 MRB 처분 → 종결, 부서 새로 만들기 → 저장 → 기록 화면), 세션 끊김 시 로그인 이동을 점검한다. 2026-11-16 기준 48개(48/48 통과). Playwright는 `requirements.txt`에 넣지 않는다 |
 | 설정 점검 | `.\.venv\Scripts\python manage.py check` | |
 | 마이그레이션 누락 확인 | `.\.venv\Scripts\python manage.py makemigrations --check --dry-run` | 모델을 바꿨는데 마이그레이션이 없으면 실패한다 |
 
@@ -25,7 +25,7 @@ e2e를 Git Bash에서 실행할 때 한글이 깨지면 `PYTHONIOENCODING=utf-8`
 | `qms/tests.py` | `QmsTest`(검사 판정·계측기·자격·SPC·4M·클레임·SCAR·CAPA·심사·PPAP·엑셀 가져오기·양식·백업·복원·알림 등), `TimelineTest`, `MemoTest`, `AuditPackTest`, `DashboardTest` |
 | `personal/tests.py` | `LeaveTests`(연차 계산), `PayTests`(급여), `OwnerOnlyTests`(본인만 열람) |
 | `core/tests_rules.py`, `qms/tests_rules.py` | 공통 업무 규칙(`rules.py`): 잠금·처분·승인, 검사 판정·입고 |
-| `core/api/tests.py`, `qms/api/tests.py` | API: 로그인·권한·오류 형식·SPA 서빙(`AuthApiTest`·`SpaTest`·`CommonApiTest`: 검색·품번 조회·감사 기록·개정 이력 승인), 공장 종합현황·내 할 일·배치 저장, 검사기준서 API(`SpecApiTest`) |
+| `core/api/tests.py`, `qms/api/tests.py` | API: 로그인·권한·오류 형식·SPA 서빙(`AuthApiTest`·`SpaTest`·`CommonApiTest`: 검색·품번 조회·변경 이력 조회·개정 이력 승인), 공장 종합현황·내 할 일·배치 저장, 검사기준서 API(`SpecApiTest`) |
 | `core/tests_rules.py` `RevisionLogTest` | 개정 이력: 신청·승인자 비밀번호 확정·확정 후 수정·삭제 불가 |
 | `qms/tests_rules.py` `SpecRulesTest` | `save_spec`·`spec_version`·이전 개정 비교 |
 | `qms/tests.py` `SpecDocumentTest` | 문서 구조·엑셀 내보내기(A4 한 시트·초안 표시·수식 문자 방어)·양식 여러 줄 매핑 |
@@ -34,7 +34,7 @@ e2e를 Git Bash에서 실행할 때 한글이 깨지면 `PYTHONIOENCODING=utf-8`
 | `core/api/tests_relations.py` | `RelationsApiTest`: 연결 패널 API 묶음·권한 없는 묶음 숨김·기록 권한·개인 앱 제외·관리 화면 없는 기록(url 없음)·쪽 나누기·쿼리 수 |
 | `qms/tests.py` `DocumentNumberingTest` | 관리 화면 문서 추가의 자동 번호·개정 자동 채움 |
 | `core/tests_modules.py` | 모듈 켜기/끄기: `CoverageTest`(모든 URL·업무 모델이 대응표에 있음), `SwitchRuleTest`(행 없으면 켜짐, 기본 플랫폼 불가, 의존 모듈, 전부 꺼도 보류 인터록), `GateTest`(일반 404·관리자 조회만, API `module_inactive`, 관리 화면·첨부·메모·자동완성, 시스템 관리자만 전환, 메뉴·`/api/auth/me/`), `OffSafetyTest`(열린 기록이면 끄기 거부, 꺼진 뒤 시스템 관리자 종결·검사 판정만 허용, 인터록 메시지 `[부적합]`·`[4M 변경]`) |
-| `scripts/e2e_browser.py` | React 화면을 브라우저로: 번호 자동 부여(품번 등록), 로그인, 카드 수, 화면 편집·위젯 추가 유지, 휴대폰 폭, 로고, 다크 모드, 명령창, 검사기준서(붙여넣기·새 개정·인쇄), 감사 기록, 검사 입력(LOT 찾기·스캔·측정·판정·입고), 검사 목록·성적서 인쇄, 메모 사진 첨부, 메뉴, 기준정보(품번 BOM·공정 표·관리계획서·엑셀 일괄 등록), 세션 끊김 |
+| `scripts/e2e_browser.py` | React 화면을 브라우저로: 번호 자동 부여(품번 등록), 로그인, 카드 수, 화면 편집·위젯 추가 유지, 휴대폰 폭, 로고, 다크 모드, 명령창, 검사기준서(붙여넣기·새 개정·인쇄), 변경 이력 조회, 검사 입력(LOT 찾기·스캔·측정·판정·입고), 검사 목록·성적서 인쇄, 메모 사진 첨부, 메뉴, 기준정보(품번 BOM·공정 표·관리계획서·엑셀 일괄 등록), 세션 끊김 |
 | `scripts/e2e_check.py` | 로그인부터 화면별 HTTP 흐름, 정적 파일·디자인 토큰 제공 |
 
 ## 변경 종류별 검증

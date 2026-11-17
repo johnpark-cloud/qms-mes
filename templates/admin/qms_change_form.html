@@ -12,7 +12,7 @@
 {% if related or related_lot %}
 <section class="card related" aria-labelledby="related-title">
   <h2 id="related-title">관련 기록</h2>
-  {% if related_lot %}<p><a class="button ghost" href="{% url 'trace' %}?lot={{ related_lot.number|urlencode }}">LOT 이력 조회 · {{ related_lot.number }}</a></p>{% endif %}
+  {% if related_lot %}<p><a class="button ghost" href="{% url 'trace' %}?lot={{ related_lot.number|urlencode }}">추적성 조회(LOT 이력) · {{ related_lot.number }}</a></p>{% endif %}
   {% if related %}<dl class="related__list">
     {% for g in related %}
     <dt>{{ g.title }} <span class="count">{{ g.count }}</span></dt>

@@ -131,7 +131,7 @@ TODO_SECTIONS = [  # (todo_lists.html 구역 id, 이름, due_items 키): 보통 
     ('nc-incomplete', '보완 필요', 'nc_incomplete'), ('nc-mail', '메일 대기', 'nc_mail_pending'),
     ('nc-notify', '고객 통보', 'nc_notify_pending'), ('edit-requests', '삭제·수정 요청', 'edit_requests'),
     ('my-rejected', '거절된 내 요청', 'my_rejected'), ('memos-unsorted', '미분류 메모', 'memos_unsorted'),
-    ('fa', '초품 미확인', 'first_articles'), ('gauges', '계측기 교정', 'gauges'), ('partner-certs', '협력사 인증 만료', 'partner_certs'),
+    ('fa', '초품 미확인', 'first_articles'), ('gauges', '계측기 교정', 'gauges'), ('partner-certs', '공급자 인증 만료', 'partner_certs'),
     ('ppaps', 'PPAP 제출', 'ppaps'),
 ]
 
@@ -189,7 +189,7 @@ WIDGETS = {w.key: w for w in [
     Widget('todo_lists', '할 일 목록', 'qms/widgets/todo_lists.html', todo_context,
            lambda u: u.has_perm('core.view_nonconformance')),
     Widget('spc_alarms', 'SPC 경보', 'qms/widgets/spc_alarms.html', lambda request, d, size: {}, everyone),
-    Widget('audits', '내부심사', 'qms/widgets/audits.html', lambda request, d, size: {}, everyone),
+    Widget('audits', '심사', 'qms/widgets/audits.html', lambda request, d, size: {}, everyone),
     Widget('kpi_ppm', '고객 PPM', TILE, kpi_tile('ppm', '{:,.0f}', '이번 달 · 클레임 수량 기준'), kpi_allowed('quality')),
     Widget('kpi_fpy', '초도 합격률', TILE, kpi_tile('fpy', '{:.1f}%', '이번 달 · 첫 판정 합격'), kpi_allowed('quality')),
     Widget('kpi_yield', '공정 수율', 'qms/widgets/kpi_yield.html', yield_context, kpi_allowed('yield')),

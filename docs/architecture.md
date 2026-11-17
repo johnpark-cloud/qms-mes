@@ -41,7 +41,7 @@ docs/        구조·업무 규칙·테스트 문서, superpowers/ 설계·계�
 | `middleware.py` | 로그인 사용자 HTML 화면에 `no-store` 헤더(뒤로가기 때 최신 내용) |
 | `importer.py` | 엑셀/CSV 일괄 등록 |
 | `export.py` | 문서 구조(dict)·표를 A4 `.xlsx`로 내보낸다(`document_xlsx`, `table_xlsx`, `xlsx_response`). React 인쇄 화면도 같은 문서 구조를 쓴다 |
-| `audit.py` | simple-history 이력을 감사 기록 화면용으로 읽는다(`audited_models`는 `PRIVATE_APPS` 제외, `row_payload`는 `password` 변경 제외) |
+| `audit.py` | simple-history 이력을 변경 이력 조회 화면용으로 읽는다(`audited_models`는 `PRIVATE_APPS` 제외, `row_payload`는 `password` 변경 제외) |
 | `rules.py` | admin·기존 뷰·API가 함께 쓰는 업무 규칙(잠금·삭제·승인 등). 규칙 본문은 한 곳에만 둔다 |
 | `relations.py` | 관계 레지스트리: 모델 `_meta`와 일반 연결(첨부·메모·증적·PPAP 요소·CAPA 출처)에서 어느 기록이든 그 기록을 가리키는 묶음(incoming)과 그 기록이 가리키는 묶음(outgoing)을 만든다. 새 표·외래키는 따로 등록하지 않는다. API `/api/relations/<app.model>/<id>/`(`core/api/views.py` `RelationsView`), 첨부 API `/api/attachments/`(`core/api/attachments.py`), 첨부 받기 `/attachments/<id>/`(`core/views.py` `attachment_download`) |
 | `recordspec.py` | 기록 설명서: 모델별 칸·목록 열·검색·탭·하위 표·오른쪽 열(`SPECS`). 등록하면 records API(`core/api/records.py`, `/api/records/<app.model>/`·`<id>/`·`<id>/history/`)와 새 기록 화면(`/app/r/:app/:model/:id`, `frontend/src/pages/records/`)이 따라오고, `core/relations.py` `record_url`이 링크 주소의 유일한 기준이다 |
@@ -57,7 +57,7 @@ docs/        구조·업무 규칙·테스트 문서, superpowers/ 설계·계�
 | --- | --- |
 | `models.py` | 검사기준 `InspectionSpec`·항목 `Characteristic`, 검사 `Inspection`·측정값 `Measurement`, 계측기 `Gauge`, 검사원 자격 `Qualification`, 관리계획서 `ControlPlan`·`ControlPlanLine`, 4M 변경 `ChangeRequest`, 고객 규칙 `CustomerRule`·클레임(8D) `CustomerClaim`, `Scar`, 문서 `Document`·`DocumentRevision`, 심사 증적 `AuditChecklist`·`AuditItem`·`Evidence`, `Capa`, 내부심사 `InternalAudit`·`AuditFinding`, PPAP `PpapSubmission`·`PpapElement`, 엑셀 양식 `ExcelTemplate`, 현장 메모 `Memo`·`MemoPhoto`, 대시보드 배치 `DashboardLayout` |
 | `apps.py` | `ensure_roles`: migrate 후 역할 그룹(품질엔지니어·품질팀장·검사원)과 권한 재설정 |
-| `views.py` | 내 할 일·대시보드, 공장 종합현황, KPI, 협력사 성적표, 검사 입력, SPC, 현장 메모, 심사 자료 출력, 엑셀 양식 출력 |
+| `views.py` | 내 할 일·대시보드, 공장 종합현황, KPI, 공급자 성적표, 검사 입력, SPC, 현장 메모, 심사 자료 출력, 엑셀 양식 출력 |
 | `rules.py` | 검사 판정·입고 업무 규칙(기존 `views.py`에서 옮김). 화면과 API가 함께 쓴다 |
 | `api/` | 공장 종합현황 `GET /api/qms/overview/`, 내 할 일 `GET /api/qms/todo/`, 위젯 배치 저장 `POST /api/qms/dashboard/` |
 | `api/memos.py` | 현장 메모 `/api/qms/memos/`(`?ct=앱.모델&id=` 기록에 붙은 메모, 없으면 미분류 메모·추가), `<id>/`(작성자가 고치기), `<id>/link/`(미분류 메모를 종류+번호로 기록에 붙이기). 연결 대상과 권한은 `qms/memo.py`(`TARGETS`·`ATTACHABLE`)를 쓴다 |
@@ -72,7 +72,7 @@ docs/        구조·업무 규칙·테스트 문서, superpowers/ 설계·계�
 
 ### frontend (`frontend/`)
 
-React 19·TypeScript·Vite·Ant Design 새 화면. 개발 PC에서 `npm run build`로 `frontend/dist/`를 만들고 그 결과를 저장소에 함께 넣는다. Django는 `/app/` 아래 모든 주소에 `dist/index.html`을 내려 주고(`core/views.py` `spa`), JS·CSS는 whitenoise가 `/static/app/`에서 제공하므로 운영 PC에는 Node가 필요 없다. 지금은 `/app/overview`·`/app/todo`·`/app/specs`(목록·`:id` 기록 페이지·`:id/print` 인쇄)·`/app/inspect`(스캔·`:lot/:spec` 측정)·`/app/inspections`(목록·`:id` 기록 페이지·`:id/print` 성적서 인쇄)·`/app/items`(목록·`:id` 속성·BOM·라우팅)·`/app/processes`·`/app/customer-rules`(표 편집)·`/app/plans`(목록·`:id` 기록 페이지·`:id/print` 가로 인쇄)·`/app/import`(엑셀 일괄 등록 미리보기·확정)·`/app/trace`(LOT 계보 그림·이력)·`/app/memos`(미분류 메모)·`/app/audit`가 있고 데이터는 API로만 받는다. `core/api/views.py`에는 LOT 찾기(`/api/core/lots/?q=`, 번호·품번·품명·협력사 일부)·LOT 계보와 이력(`/api/core/trace/?lot=`)·통합 검색(`/api/search/`)·품번 조회(`/api/items/`)·감사 기록(`/api/audit-log/`, 승인자만)·개정 이력 확정(`/api/revision-log/<id>/approve/`)이 있다.
+React 19·TypeScript·Vite·Ant Design 새 화면. 개발 PC에서 `npm run build`로 `frontend/dist/`를 만들고 그 결과를 저장소에 함께 넣는다. Django는 `/app/` 아래 모든 주소에 `dist/index.html`을 내려 주고(`core/views.py` `spa`), JS·CSS는 whitenoise가 `/static/app/`에서 제공하므로 운영 PC에는 Node가 필요 없다. 지금은 `/app/overview`·`/app/todo`·`/app/specs`(목록·`:id` 기록 페이지·`:id/print` 인쇄)·`/app/inspect`(스캔·`:lot/:spec` 측정)·`/app/inspections`(목록·`:id` 기록 페이지·`:id/print` 성적서 인쇄)·`/app/items`(목록·`:id` 속성·BOM·라우팅)·`/app/processes`·`/app/customer-rules`(표 편집)·`/app/plans`(목록·`:id` 기록 페이지·`:id/print` 가로 인쇄)·`/app/import`(엑셀 일괄 등록 미리보기·확정)·`/app/trace`(LOT 계보 그림·이력)·`/app/memos`(미분류 메모)·`/app/audit`가 있고 데이터는 API로만 받는다. `core/api/views.py`에는 LOT 찾기(`/api/core/lots/?q=`, 번호·품번·품명·공급자 일부)·LOT 계보와 이력(`/api/core/trace/?lot=`)·통합 검색(`/api/search/`)·품번 조회(`/api/items/`)·변경 이력 조회(`/api/audit-log/`, 승인자만)·개정 이력 확정(`/api/revision-log/<id>/approve/`)이 있다.
 
 | 위치 | 역할 |
 | --- | --- |

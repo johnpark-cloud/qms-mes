@@ -79,9 +79,9 @@ export default function Trace() {
 
   return (
     <div>
-      <h1 className="page-title">LOT 이력 조회</h1>
+      <h1 className="page-title">추적성 조회(LOT 이력)</h1>
       <AutoComplete style={{ width: '100%', maxWidth: 480 }} options={options} value={text} onChange={setText} onSelect={open} defaultActiveFirstOption={false}>
-        <Input.Search size="large" placeholder="LOT 번호·품번·품명·협력사로 찾기" enterButton="조회" onSearch={open} />
+        <Input.Search size="large" placeholder="LOT 번호·품번·품명·공급자로 찾기" enterButton="조회" onSearch={open} />
       </AutoComplete>
       {q.isError && <Alert style={{ marginTop: 12 }} type="error" role="alert" message={q.error instanceof ApiError ? q.error.detail : 'LOT 이력을 불러오지 못했습니다.'} />}
       {number && q.isPending && <Spin style={{ display: 'block', marginTop: 24 }} />}

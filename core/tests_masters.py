@@ -61,7 +61,7 @@ class MasterTest(TestCase):
 class PartnerTest(TestCase):
     def test_partner_needs_a_role(self):
         p = Partner(code='P1', name='대한정밀')
-        with self.assertRaisesMessage(ValidationError, '협력사·고객사·외주처·교정기관 중 하나 이상을 고르세요.'):
+        with self.assertRaisesMessage(ValidationError, '공급자·고객사·외주처·교정기관 중 하나 이상을 고르세요.'):
             p.full_clean()
         p.is_supplier = True
         p.full_clean()
@@ -83,7 +83,7 @@ class PartnerTest(TestCase):
         PartnerCertificate.objects.create(partner=off, standard='ISO 9001', valid_until=today)
         d = due_items()
         self.assertEqual(d['partner_certs'], [near])
-        self.assertIn('협력사 인증 만료', [t for t, _ in digest(d)])
+        self.assertIn('공급자 인증 만료', [t for t, _ in digest(d)])
 
 
 class FieldDefTest(TestCase):

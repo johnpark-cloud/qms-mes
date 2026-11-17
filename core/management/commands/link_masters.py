@@ -22,7 +22,7 @@ LINKS = [
     ('qms', 'InternalAudit', 'auditee', 'auditee_dept', 'department'),
     ('qms', 'InternalAudit', 'auditor', 'auditor_user', 'user'),
 ]
-ROLE = {'supplier': ('is_supplier', '협력사'), 'customer': ('is_customer', '고객사')}
+ROLE = {'supplier': ('is_supplier', '공급자'), 'customer': ('is_customer', '고객사')}
 
 
 def _key(value):

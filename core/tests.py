@@ -116,8 +116,8 @@ class ShellTest(TestCase):
         lead.groups.add(Group.objects.get(name='품질팀장'))
         eng.groups.add(Group.objects.get(name='품질엔지니어'))
         labels = lambda u: [l for _, items in visible_nav(u) for l, _ in items]
-        self.assertIn('감사 기록', labels(lead))
-        self.assertNotIn('감사 기록', labels(eng))
+        self.assertIn('변경 이력 조회', labels(lead))
+        self.assertNotIn('변경 이력 조회', labels(eng))
 
     def test_logo_served_from_data_dir(self):
         import tempfile
@@ -151,8 +151,8 @@ class ShellTest(TestCase):
         self.assertIn('검사 입력', html)
         self.assertNotIn('전체 메뉴', html)  # 관리 화면 첫 화면은 시스템 관리자 메뉴(REC-11)
         self.assertIn('aria-current="page"', html)  # /todo/ = 내 할 일
-        self.assertNotIn('품질 KPI', html)  # 검사원은 KPI·협력사 화면 권한이 없다 (누르면 403)
-        self.assertNotIn('협력사', html)
+        self.assertNotIn('품질 KPI', html)  # 검사원은 KPI·공급자 화면 권한이 없다 (누르면 403)
+        self.assertNotIn('공급자', html)
         self.assertNotIn('엑셀 일괄 등록', self.client.get('/todo/').content.decode())
         plain = User.objects.create_user('plain', is_staff=True)
         self.client.force_login(plain)
@@ -181,7 +181,7 @@ class ShellTest(TestCase):
     def test_admin_index_grouped_like_sidebar(self):
         self.client.force_login(User.objects.create_superuser('root'))
         html = self.client.get('/admin/').content.decode()
-        groups = ['통합 업무 홈', '생산관리 (MES)', '품질관리 (QMS)', '품질보증 및 개선', '고객 및 협력사', '분석 및 보고서',
+        groups = ['통합 업무 홈', '생산관리 (MES)', '품질관리 (QMS)', '품질보증 및 개선', '고객 및 공급자', '분석 및 보고서',
                   '기준정보 및 시스템 관리']
         found = [g for g in groups if f'class="section">{g}<' in html]
         self.assertEqual(found, groups)

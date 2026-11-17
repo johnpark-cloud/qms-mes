@@ -399,7 +399,7 @@ class InspectApiTest(TestCase):
         self.assertEqual(r.status_code, 200)
         self.assertIn('spreadsheetml', r['Content-Type'])
         ws = load_workbook(BytesIO(r.content)).active
-        self.assertEqual([c.value for c in ws[1]][:7], ['LOT', '품번', '품명', '협력사', '수량', '생성일', '보류'])
+        self.assertEqual([c.value for c in ws[1]][:7], ['LOT', '품번', '품명', '공급자', '수량', '생성일', '보류'])
 
     def test_lot_lookup(self):
         d = self.c().get('/api/qms/inspect/lot/?number=Q-2').json()
@@ -460,7 +460,7 @@ class InspectApiTest(TestCase):
         InspectionSpec.objects.filter(pk=rev2.pk).update(approved_by=self.lead, approved_at=timezone.now())
         r = self.c().get(f'/api/qms/inspect/form/{self.q1.pk}/{self.spec.pk}/')
         self.assertEqual(r.status_code, 400)
-        self.assertIn('유효본이 아닙니다', r.json()['detail'])
+        self.assertIn('최신 승인본이 아닙니다', r.json()['detail'])
         self.assertEqual(self.c().get(f'/api/qms/inspect/form/{self.q1.pk}/{rev2.pk}/').status_code, 200)
         other = Lot.objects.create(number='Q-X', item=Item.objects.create(code='X-1', name='다른', item_type=Item.RAW))
         r = self.c().get(f'/api/qms/inspect/form/{other.pk}/{rev2.pk}/')
@@ -506,7 +506,7 @@ class InspectApiTest(TestCase):
         before = self.counts()
         r = self.submit()
         self.assertEqual(r.status_code, 400)
-        self.assertIn('유효본이 아닙니다', r.json()['detail'])
+        self.assertIn('최신 승인본이 아닙니다', r.json()['detail'])
         self.assertEqual(self.counts(), before)
         self.gauge.last_calibrated = timezone.localdate() - datetime.timedelta(days=self.gauge.interval_days + 1)
         self.gauge.save()
@@ -619,7 +619,7 @@ class InspectionApiTest(TestCase):
         r = self.c().get('/api/qms/inspections/?tab=INCOMING&export=xlsx')
         self.assertEqual(r.status_code, 200)
         ws = load_workbook(BytesIO(r.content)).active
-        self.assertEqual([c.value for c in ws[1]], ['검사 일시', 'LOT', '품번', '품명', '협력사', '검사기준', '검사자', '판정', '부적합'])
+        self.assertEqual([c.value for c in ws[1]], ['검사 일시', 'LOT', '품번', '품명', '공급자', '검사기준', '검사자', '판정', '부적합'])
 
     def test_list_sort_and_filter(self):
         self.make(self.lots[0], 'INCOMING', '10.0')

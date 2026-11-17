@@ -305,7 +305,7 @@ class InternalAuditAdmin(BaseAdmin):
         url = reverse('admin:qms_capa_add') + '?' + urlencode({'source': 'AUDIT', 'title': title[:200]})
         return format_html('<a class="button" href="{}">CAPA 만들기</a>', url)
 
-    @admin.display(description='CAPA 미연결 지적')
+    @admin.display(description='CAPA 미연결 발견사항')
     def open_findings(self, obj):
         n = obj.findings.filter(grade__in=AuditFinding.NEEDS_CAPA, capa__isnull=True).count()
         return format_html('<span class="status status--negative">{}</span>', n) if n else 0

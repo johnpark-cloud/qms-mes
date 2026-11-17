@@ -7,7 +7,7 @@
     <option value="6" {% if months == 6 %}selected{% endif %}>최근 6개월</option>
     <option value="12" {% if months == 12 %}selected{% endif %}>최근 12개월</option>
   </select>
-  <a class="button ghost" href="{% url 'suppliers' %}?months={{ months }}">협력사 성적표</a>
+  <a class="button ghost" href="{% url 'suppliers' %}?months={{ months }}">공급자 성적표</a>
 </form>
 
 {% if not show.quality and not show.yield %}
@@ -72,9 +72,9 @@
 
   {% if show.quality %}
   <section class="card">
-    <h2>불량유형 파레토 <span class="count">기간 전체</span></h2>
+    <h2>부적합 유형 파레토 <span class="count">기간 전체</span></h2>
     <table>
-      <thead><tr><th>불량유형</th><th class="num">건수</th><th class="num">수량</th><th class="num">비율(%)</th><th class="num">누적(%)</th><th></th></tr></thead>
+      <thead><tr><th>부적합 유형</th><th class="num">건수</th><th class="num">수량</th><th class="num">비율(%)</th><th class="num">누적(%)</th><th></th></tr></thead>
       <tbody>
       {% for p in pareto %}
         <tr>
@@ -85,7 +85,7 @@
           <td class="num">{{ p.cum|floatformat:1 }}</td>
           <td class="w"><div class="bar" style="width:{{ p.share|floatformat:0 }}%"></div></td>
         </tr>
-      {% empty %}<tr><td colspan="6" class="empty">{% include "admin/empty_state.html" with message="불량유형이 입력된 부적합이 없습니다." %}</td></tr>{% endfor %}
+      {% empty %}<tr><td colspan="6" class="empty">{% include "admin/empty_state.html" with message="부적합 유형이 입력된 부적합이 없습니다." %}</td></tr>{% endfor %}
       </tbody>
     </table>
   </section>

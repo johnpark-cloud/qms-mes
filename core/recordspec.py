@@ -181,7 +181,7 @@ SPECS = {
         search=('name', 'auditor', 'auditee'),
         tabs=(('open', '진행', lambda qs: qs.filter(closed_at__isnull=True)), ALL,
               ('closed', '종결', lambda qs: qs.filter(closed_at__isnull=False))),
-        children=(Child('findings', '지적', ('clause', 'grade', 'description', 'capa'), ('pk',)),),
+        children=(Child('findings', '발견사항', ('clause', 'grade', 'description', 'capa'), ('pk',)),),
         order=('-planned_date', '-pk'),
         edit=('name', 'kind', 'scope', 'planned_date', 'auditor', 'auditee', 'performed_at', 'checklist', 'auditor_user', 'auditee_dept'),
         close=True),
@@ -329,7 +329,7 @@ def label_of(model, name):
     try:
         return str(model._meta.get_field(name).verbose_name)
     except Exception:  # 속성(next_due 등)
-        return {'next_due': '다음 교정 기한', 'current_revision': '유효본'}.get(name, name)
+        return {'next_due': '다음 교정 기한', 'current_revision': '최신 승인본'}.get(name, name)
 
 
 def value_of(obj, name):

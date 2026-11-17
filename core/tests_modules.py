@@ -242,7 +242,7 @@ def force_off(*keys):
 
 
 class ConsumerTest(TestCase):
-    """A4: 일상 화면에서 빠지고(MOD-10), 추적 화면은 건수로 남고(MOD-11), 일괄 작업은 거부(MOD-12), 클레임 설정 메뉴(MOD-13)."""
+    """A4: 일상 화면에서 빠지고(MOD-10), 추적 화면은 건수로 남고(MOD-11), 일괄 작업은 거부(MOD-12), 고객사별 8D 기한 메뉴(MOD-13)."""
 
     def setUp(self):
         self.admin = User.objects.create_superuser('root', password='pw')
@@ -321,7 +321,7 @@ class ConsumerTest(TestCase):
     def test_claim_settings_menu(self):
         from .nav import visible_nav
         groups = dict(visible_nav(self.user))
-        self.assertIn(('클레임 설정', '/admin/qms/customerrule/'), groups['고객 및 협력사'])
+        self.assertIn(('고객사별 8D 기한', '/admin/qms/customerrule/'), groups['고객 및 공급자'])
         self.assertNotIn('/admin/qms/customerrule/', [h for _, h in groups['기준정보 및 시스템 관리']])
         force_off('qms_claim')
         self.assertNotIn('/admin/qms/customerrule/', [h for links in dict(visible_nav(self.user)).values() for _, h in links])

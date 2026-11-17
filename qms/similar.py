@@ -14,7 +14,7 @@ def _words(text):
 
 
 def similar(record, limit=10):
-    """record: 부적합(Nonconformance) 또는 고객 클레임. 점수 = 같은 품번(계보 포함) 2 + 같은 불량유형 2 + 겹치는 단어 수."""
+    """record: 부적합(Nonconformance) 또는 고객 클레임. 점수 = 같은 품번(계보 포함) 2 + 같은 부적합 유형 2 + 겹치는 단어 수."""
     nc = record if isinstance(record, Nonconformance) else record.nonconformance
     if nc is None:
         return []

@@ -44,7 +44,7 @@ class InspectionSpec(Approvable):
     INCOMING, PROCESS, OUTGOING = 'INCOMING', 'PROCESS', 'OUTGOING'
     TYPES = [(INCOMING, '수입검사'), (PROCESS, '공정검사'), (OUTGOING, '출하검사')]
 
-    item = models.ForeignKey(Item, on_delete=models.PROTECT, verbose_name='품번')
+    item = models.ForeignKey(Item, on_delete=models.PROTECT, verbose_name='품목')
     inspection_type = models.CharField('검사 구분', max_length=10, choices=TYPES)
     revision = models.PositiveIntegerField('개정번호', default=1)
     sampling = models.CharField('샘플링', max_length=200, blank=True, help_text='예: AQL 0.65 일반검사수준 II, n=5')
@@ -176,7 +176,7 @@ class Inspection(models.Model):
         return {
             'title': f'{self.spec.get_inspection_type_display()} 성적서', 'number': None, 'revision': f'Rev.{self.spec.revision}',
             'draft': self.result == '',
-            'head': [['LOT', str(lot)], ['품번', item.code], ['품명', item.name], ['협력사', lot.supplier or '-'],
+            'head': [['LOT', str(lot)], ['품번', item.code], ['품명', item.name], ['공급자', lot.supplier or '-'],
                      ['수량', format(lot.qty.normalize(), 'f')], ['검사기준', str(self.spec)], ['샘플링', self.spec.sampling],
                      ['검사자', who or '-'],
                      ['검사 일시', timezone.localtime(self.inspected_at).strftime('%Y-%m-%d %H:%M')],
@@ -204,7 +204,7 @@ class Inspection(models.Model):
         if self._state.adding and self.spec_id and self.lot_id:
             current = InspectionSpec.current(self.lot.item, self.spec.inspection_type)
             if current != self.spec:
-                raise ValidationError(f'{self.spec}은(는) 유효본이 아닙니다. 승인된 최신 개정({current})으로 검사하세요.')
+                raise ValidationError(f'{self.spec}은(는) 최신 승인본이 아닙니다. 승인된 최신 개정({current})으로 검사하세요.')
             # 재검사는 처분 전 부적합(재작업·수리 대기)이 있을 때만. 처분은 재검사 합격 뒤에 입력한다 (Nonconformance.clean)
             # shortcut: 두 판정이 동시에 들어오면 둘 다 통과할 수 있다(확인 후 저장), 여러 단말 동시 판정이 생기면 잠금 추가
             done = Inspection.objects.filter(lot_id=self.lot_id, spec__inspection_type=self.spec.inspection_type).exclude(result='')
@@ -338,18 +338,18 @@ class Qualification(models.Model):
         return f'{self.user} {self.get_inspection_type_display()} ~{self.valid_until}'
 
 
-# ---------- 관리계획서(PFMEA) · 4M 변경 ----------
+# ---------- 관리계획서 · 4M 변경 ----------
 
 class ControlPlan(Approvable):
     STAGES = [('PROTO', '시작품'), ('PRELAUNCH', '양산 전'), ('PRODUCTION', '양산')]
 
-    item = models.ForeignKey(Item, on_delete=models.PROTECT, verbose_name='품번')
+    item = models.ForeignKey(Item, on_delete=models.PROTECT, verbose_name='품목')
     stage = models.CharField('단계', max_length=10, choices=STAGES, default='PRODUCTION')
     revision = models.PositiveIntegerField('개정번호', default=1)
     history = HistoricalRecords()
 
     class Meta:
-        verbose_name = verbose_name_plural = '관리계획서(PFMEA)'
+        verbose_name = verbose_name_plural = '관리계획서'
         constraints = [models.UniqueConstraint(fields=['item', 'stage', 'revision'], name='uniq_cp_rev')]
 
     def __str__(self):
@@ -373,7 +373,7 @@ class ControlPlan(Approvable):
             'head': [['품번', self.item.code], ['품명', self.item.name], ['단계', self.get_stage_display()],
                      ['개정', f'Rev.{self.revision}']],
             'tables': [{'title': '관리 항목', 'columns': ['공정', '특성', '특별특성', '하한', '상한', '단위', '측정방법', '샘플링', '검사 구분',
-                                                       '이상 시 조치', '잠재 고장모드', 'S', 'O', 'D', 'AP'], 'rows': rows}],
+                                                       '이상 시 조치', '잠재 고장모드', 'S', 'O', 'D', '조치 우선순위(AP)'], 'rows': rows}],
             **_doc_tail(self, plan_logs(self, confirmed_only=True)),
         }
 
@@ -429,7 +429,7 @@ class ChangeRequest(Approvable):
     CATEGORIES = [('MAN', '사람(Man)'), ('MACHINE', '설비(Machine)'), ('MATERIAL', '자재(Material)'), ('METHOD', '방법(Method)')]
 
     number = models.CharField('변경 번호', max_length=50, unique=True)
-    item = models.ForeignKey(Item, on_delete=models.PROTECT, related_name='changes', verbose_name='품번')
+    item = models.ForeignKey(Item, on_delete=models.PROTECT, related_name='changes', verbose_name='품목')
     category = models.CharField('4M 구분', max_length=10, choices=CATEGORIES)
     description = models.TextField('변경 내용')
     customer_notice = models.BooleanField('고객 통보 필요', default=True)
@@ -468,7 +468,7 @@ class ChangeRequest(Approvable):
         return [c for c in due if not c.first_article]
 
 
-# ---------- 고객 클레임(8D) · 협력사(SCAR) ----------
+# ---------- 고객 클레임(8D) · 공급자(SCAR) ----------
 
 class CustomerRule(models.Model):
     customer = models.CharField('고객사', max_length=100, unique=True)
@@ -548,7 +548,7 @@ class CustomerClaim(models.Model):
 
 class Scar(models.Model):
     number = models.CharField('SCAR 번호', max_length=50, unique=True)
-    supplier = models.CharField('협력사', max_length=100)
+    supplier = models.CharField('공급자', max_length=100)
     lot = models.ForeignKey(Lot, on_delete=models.PROTECT, related_name='scars', verbose_name='자재 LOT')
     partner = models.ForeignKey('core.Partner', on_delete=models.PROTECT, null=True, blank=True, related_name='scars',
                                 limit_choices_to={'is_supplier': True}, verbose_name='거래처')
@@ -557,20 +557,20 @@ class Scar(models.Model):
     request = models.TextField('요구 내용')
     issued_at = models.DateField('발행일', default=datetime.date.today)
     response_due = models.DateField('회신 기한')
-    response = models.TextField('협력사 회신', blank=True)
+    response = models.TextField('공급자 회신', blank=True)
     responded_at = models.DateField('회신일', null=True, blank=True)
     closed_at = models.DateField('종결일', null=True, blank=True)
     history = HistoricalRecords()
 
     class Meta:
-        verbose_name = verbose_name_plural = '협력사 시정요구(SCAR)'
+        verbose_name = verbose_name_plural = '공급자 시정조치 요구(SCAR)'
 
     def __str__(self):
         return f'{self.number} {self.supplier}'
 
     def clean(self):
         if self.closed_at and not self.response:
-            raise ValidationError('협력사 회신 없이 종결할 수 없습니다.')
+            raise ValidationError('공급자 회신 없이 종결할 수 없습니다.')
 
     def save(self, *args, **kwargs):
         self.clean()
@@ -593,7 +593,7 @@ class Document(models.Model):
 
     @property
     def current_revision(self):
-        """유효본 = 승인된 최신 개정."""
+        """최신 승인본 = 승인된 최신 개정."""
         return self.revisions.filter(approved_at__isnull=False).order_by('-approved_at').first()
 
 
@@ -641,7 +641,7 @@ class AuditChecklist(models.Model):
 
 class AuditItem(models.Model):
     checklist = models.ForeignKey(AuditChecklist, on_delete=models.CASCADE, related_name='items', verbose_name='체크리스트')
-    clause = models.CharField('항목 번호', max_length=50)
+    clause = models.CharField('조항', max_length=50)
     requirement = models.TextField('요구사항')
     history = HistoricalRecords()
 
@@ -683,8 +683,8 @@ def _capa_number():
     return f'{prefix}{int(last[-3:]) + 1 if last and last[-3:].isdigit() else 1:03d}'
 
 class Capa(models.Model):
-    """시정·예방조치. 8D·SCAR·심사 지적·SPC·부적합 어디서 나왔든 한 목록에서 유효성 확인까지 추적한다."""
-    SOURCES = [('8D', '고객 클레임(8D)'), ('SCAR', '협력사(SCAR)'), ('AUDIT', '내부심사'), ('SPC', 'SPC 경보'),
+    """시정·예방조치. 8D·SCAR·심사 발견사항·SPC·부적합 어디서 나왔든 한 목록에서 유효성 확인까지 추적한다."""
+    SOURCES = [('8D', '고객 클레임(8D)'), ('SCAR', '공급자(SCAR)'), ('AUDIT', '심사'), ('SPC', 'SPC 경보'),
                ('NC', '부적합'), ('OTHER', '기타')]
 
     number = models.CharField('CAPA 번호', max_length=50, unique=True, default=_capa_number)
@@ -709,7 +709,7 @@ class Capa(models.Model):
     history = HistoricalRecords()
 
     class Meta:
-        verbose_name = verbose_name_plural = 'CAPA(시정조치)'
+        verbose_name = verbose_name_plural = '시정조치(CAPA)'
 
     def __str__(self):
         return f'{self.number} {self.title}'
@@ -734,13 +734,13 @@ class Capa(models.Model):
             save_numbered(self, _capa_number, r'CAPA-\d{6}-\d{3}', lambda: super(Capa, self).save(*args, **kwargs))
         else:
             super().save(*args, **kwargs)
-        if self.source_type_id and self.source_type.model == 'auditfinding':  # 심사 지적에서 만들면 지적에 연결
+        if self.source_type_id and self.source_type.model == 'auditfinding':  # 심사 발견사항에서 만들면 지적에 연결
             AuditFinding.objects.filter(pk=self.source_id, capa__isnull=True).update(capa=self)
 
 
 class InternalAudit(models.Model):
-    """내부심사 계획·실시 (IATF 9.2). 중·경부적합 지적은 CAPA가 연결돼야 종결된다."""
-    KINDS = [('INTERNAL', '내부'), ('CUSTOMER', '고객'), ('CERT', '인증')]
+    """내부심사 계획·실시 (IATF 9.2). 중·경부적합 발견사항은 CAPA가 연결돼야 종결된다."""
+    KINDS = [('INTERNAL', '내부(1자)'), ('CUSTOMER', '고객(2자)'), ('CERT', '인증(3자)')]
 
     name = models.CharField('심사명', max_length=200, help_text='예: 2026 상반기 공정심사 - 조립')
     kind = models.CharField('구분', max_length=10, choices=KINDS, default='INTERNAL')
@@ -758,7 +758,7 @@ class InternalAudit(models.Model):
     history = HistoricalRecords()
 
     class Meta:
-        verbose_name = verbose_name_plural = '내부심사'
+        verbose_name = verbose_name_plural = '심사'
         ordering = ['-planned_date']
 
     def __str__(self):
@@ -769,7 +769,7 @@ class InternalAudit(models.Model):
             if not self.performed_at:
                 raise ValidationError('실시일 없이 종결할 수 없습니다.')
             if self.pk and self.findings.filter(grade__in=AuditFinding.NEEDS_CAPA, capa__isnull=True).exists():
-                raise ValidationError('CAPA가 연결되지 않은 중·경부적합 지적이 있어 종결할 수 없습니다.')
+                raise ValidationError('CAPA가 연결되지 않은 중·경부적합 발견사항이 있어 종결할 수 없습니다.')
 
     def save(self, *args, **kwargs):
         self.clean()
@@ -783,33 +783,33 @@ class AuditFinding(models.Model):
     audit = models.ForeignKey(InternalAudit, on_delete=models.CASCADE, related_name='findings', verbose_name='심사')
     clause = models.CharField('조항', max_length=50, blank=True)
     grade = models.CharField('등급', max_length=5, choices=GRADES)
-    description = models.TextField('지적 내용')
+    description = models.TextField('발견 내용')
     capa = models.ForeignKey(Capa, on_delete=models.PROTECT, null=True, blank=True, related_name='findings', verbose_name='CAPA')
     history = HistoricalRecords()
 
     class Meta:
-        verbose_name = verbose_name_plural = '심사 지적'
+        verbose_name = verbose_name_plural = '심사 발견사항'
 
     def __str__(self):
         return f'{self.audit.name} {self.clause} {self.get_grade_display()}'
 
 
 # AIAG PPAP 4판 18요소와 제출 수준(1~5)별 요구: S 제출, R 보관, * 고객 지정
-# shortcut: 표준 표 그대로, 고객 특별 요구(CSR)가 다르면 요소 화면에서 '요구'를 직접 고친다
+# shortcut: 표준 표 그대로, 고객 특정 요구사항(CSR)가 다르면 요소 화면에서 '요구'를 직접 고친다
 PPAP_ELEMENTS = [
     (1, '설계 기록', 'RSS*R'), (2, '설계 변경 문서', 'RSS*R'), (3, '고객 엔지니어링 승인', 'RRS*R'),
     (4, 'DFMEA', 'RRS*R'), (5, '공정 흐름도', 'RRS*R'), (6, 'PFMEA', 'RRS*R'), (7, '관리계획서', 'RRS*R'),
     (8, '측정시스템 분석(MSA)', 'RRS*R'), (9, '치수 측정 결과', 'RSS*R'), (10, '재료·성능 시험 결과', 'RSS*R'),
     (11, '초기 공정 능력 연구', 'RRS*R'), (12, '공인 시험실 문서', 'RSS*R'), (13, '외관 승인 보고서(AAR)', 'SSS*R'),
     (14, '샘플 제품', 'RSS*R'), (15, '마스터 샘플', 'RRR*R'), (16, '검사 보조구', 'RRR*R'),
-    (17, '고객 특별 요구사항', 'RRS*R'), (18, '부품 제출 보증서(PSW)', 'SSSSR'),
+    (17, '고객 특정 요구사항', 'RRS*R'), (18, '부품 제출 보증서(PSW)', 'SSSSR'),
 ]
 PSW = 18
 
 
 class PpapSubmission(Approvable):
     """PPAP 제출. 승인 서명 = 내부 PSW 서명이며, '제출(S)' 요소에 증적이 모두 있어야 한다."""
-    item = models.ForeignKey(Item, on_delete=models.PROTECT, related_name='ppaps', verbose_name='품번')
+    item = models.ForeignKey(Item, on_delete=models.PROTECT, related_name='ppaps', verbose_name='품목')
     customer = models.CharField('고객사', max_length=100)
     partner = models.ForeignKey('core.Partner', on_delete=models.PROTECT, null=True, blank=True, related_name='ppaps',
                                 limit_choices_to={'is_customer': True}, verbose_name='거래처')

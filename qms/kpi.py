@@ -1,4 +1,4 @@
-"""품질 KPI와 협력사 성적표 계산. 화면(views.kpi, views.suppliers)과 테스트가 함께 쓴다."""
+"""품질 KPI와 공급자 성적표 계산. 화면(views.kpi, views.suppliers)과 테스트가 함께 쓴다."""
 import datetime
 from collections import defaultdict
 from decimal import Decimal
@@ -12,7 +12,7 @@ from .models import CustomerClaim, Inspection, InspectionSpec, Scar
 
 # 부서 = 역할 그룹 묶음. 부서를 늘릴 때 여기에 그룹을 더한다(예: '생산': ('생산팀',)).
 DEPARTMENTS = {'품질': ('품질엔지니어', '품질팀장', '검사원')}
-# KPI 영역 → 볼 수 있는 부서. quality = PPM·직행률·8D·실패비용·불량유형 파레토, yield = 공정별 수율
+# KPI 영역 → 볼 수 있는 부서. quality = PPM·직행률·8D·실패비용·부적합 유형 파레토, yield = 공정별 수율
 KPI_DEPARTMENTS = {'quality': ('품질',), 'yield': ('품질', '생산')}
 
 

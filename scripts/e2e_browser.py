@@ -223,14 +223,14 @@ try:
             check('잠긴 기준서 붙여넣기 → 변경 없음', page.get_by_text('변경 ').count() == 0 and after == before, f'{before!r} → {after!r}')
             page.get_by_role('button', name='새 개정').click()
             page.wait_for_function(f"() => !location.pathname.endsWith('/{spec_id}')", timeout=5000)
-            draft_id = page.url.rstrip('/').split('/')[-1]  # 감사 기록·문서 점검이 쓴다
+            draft_id = page.url.rstrip('/').split('/')[-1]  # 변경 이력 조회·문서 점검이 쓴다
             new = api_get(page, f'/api/qms/specs/{draft_id}/')
             ok = new['revision'] == 2 and len(new['characteristics']) == 10
         except Exception:
             ok = False
         check('승인본 → 새 개정 → Rev.2 초안, 항목 복사', ok, page.url)
 
-        # 인쇄 화면(PDF)·감사 기록
+        # 인쇄 화면(PDF)·변경 이력 조회
         try:
             page.goto(f'/app/specs/{spec_id}/print')
             page.locator('.doc-page').wait_for(timeout=5000)
@@ -252,9 +252,9 @@ try:
             page.goto(f'/app/audit?model=qms.inspectionspec&id={spec_id}')
             page.locator('[data-audit-row]').first.wait_for(timeout=5000)
             n = page.locator('[data-audit-row]').count()
-            check('감사 기록: 저장 이력이 보임', n >= 2, f'{n}줄')
+            check('변경 이력 조회: 저장 이력이 보임', n >= 2, f'{n}줄')
         except Exception as e:
-            check('감사 기록: 저장 이력이 보임', False, str(e)[:80])
+            check('변경 이력 조회: 저장 이력이 보임', False, str(e)[:80])
 
         # 검사 입력(/app/inspect)·측정·검사 목록·성적서
         manage('shell', '-c', (
@@ -447,7 +447,7 @@ try:
             ok = False
         check('메뉴 → 새 화면', ok, page.url)
 
-        try:  # 즉시 확인(300ms) 전에 판정 → 불량유형 칸을 보여 주고 저장하지 않는다
+        try:  # 즉시 확인(300ms) 전에 판정 → 부적합 유형 칸을 보여 주고 저장하지 않는다
             page.goto('/app/inspect')
             page.get_by_placeholder(scan_ph).fill('E2E-IN-2')
             page.keyboard.press('Enter')
@@ -459,12 +459,12 @@ try:
             page.get_by_role('button', name='판정').click()
             page.get_by_text('불합격 항목이 있습니다').wait_for(timeout=5000)
             n = api_get(page, '/api/qms/inspections/?tab=INCOMING&q=E2E-IN-2')['count']
-            ok = n == 0 and page.get_by_placeholder('불량유형').count() + page.get_by_text('불량유형').count() > 0
+            ok = n == 0 and page.get_by_placeholder('부적합 유형').count() + page.get_by_text('부적합 유형').count() > 0
         except Exception as e:
             ok, n = False, str(e)[:80]
-        check('바로 판정 → 불량유형 먼저', ok, f'{n}')
+        check('바로 판정 → 부적합 유형 먼저', ok, f'{n}')
 
-        # 기준정보 새 화면: 품번·BOM, 공정 표, 관리계획서, 엑셀 일괄 등록, 메뉴
+        # 기준정보 새 화면: 품목·BOM, 공정 표, 관리계획서, 엑셀 일괄 등록, 메뉴
         manage('shell', '-c', (
             "from django.contrib.auth import get_user_model; from django.utils import timezone;"
             "from core.models import ImportProfile, Item; from qms.models import ControlPlan, ControlPlanLine;"
@@ -630,7 +630,7 @@ try:
         try:
             page.goto('/app/todo')
             page.locator('.ant-menu-submenu-title', has_text='기준정보').click()
-            page.get_by_role('menuitem', name='품번·BOM·라우팅', exact=True).click()
+            page.get_by_role('menuitem', name='품목·BOM·라우팅', exact=True).click()
             page.wait_for_url('**/app/items')
             ok = page.url.endswith('/app/items')
         except Exception:

@@ -128,7 +128,7 @@ def sections(user):
         rows = [r for r in kpi.suppliers(3) if r['inspections'] or r['scars']]
         worst = sorted(rows, key=lambda r: -(r['fail_rate'] or 0))[:5]
         quality.append({
-            'title': '협력사 품질', 'value': len(rows), 'sub': '최근 3개월 실적 있는 협력사 · 불합격률 높은 순',
+            'title': '공급자 품질', 'value': len(rows), 'sub': '최근 3개월 실적 있는 공급자 · 불합격률 높은 순',
             'href': reverse('suppliers') + '?months=3',
             'rows': [{'label': r['name'], 'meta': '-' if r['fail_rate'] is None else f"불합격 {r['fail_rate']:.1f}%",
                       'tone': 'negative' if r['fail_rate'] else ''} for r in worst]})

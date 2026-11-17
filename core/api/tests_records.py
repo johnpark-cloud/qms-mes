@@ -463,7 +463,7 @@ class RecordsNcApiTest(TestCase):
 
     def test_dispose_missing_fields(self):
         from core.models import Nonconformance
-        nc = Nonconformance.objects.create(lot=self.fg, description='x')  # 공정 내부: 불량유형·선별·격리·공정 비어 있음
+        nc = Nonconformance.objects.create(lot=self.fg, description='x')  # 공정 내부: 부적합 유형·선별·격리·공정 비어 있음
         r = self.dispose({'disposition': 'SCRAP', 'password': 'pw'}, nc)
         self.assertEqual(r.status_code, 400)
         self.assertIn('보완 필요:', r.json()['detail'])
@@ -547,7 +547,7 @@ class RecordsCapaClaimApiTest(TestCase):
 
     def test_scar_and_capa_close_rules(self):
         r = self.close('qms.scar', self.scar.pk)
-        self.assertEqual(r.json()['detail'], '협력사 회신 없이 종결할 수 없습니다.')
+        self.assertEqual(r.json()['detail'], '공급자 회신 없이 종결할 수 없습니다.')
         self.assertEqual(self.patch('qms.scar', self.scar.pk, {'response': '열처리 조건 변경'}).status_code, 200)
         self.assertEqual(self.close('qms.scar', self.scar.pk).status_code, 200)
         self.scar.refresh_from_db()
@@ -643,7 +643,7 @@ class RecordsAuditPpapApiTest(TestCase):
         self.assertEqual(self.close('qms.internalaudit', self.audit.pk).json()['detail'], '실시일 없이 종결할 수 없습니다.')
         self.assertEqual(self.patch('qms.internalaudit', self.audit.pk, {'performed_at': self.today.isoformat()}).status_code, 200)
         self.assertEqual(self.close('qms.internalaudit', self.audit.pk).json()['detail'],
-                         'CAPA가 연결되지 않은 중·경부적합 지적이 있어 종결할 수 없습니다.')
+                         'CAPA가 연결되지 않은 중·경부적합 발견사항이 있어 종결할 수 없습니다.')
         self.assertEqual(self.patch('qms.auditfinding', self.finding.pk, {'grade': 'OBS'}).status_code, 200)
         d = self.close('qms.internalaudit', self.audit.pk).json()
         self.assertEqual((d['status'], d['can_close']), ('종결', False))
@@ -739,8 +739,8 @@ class RecordsMesMasterApiTest(TestCase):
         self.assertEqual(root['작업지시'], '/app/r/core/workorder')
         self.assertEqual(root['출하'], '/app/r/core/shipment')
         self.assertEqual(root['수입검사'], '/app/inspections?tab=INCOMING')
-        self.assertEqual(root['품번·BOM·라우팅'], '/app/items')
-        self.assertEqual(root['클레임 설정'], '/app/customer-rules')
+        self.assertEqual(root['품목·BOM·라우팅'], '/app/items')
+        self.assertEqual(root['고객사별 8D 기한'], '/app/customer-rules')
         self.assertEqual({k for k, v in root.items() if v.startswith('/admin/')}, {'사용자', '모듈 켜기/끄기', '전체 메뉴'})
         lead = User.objects.create_user('lead', password='pw', is_staff=True)
         lead.groups.add(Group.objects.get(name='품질팀장'))

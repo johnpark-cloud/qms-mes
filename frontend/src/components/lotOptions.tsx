@@ -3,7 +3,7 @@ import { Tag } from 'antd'
 import { api } from '../api/client'
 import type { LotInfo } from '../api/inspect'
 
-// LOT 고르기 목록: 번호·품번·품명·협력사 일부로 찾는다. 빈 검색어면 최근 LOT 20건이다.
+// LOT 고르기 목록: 번호·품번·품명·공급자 일부로 찾는다. 빈 검색어면 최근 LOT 20건이다.
 // shortcut: 글자마다 한 번씩 조회한다(사내망·SQLite 기준). 느려지면 입력 지연(debounce)을 넣는다.
 export function useLotOptions(text: string) {
   const q = text.trim()

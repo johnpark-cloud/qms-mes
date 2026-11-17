@@ -102,7 +102,7 @@ export default function MeasurePage() {
     setSaving(true)
     setErr('')
     try {
-      // 즉시 확인 응답 전에 눌렀으면 한 번 더 확인한다. 불합격인데 불량유형 칸을 못 봤으면 보여 주고 멈춘다.
+      // 즉시 확인 응답 전에 눌렀으면 한 번 더 확인한다. 불합격인데 부적합 유형 칸을 못 봤으면 보여 주고 멈춘다.
       if (!failed) {
         const filled = Object.fromEntries(Object.entries(values).filter(([, v]) => v.trim()))
         const r = Object.keys(filled).length ? await checkValues(spec, filled).catch(() => null) : null
@@ -110,7 +110,7 @@ export default function MeasurePage() {
           const mine = ++seq.current
           Object.keys(filled).forEach((k) => (last.current[k] = mine))
           setResults((p) => ({ ...p, ...r.results }))
-          setErr('불합격 항목이 있습니다. 불량유형을 고른 뒤 다시 판정하세요.')
+          setErr('불합격 항목이 있습니다. 부적합 유형을 고른 뒤 다시 판정하세요.')
           return
         }
       }
@@ -225,7 +225,7 @@ export default function MeasurePage() {
       />
       {failed && (
         <Space style={{ marginTop: 16 }} wrap>
-          <Select style={{ width: 200 }} placeholder="불량유형" value={defectType} onChange={setDefectType} options={f.defect_types.map((d) => ({ value: d, label: d }))} />
+          <Select style={{ width: 200 }} placeholder="부적합 유형" value={defectType} onChange={setDefectType} options={f.defect_types.map((d) => ({ value: d, label: d }))} />
           <Input style={{ width: 100 }} inputMode="decimal" addonBefore="수량" value={defectQty} onChange={(e) => setDefectQty(e.target.value)} />
         </Space>
       )}

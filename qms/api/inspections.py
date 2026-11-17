@@ -18,7 +18,7 @@ from qms.rules import RECEIVE_MSG, measurement, receive_lot, submit_inspection
 from .specs import BAD_BODY, PAGE_SIZE, _bad
 
 PERM = 'qms.add_inspection'
-QUEUE_COLUMNS = ['LOT', '품번', '품명', '협력사', '수량', '생성일', '보류']
+QUEUE_COLUMNS = ['LOT', '품번', '품명', '공급자', '수량', '생성일', '보류']
 
 
 def _int(v):
@@ -99,7 +99,7 @@ class LotLookupView(APIView):
         if lot:
             return Response({'lot': _lot(lot), 'specs': _specs(lot)})
         body = {'detail': '등록되지 않은 LOT입니다.', 'can_receive': request.user.has_perm('core.add_lot')}
-        if body['can_receive']:  # 입고 권한이 없으면 품목·협력사 목록도 주지 않는다
+        if body['can_receive']:  # 입고 권한이 없으면 품목·공급자 목록도 주지 않는다
             with_spec = InspectionSpec.objects.filter(approved_at__isnull=False).values('item')
             body['items'] = [{'value': i.pk, 'label': str(i)} for i in Item.objects.filter(pk__in=with_spec).order_by('code')]
             body['suppliers'] = list(Lot.objects.exclude(supplier='').order_by('supplier')
@@ -135,7 +135,7 @@ class FormView(APIView):
         require_perm(request.user, PERM)
         lot = get_object_or_404(Lot.objects.select_related('item'), pk=lot_id)
         spec = get_object_or_404(InspectionSpec, pk=spec_id, approved_at__isnull=False)
-        try:  # 품번·유효본을 판정 때와 같은 규칙으로 미리 확인한다 (값을 다 넣은 뒤에 거부되지 않게)
+        try:  # 품번·최신 승인본을 판정 때와 같은 규칙으로 미리 확인한다 (값을 다 넣은 뒤에 거부되지 않게)
             Inspection(lot=lot, spec=spec).clean()
         except ValidationError as e:
             return _bad(e.messages[0])
@@ -218,7 +218,7 @@ class SubmitView(APIView):
                          'nonconformance': {'id': nc.pk, 'number': nc.number} if nc else None}, status=201)
 
 
-LIST_COLUMNS = ['검사 일시', 'LOT', '품번', '품명', '협력사', '검사기준', '검사자', '판정', '부적합']
+LIST_COLUMNS = ['검사 일시', 'LOT', '품번', '품명', '공급자', '검사기준', '검사자', '판정', '부적합']
 VIEW_PERM = 'qms.view_inspection'
 
 

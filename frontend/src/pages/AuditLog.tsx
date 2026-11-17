@@ -39,7 +39,7 @@ export default function AuditLog() {
   const list = [...new Map((rows.data?.pages.flatMap((p) => p.results) ?? []).map((r) => [r.history_id, r])).values()]
   return (
     <>
-      <h1 className="page-title">감사 기록</h1>
+      <h1 className="page-title">변경 이력 조회</h1>
       {err && <Alert type="error" message={err instanceof ApiError ? err.detail : '불러오지 못했습니다.'} style={{ marginBottom: 16 }} />}
       <Space style={{ marginBottom: 16 }} wrap>
         <Select

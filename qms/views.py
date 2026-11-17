@@ -113,7 +113,7 @@ def kpi_view(request):
 def suppliers_view(request):
     _need(request, 'qms.view_scar')
     months = _months(request)
-    return render(request, 'qms/suppliers.html', {'title': '협력사 성적표', 'months': months,
+    return render(request, 'qms/suppliers.html', {'title': '공급자 성적표', 'months': months,
                                                    'rows': kpi.suppliers(months)})
 
 
@@ -134,7 +134,7 @@ DEFECT_TYPES = ['파손', '찍힘·스크래치', '이물', '인쇄', 'Burr', '�
 
 
 def _lot_step(request, lot, number, error=None):
-    """LOT 화면. 없는 LOT이면 그 자리에서 입고 등록할 수 있게 품목·협력사 목록을 준다."""
+    """LOT 화면. 없는 LOT이면 그 자리에서 입고 등록할 수 있게 품목·공급자 목록을 준다."""
     ctx = {'lot': lot, 'number': number, 'error': error}
     if lot:
         ctx['specs'] = [s for t, _ in InspectionSpec.TYPES if (s := InspectionSpec.current(lot.item, t))]
@@ -399,7 +399,7 @@ def _pack_data(request):
     if can('controlplan'):
         d['plan'] = ControlPlan.objects.filter(item=item, approved_at__isnull=False).order_by('-approved_at').first()
         d['plan_lines'] = list(d['plan'].lines.select_related('process')) if d['plan'] else []
-    # 문서는 품번에 직접 묶이지 않아, 이 품번 PPAP 요소가 인용한 문서의 유효본만 모은다
+    # 문서는 품번에 직접 묶이지 않아, 이 품번 PPAP 요소가 인용한 문서의 최신 승인본만 모은다
     d['doc_revisions'] = []
     if can('documentrevision'):
         docs = {e.document for e in PpapElement.objects.filter(submission__item=item, document__isnull=False)

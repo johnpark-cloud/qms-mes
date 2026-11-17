@@ -24,7 +24,7 @@
 | --- | --- |
 | 처분은 등록과 동시에 입력할 수 없다(먼저 등록·보류). | `Nonconformance.clean` |
 | 처분하려면 품질팀장(또는 시스템 관리자)이 승인자이고, 처분 저장 때 본인 비밀번호를 다시 입력한다. | `Nonconformance.clean`, `core/rules.py` `sign_disposition`(비밀번호 확인, admin 폼 `clean`이 호출)·`dispose_nc`(처분 없는 서명 거부) |
-| 처분 전에 보완 필수 칸(불량유형·선별 결과·격리 수량, 공정 내부·출하검사는 발견 공정까지)을 채워야 한다. | `Nonconformance.missing_fields`, 부적합 폼 `_post_clean` |
+| 처분 전에 보완 필수 칸(부적합 유형·선별 결과·격리 수량, 공정 내부·출하검사는 발견 공정까지)을 채워야 한다. | `Nonconformance.missing_fields`, 부적합 폼 `_post_clean` |
 | 재작업·수리는 부적합 발견 이후 그 LOT의 재검사 합격 기록이 있어야 한다. | `Nonconformance.clean` |
 | 특채는 고객 승인 문서번호가 필요하다. | `Nonconformance.clean` |
 | 재작업·수리·특채(`RELEASING`)만 보류를 해제한다. 폐기·반품은 보류를 유지한다. | `Nonconformance.RELEASING`, `save` |
@@ -37,7 +37,7 @@
 | --- | --- |
 | 승인 대상(`Approvable`: 검사기준, 관리계획서, 4M 변경, 문서 개정, PPAP)은 승인 서명 화면에서만 승인된다. 승인자는 품질팀장 그룹이나 시스템 관리자이고, 비밀번호를 다시 입력한다. | `core/views.py` `approve`, `core/models.py` `is_approver` |
 | 승인된 기록은 수정할 수 없다. 새 개정을 만든다. | `Approvable.save`, `Characteristic.save`, `ControlPlanLine` 저장 |
-| 검사·문서 기준은 "승인된 최신 개정"이 유효본이다. | `InspectionSpec.current` |
+| 검사·문서 기준은 "승인된 최신 개정"이 최신 승인본이다. | `InspectionSpec.current` |
 | 검사기준 저장은 `qms.rules.save_spec`이 한다(admin과 같은 잠금: `save_with_lock`). 기준서 속성과 검사항목 줄을 한꺼번에 저장하고 하나라도 잘못이면 아무것도 저장하지 않는다. 다른 기준서의 항목 id는 400으로 거부한다. 동시 수정은 `spec_version`(기준서·항목 이력 중 가장 큰 `history_id`)이 달라지면 409 `다른 사람이 먼저 고쳤습니다. 다시 불러오세요.`다. 항목 삭제는 `delete_characteristic` 권한이 필요하다(역할 그룹에는 없어 사실상 시스템 관리자만). | `qms/rules.py` `save_spec`·`spec_version`, `qms/api/specs.py` |
 | 4M 변경 중 고객 통보 대상은 고객 승인 문서번호가 있어야 승인할 수 있다. | `ChangeRequest.clean` |
 | PPAP: 제출(S) 요소마다 증적이 있어야 PSW를 승인할 수 있다. 승인 후에는 제출일·고객 승인일만 기록할 수 있다. | `PpapSubmission.clean`/`save`, `PpapElement` 저장 |
@@ -104,9 +104,9 @@
 | 규칙 | 위치 |
 | --- | --- |
 | 8D 기한은 고객사별 규칙(봉쇄 D3 시간, 대책 D5 일)을 따르고, D1~D8이 모두 채워져야 종결한다. | `CustomerRule`, `CustomerClaim.clean` |
-| SCAR는 협력사 회신 없이 종결할 수 없다. | `Scar.clean` |
+| SCAR는 공급자 회신 없이 종결할 수 없다. | `Scar.clean` |
 | CAPA 유효성은 조치 완료 후 확인일·확인자와 함께 기록하고, "유효"여야 종결한다. | `Capa.clean` |
-| 내부심사는 실시일이 있어야 하고, CAPA가 연결되지 않은 중·경부적합 지적이 있으면 종결할 수 없다. | `InternalAudit.clean` |
+| 내부심사는 실시일이 있어야 하고, CAPA가 연결되지 않은 중·경부적합 발견사항이 있으면 종결할 수 없다. | `InternalAudit.clean` |
 
 ## 10. 권한과 개인정보
 
@@ -115,14 +115,14 @@
 | 역할 그룹(품질엔지니어·품질팀장·검사원)과 권한은 migrate 때마다 다시 설정된다. 권한을 바꾸려면 이 함수를 고친다. | `qms/apps.py` `ensure_roles` |
 | 품질팀장 그룹이 승인자다. | `core/models.py` `APPROVER_GROUP`, `is_approver` |
 | 연차·급여(`personal`)는 본인 기록만 조회·다운로드한다. 시스템 관리자도 남의 것은 볼 수 없다. 명세서 파일은 `/media/` 밖(`data/private/`)에 둔다. 연차 사용 표는 합계와 같은 입사 기념일 기간으로 보여 준다. 명세서를 지우거나 파일을 바꾸면 옛 파일도 지운다. 화면 이름(`__str__`)에는 날짜·일수를 넣지 않는다(삭제 확인 화면·변경 로그 노출 방지). | `personal/api.py`, `personal/views.py`, `personal/admin.py`, `personal/models.py` `private_storage`, `Payslip.save`, `_delete_payslip_file` |
-| LOT 이력 조회(`/trace/`)는 `core.view_lot` 권한이 있어야 본다. | `core/views.py` `trace`, `core/nav.py` |
+| 추적성 조회(LOT 이력)(`/trace/`)는 `core.view_lot` 권한이 있어야 본다. | `core/views.py` `trace`, `core/nav.py` |
 | `/media/` 아래 파일(부적합 사진·메모 사진·거래처 인증서 등)은 로그인한 스태프만 받을 수 있다. | `config/urls.py` `/media/` |
 | 기록 첨부(`Attachment`)는 `/media/` 밖(`data/attachments/`)에 두고 `/attachments/<id>/`로만 받는다. 받으려면 `core.view_attachment` 권한과 첨부가 붙은 기록의 보기 권한이 모두 있어야 하고, 그 기록이 있어야 한다. 개인 앱(`PRIVATE_APPS`) 기록에는 붙일 수도 받을 수도 없다. 올리기(`/api/attachments/`)는 `core.add_attachment`와 대상 기록 보기 권한이 필요하다. 관리 화면에서는 첨부를 추가하지 않고, 관리 화면 삭제는 시스템 관리자만 한다. 기록 화면의 지우기(`DELETE /api/attachments/<id>/`)는 올린 사람(올리기 권한이 있을 때)과 시스템 관리자만 하고, 붙은 기록이 승인돼 잠겼으면(설명서 `lock_parent` 포함) 시스템 관리자도 400이다(2026-11-16 사용자 결정). 첨부 행을 지우면 파일도 지우고, 행은 simple-history에 파일 이름·지운 사람·시각으로 남는다. 기록 화면 변경 이력 탭은 그 기록의 첨부·메모 이력도 보기 권한(`core.view_attachment`·`qms.view_memo`)이 있으면 함께 보인다. | `core/views.py` `can_view_target`·`attachment_download`, `core/api/attachments.py` `AttachmentDetailView`, `core/api/records.py` `RecordHistoryView`, `core/models.py` `attachment_storage` |
 | 부서·거래처·사용자 정의 칸의 추가·수정은 품질팀장(과 시스템 관리자)만 한다. 품질엔지니어·검사원은 보기만 한다. | `qms/apps.py` `TEAM_LEAD_ONLY`, `ensure_roles` |
-| 새 기록 화면(`/app/r/<app>/<model>/<id>`)과 records API는 설명서(`core/recordspec.py` `SPECS`)에 등록된 모델만 연다(그 밖은 404). 목록·상세·변경 이력 탭은 그 모델의 `view_` 권한으로 서버가 검사한다(변경 이력 탭은 `view_` 권한자에게 보인다, 2026-11-13 사용자 결정). 전체 감사 기록 화면(`/app/audit`)은 그대로 품질팀장 전용이다. | `core/api/records.py`, `core/recordspec.py` |
+| 새 기록 화면(`/app/r/<app>/<model>/<id>`)과 records API는 설명서(`core/recordspec.py` `SPECS`)에 등록된 모델만 연다(그 밖은 404). 목록·상세·변경 이력 탭은 그 모델의 `view_` 권한으로 서버가 검사한다(변경 이력 탭은 `view_` 권한자에게 보인다, 2026-11-13 사용자 결정). 전체 변경 이력 조회 화면(`/app/audit`)은 그대로 품질팀장 전용이다. | `core/api/records.py`, `core/recordspec.py` |
 | 기록 화면의 범용 저장(`PATCH /api/records/<label>/<id>/`)은 `change_` 권한, 설명서 `Spec.edit` 칸만 받는다. 서명 칸(`SIGN_FIELDS`: 승인자·승인 일시·판정 등)은 설명서에 넣을 수 없고(테스트가 검사) 보내면 400이다. 저장은 ModelForm 검증 + `validate_constraints` → `rules.save_with_lock`(승인 잠금·수정 승인 1회 소모)이고, 이력 번호(`version`)가 다르면 409다. 승인은 `rules.approve`(품질팀장·비밀번호)로만 한다. | `core/api/records.py`, `core/recordspec.py` `SIGN_FIELDS`, `core/rules.py` |
 | 기록 화면의 부적합 처분은 `POST /api/records/core.nonconformance/<id>/dispose/`(`change_nonconformance` 권한)로만 하고, 관리 화면과 같은 `rules.dispose_nc`(MRB 비밀번호·필수칸·모델 `clean` 처분 규칙·보류 해제)를 거친다. 처분·특채 승인번호·보류 해제 일시는 `SIGN_FIELDS`라 범용 저장으로 보낼 수 없다(400). 보류는 설명서 `edit`가 비어 있어 범용 저장이 403이고, 수정·삭제 요청은 404다. 처분·특채 승인번호는 부적합 설명서 `sign`에 있다(4M 변경의 고객 승인 문서번호는 승인 전 입력 칸). | `core/api/records.py` `RecordDisposeView`, `core/rules.py` `dispose_nc`, `core/recordspec.py` |
-| CAPA·클레임·SCAR 종결은 `POST /api/records/<label>/<id>/close/`(설명서 `close=True`, `change_` 권한)로 하고, 종결일은 서버가 넣는다. 모델 `clean`(8D 전 단계·SCAR 회신·CAPA 유효)이 같은 문구로 막고(400), 이미 종결된 기록은 400이다. `closed_at`은 `SIGN_FIELDS`라 범용 저장으로 바꿀 수 없다. 내부심사도 같은 「종결」로 닫고 `InternalAudit.clean`(실시일, CAPA 없는 중·경부적합 지적)이 막는다. | `core/api/records.py` `RecordCloseView`, `core/rules.py` `close_record` |
+| CAPA·클레임·SCAR 종결은 `POST /api/records/<label>/<id>/close/`(설명서 `close=True`, `change_` 권한)로 하고, 종결일은 서버가 넣는다. 모델 `clean`(8D 전 단계·SCAR 회신·CAPA 유효)이 같은 문구로 막고(400), 이미 종결된 기록은 400이다. `closed_at`은 `SIGN_FIELDS`라 범용 저장으로 바꿀 수 없다. 내부심사도 같은 「종결」로 닫고 `InternalAudit.clean`(실시일, CAPA 없는 중·경부적합 발견사항)이 막는다. | `core/api/records.py` `RecordCloseView`, `core/rules.py` `close_record` |
 | PPAP 요소는 PSW 승인 후 기록 화면에서 고칠 수 없다: 설명서 `lock_parent='submission'`이라 `locked`로 보이고 범용 저장은 409다(시스템 관리자 포함). 모델 `PpapElement.save`도 그대로 막는다. | `core/recordspec.py`, `core/api/records.py` `_parent_locked` |
 | 기록 화면은 설명서 `Spec.edit` 칸만 고친다(외래키·일시 포함). 서명·처분 칸, 부적합의 LOT·발견 일시, 실적·출하의 LOT, 자동 번호, 붙어 있는 부모(문서·심사·PPAP·작업지시·실적의 공정 단계), 품번·코드는 넣지 않으며 관리 화면 링크는 시스템 관리자에게만 준다(`_detail` `admin_url`). 보류 LOT 실적·출하 차단과 양품+불량 ≤ 투입은 모델 `clean`/`save`가 그대로 막는다. 일반 메뉴는 `app_href`로 새 화면 주소를 내보내고, 사용자·모듈 켜기/끄기·전체 메뉴(`/admin/`)는 시스템 관리자에게만 보인다. | `core/recordspec.py`, `core/nav.py` `app_href`, `core/models.py` |
 | 기록 화면 「새로 만들기」(`POST /api/records/<label>/`)는 설명서 `Spec.create`가 있는 모델(작업지시·작업 실적·출하·거래처·부서·번호 코드값·번호 규칙)만 열고 `add_` 권한을 서버에서 검사한다. `Spec.create` 밖의 칸은 거부하고, 모델 폼 `full_clean` → `rules.save_with_lock`으로 저장하므로 보류 LOT 실적·출하 차단 등 모델 규칙이 그대로 적용된다. `created_by`·`operator`가 비어 있으면 요청 사용자로 넣는다. | `core/api/records.py` `RecordListView.post`, `core/recordspec.py` `creator` |
@@ -130,8 +130,8 @@
 | 엑셀 일괄 등록은 대상(품번·작업지시)의 추가·변경 권한이 모두 있어야 올릴 수 있다(기존 행을 덮어쓰므로). 각 행은 모델 검증(`full_clean`)을 거치고, 한 행이라도 틀리면 전체를 되돌린다. | `core/views.py` `import_view`, `core/importer.py` |
 | 인쇄·승인·삭제 요청 경로는 개인 자료와 계정·세션 등 시스템 기록(`personal`, `auth`, `admin`, `sessions`, `contenttypes`)을 열지 않는다. | `core/views.py` `_get_record` |
 | 엑셀 양식 출력은 읽기 전용 메서드만 호출한다. 개인·인증 앱(`PRIVATE_APPS`)은 양식 대상과 심사 증적·PPAP 요소의 기록 종류에서 제외하고, 값을 따라가다 그 앱 기록에 닿으면 칸을 비운다. | `qms/models.py` `PRIVATE_APPS`, `ExcelTemplate.fill`, `report_safe` |
-| 품질 KPI(실패비용 포함)는 `qms.view_customerclaim`, 협력사 성적표는 `qms.view_scar`, SPC 관리도는 `qms.view_measurement`, 내 할 일 목록 위젯은 `core.view_nonconformance` 권한이 있어야 본다. 검사원은 KPI·협력사 화면을 볼 수 없다. | `qms/views.py`, `qms/widgets.py`, `core/nav.py` |
-| KPI는 소속 부서 것만 본다(`/kpi/` 화면과 내 할 일 KPI 위젯 모두). 부서는 역할 그룹 묶음이고 지금은 `품질`(품질엔지니어·품질팀장·검사원)뿐이다. PPM·직행률·8D·실패비용·불량유형 파레토는 품질, 공정 수율은 품질·생산 부서 KPI다. 품질팀장·시스템 관리자는 모든 부서 KPI를 본다. KPI 위젯은 `/kpi/`와 같은 `qms.view_customerclaim` 권한도 있어야 보인다. 부서를 늘리려면 `DEPARTMENTS`에 그룹을 더한다. | `qms/kpi.py` `DEPARTMENTS`·`KPI_DEPARTMENTS`·`can_see`, `qms/views.py` `kpi_view`, `qms/widgets.py` `kpi_allowed` |
+| 품질 KPI(실패비용 포함)는 `qms.view_customerclaim`, 공급자 성적표는 `qms.view_scar`, SPC 관리도는 `qms.view_measurement`, 내 할 일 목록 위젯은 `core.view_nonconformance` 권한이 있어야 본다. 검사원은 KPI·공급자 화면을 볼 수 없다. | `qms/views.py`, `qms/widgets.py`, `core/nav.py` |
+| KPI는 소속 부서 것만 본다(`/kpi/` 화면과 내 할 일 KPI 위젯 모두). 부서는 역할 그룹 묶음이고 지금은 `품질`(품질엔지니어·품질팀장·검사원)뿐이다. PPM·직행률·8D·실패비용·부적합 유형 파레토는 품질, 공정 수율은 품질·생산 부서 KPI다. 품질팀장·시스템 관리자는 모든 부서 KPI를 본다. KPI 위젯은 `/kpi/`와 같은 `qms.view_customerclaim` 권한도 있어야 보인다. 부서를 늘리려면 `DEPARTMENTS`에 그룹을 더한다. | `qms/kpi.py` `DEPARTMENTS`·`KPI_DEPARTMENTS`·`can_see`, `qms/views.py` `kpi_view`, `qms/widgets.py` `kpi_allowed` |
 
 ### 모듈 켜기/끄기
 
@@ -148,7 +148,7 @@
 
 ## 11. 이력
 
-감사 기록 화면(`/app/audit`, API `GET /api/audit-log/`)은 승인자(`is_approver`: 품질팀장·시스템 관리자)만 본다. 개인정보 앱(`PRIVATE_APPS`, `personal` 등)의 이력은 보여 주지 않고, `password` 필드 변경은 가린다(`core/api/views.py` `AuditLogView`, `core/audit.py` `audited_models`·`SECRET_FIELDS`). 사이드바의 "감사 기록" 메뉴도 승인자에게만 나온다(`core/nav.py`).
+변경 이력 조회 화면(`/app/audit`, API `GET /api/audit-log/`)은 승인자(`is_approver`: 품질팀장·시스템 관리자)만 본다. 개인정보 앱(`PRIVATE_APPS`, `personal` 등)의 이력은 보여 주지 않고, `password` 필드 변경은 가린다(`core/api/views.py` `AuditLogView`, `core/audit.py` `audited_models`·`SECRET_FIELDS`). 사이드바의 "변경 이력 조회" 메뉴도 승인자에게만 나온다(`core/nav.py`).
 
 업무 모델은 `history = HistoricalRecords()`로 모든 변경을 남긴다. 새 업무 모델에도 붙이고, 기존 모델에서 제거하지 않는다. 여러 행을 한꺼번에 저장할 때는 `bulk_create`·`update()` 대신 이력을 남기는 `simple_history.utils.bulk_create_with_history`·`bulk_update_with_history`를 쓴다(보류 생성·해제, 부적합 메일 발송 표시가 이 방식이다: `core/models.py` `Nonconformance.save`, `core/views.py` `_mark_mailed`).
 

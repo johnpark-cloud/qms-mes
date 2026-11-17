@@ -105,7 +105,7 @@ class QuickNcForm(forms.Form):
     lot = forms.CharField(label='LOT 번호', max_length=100)
     origin = forms.ChoiceField(label='발생 유형', choices=Nonconformance.ORIGINS, initial='PROCESS')
     description = forms.CharField(label='부적합 내용', widget=forms.Textarea(attrs={'rows': 4}))
-    defect_qty = forms.DecimalField(label='불량 수량', min_value=0, initial=1)
+    defect_qty = forms.DecimalField(label='부적합 수량', min_value=0, initial=1)
     photos = MultiPhotoField(label='사진', required=False)
 
     def clean_lot(self):

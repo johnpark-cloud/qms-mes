@@ -17,7 +17,7 @@ const COLUMNS: ColumnsType<QueueRow> = [
   { title: 'LOT', dataIndex: 'number' },
   { title: '품번', dataIndex: 'item_code' },
   { title: '품명', dataIndex: 'item_name' },
-  { title: '협력사', dataIndex: 'supplier' },
+  { title: '공급자', dataIndex: 'supplier' },
   { title: '수량', dataIndex: 'qty', align: 'right' },
   { title: '생성일', dataIndex: 'created_at', render: (v: string) => v.slice(0, 10) },
   { title: '보류', dataIndex: 'on_hold', render: (v: boolean) => (v ? <Tag color="red">보류</Tag> : null) },
@@ -70,7 +70,7 @@ function ReceiveModal({ init, onClose, onDone }: { init: Receive | null; onClose
         <Form.Item label="입고수량" name="qty" rules={[{ required: true, whitespace: true, message: '입고수량을 입력하세요.' }]}>
           <Input inputMode="decimal" />
         </Form.Item>
-        <Form.Item label="협력사" name="supplier">
+        <Form.Item label="공급자" name="supplier">
           <AutoComplete options={(init?.suppliers ?? []).map((s) => ({ value: s }))} filterOption />
         </Form.Item>
         {err && <Alert style={{ marginBottom: 12 }} type="error" message={err} />}
@@ -136,7 +136,7 @@ export default function InspectPage() {
   return (
     <div>
       <h1 className="page-title">검사 입력</h1>
-      {/* 스캐너는 그대로 번호 + Enter. 손으로 찾을 때는 번호·품번·품명·협력사 일부를 치고 목록에서 고른다. */}
+      {/* 스캐너는 그대로 번호 + Enter. 손으로 찾을 때는 번호·품번·품명·공급자 일부를 치고 목록에서 고른다. */}
       <AutoComplete
         style={{ width: '100%', maxWidth: 480 }}
         options={lotOptions}
@@ -162,13 +162,13 @@ export default function InspectPage() {
           }}
         />
       </AutoComplete>
-      <div className="palette-sub" style={{ marginTop: 4 }}>번호를 몰라도 품번·품명·협력사 일부를 치면 목록에서 고를 수 있습니다.</div>
+      <div className="palette-sub" style={{ marginTop: 4 }}>번호를 몰라도 품번·품명·공급자 일부를 치면 목록에서 고를 수 있습니다.</div>
       {err && <Alert style={{ marginTop: 12 }} type="error" message={err} role="alert" />}
       {notice && <Alert style={{ marginTop: 12 }} type="info" message={notice} />}
       {result && (
         <div style={{ margin: '12px 0 20px' }}>
           <p>
-            <b>{result.lot.number}</b> · {result.lot.item_code} {result.lot.item_name} · {result.lot.supplier || '협력사 없음'} · 수량 {result.lot.qty}
+            <b>{result.lot.number}</b> · {result.lot.item_code} {result.lot.item_name} · {result.lot.supplier || '공급자 없음'} · 수량 {result.lot.qty}
             {result.lot.on_hold && <Tag color="red" style={{ marginLeft: 8 }}>보류</Tag>}
           </p>
           {result.specs.length ? (

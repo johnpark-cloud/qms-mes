@@ -129,7 +129,7 @@ def _lot_row(lot, held):
 
 
 class LotSearchView(APIView):
-    """LOT 고르기 목록: 번호·품번·품명·협력사 일부로 찾는다. 검색어가 없으면 최근 LOT."""
+    """LOT 고르기 목록: 번호·품번·품명·공급자 일부로 찾는다. 검색어가 없으면 최근 LOT."""
     schema = None
 
     def get(self, request):

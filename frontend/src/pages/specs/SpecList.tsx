@@ -12,7 +12,7 @@ const TABS = [
   { key: 'all', label: '전체' },
   { key: 'draft', label: '초안' },
   { key: 'approved', label: '승인됨' },
-  { key: 'current', label: '유효본만' },
+  { key: 'current', label: '최신 승인본만' },
 ]
 
 const COLUMNS: ColumnsType<SpecRow> = [

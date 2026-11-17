@@ -54,7 +54,7 @@ class AuthApiTest(TestCase):
         body = self.client.get('/api/auth/me/').json()
         labels = [i['label'] for g in body['nav'] for i in g['items']]
         self.assertIn('내 할 일', labels)
-        self.assertNotIn('LOT 이력 조회', labels)  # core.view_lot이 없다
+        self.assertNotIn('추적성 조회(LOT 이력)', labels)  # core.view_lot이 없다
         self.assertFalse(body['is_approver'])
 
     def test_login_without_csrf_rejected(self):

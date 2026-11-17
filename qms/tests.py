@@ -96,7 +96,7 @@ class QmsTest(TestCase):
         rev2 = InspectionSpec.objects.create(item=self.raw_item, inspection_type=InspectionSpec.INCOMING, revision=2)
         Characteristic.objects.create(spec=rev2, name='두께', lsl=Decimal('9.5'), usl=Decimal('10.5'))
         approve(rev2, self.lead)
-        with self.assertRaisesMessage(ValidationError, '유효본이 아닙니다'):
+        with self.assertRaisesMessage(ValidationError, '최신 승인본이 아닙니다'):
             Inspection.objects.create(lot=self.raw, spec=self.spec)
         pending.finalize()  # 이미 만든 검사는 그대로 판정된다
         self.assertEqual(pending.result, Inspection.PASS)
@@ -267,7 +267,7 @@ class QmsTest(TestCase):
         self.assertFalse(spec.is_approved)
 
     def test_4m_change_blocks_shipment_until_first_article(self):
-        cr = ChangeRequest.objects.create(number='4M-1', item=self.raw_item, category='MATERIAL', description='원료 협력사 변경',
+        cr = ChangeRequest.objects.create(number='4M-1', item=self.raw_item, category='MATERIAL', description='원료 공급자 변경',
                                           effective_at=timezone.now() - datetime.timedelta(hours=1))
         self.client.force_login(self.lead)
         self.client.post(f'/approve/qms/changerequest/{cr.pk}/', {'password': 'pw-lead-123'})
@@ -516,7 +516,7 @@ class QmsTest(TestCase):
         self.assertNotIn('django-insecure', settings.SECRET_KEY)
         self.assertNotIn('django-insecure', (Path(settings.BASE_DIR) / 'config' / 'settings.py').read_text('utf-8'))
 
-    # KPI · 협력사 · 재발 방지
+    # KPI · 공급자 · 재발 방지
     def test_kpi_and_suppliers(self):
         self.raw.supplier = 'B소재'
         self.raw.qty = 1000
@@ -614,6 +614,7 @@ class QmsTest(TestCase):
         self.assertEqual(ppap.elements.count(), 18)
         self.assertEqual(ppap.elements.get(number=7).record, plan)  # 관리계획서 자동 연결
         self.assertEqual(ppap.elements.get(number=15).requirement, 'R')
+        self.assertEqual(ppap.elements.get(number=17).name, '고객 특정 요구사항')  # IATF 4.3.2 CSR 용어
         self.client.force_login(self.lead)
         url = f'/approve/qms/ppapsubmission/{ppap.pk}/'
         self.assertContains(self.client.post(url, {'password': 'pw-lead-123'}), '증적이 없습니다')
@@ -755,7 +756,7 @@ class QmsTest(TestCase):
             r = self.client.get('/kpi/')
             self.assertContains(r, '공정별 수율')
             self.assertNotContains(r, '월별 추이')
-            self.assertNotContains(r, '불량유형 파레토')
+            self.assertNotContains(r, '부적합 유형 파레토')
             self.client.force_login(self.lead)  # 품질팀장은 모든 부서 KPI
             r = self.client.get('/kpi/')
             self.assertContains(r, '월별 추이')
@@ -1214,7 +1215,7 @@ class OverviewTest(TestCase):
         self.assertIn('href="/overview/"', self.client.get('/todo/').content.decode())  # 홈 묶음 메뉴
         html = self.client.get('/overview/').content.decode()
         for title in ('진행 중 작업지시', '계획 대비 실적', '생산 수율', '검사 불합격', '보류 LOT', '열린 부적합',
-                      '진행 중 CAPA', '계측기 교정', 'SPC 경보', '협력사 품질'):
+                      '진행 중 CAPA', '계측기 교정', 'SPC 경보', '공급자 품질'):
             self.assertIn(title, html)
         self.assertIn('WO-1', html)
         links = self.admin_links(html)
@@ -1227,7 +1228,7 @@ class OverviewTest(TestCase):
         html = self.client.get('/overview/').content.decode()
         self.assertIn('검사 불합격', html)
         self.assertIn('열린 부적합', html)
-        for title in ('보류 LOT', '진행 중 CAPA', '협력사 품질'):  # 검사원은 보류·CAPA·SCAR 조회 권한이 없다
+        for title in ('보류 LOT', '진행 중 CAPA', '공급자 품질'):  # 검사원은 보류·CAPA·SCAR 조회 권한이 없다
             self.assertNotIn(title, html)
         self.client.force_login(User.objects.create_user('plain', is_staff=True))
         self.assertIn('볼 수 있는 현황이 없습니다', self.client.get('/overview/').content.decode())
@@ -1381,7 +1382,7 @@ class InspectionDocumentTest(TestCase):
         self.assertFalse(d['draft'])
         self.assertIsNone(d['revisions'])
         head = dict(d['head'])
-        self.assertEqual((head['LOT'], head['협력사'], head['수량'], head['판정']), ('D-LOT-1', '성일철강', '50', '불합격'))
+        self.assertEqual((head['LOT'], head['공급자'], head['수량'], head['판정']), ('D-LOT-1', '성일철강', '50', '불합격'))
         self.assertEqual(head['부적합'], self.insp.nonconformance.number)
         t = d['tables'][0]
         self.assertEqual(t['columns'], ['검사항목', '규격', '측정값', '계측기', '판정'])

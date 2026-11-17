@@ -11,7 +11,7 @@
         </select></p>
       <p><label for="r-number">LOT 번호</label><input id="r-number" name="number" value="{{ number }}" required></p>
       <p><label for="r-qty">입고수량</label><input id="r-qty" name="qty" inputmode="decimal" required></p>
-      <p><label for="r-supplier">협력사</label><input id="r-supplier" name="supplier" list="supplier-list" maxlength="100">
+      <p><label for="r-supplier">공급자</label><input id="r-supplier" name="supplier" list="supplier-list" maxlength="100">
         <datalist id="supplier-list">{% for s in suppliers %}<option value="{{ s }}">{% endfor %}</datalist></p>
       <p><button type="submit">등록하고 검사 시작</button></p>
     </form>

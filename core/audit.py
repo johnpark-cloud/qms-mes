@@ -1,4 +1,4 @@
-"""감사 기록: simple-history 이력을 화면용으로 읽는다. 개인정보 앱(PRIVATE_APPS)은 보여 주지 않는다."""
+"""변경 이력 조회: simple-history 이력을 화면용으로 읽는다. 개인정보 앱(PRIVATE_APPS)은 보여 주지 않는다."""
 from django.apps import apps
 
 TYPES = {'+': '생성', '~': '변경', '-': '삭제'}

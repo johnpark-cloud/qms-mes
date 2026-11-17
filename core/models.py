@@ -53,7 +53,7 @@ class Item(models.Model):
     history = HistoricalRecords()
 
     class Meta:
-        verbose_name = verbose_name_plural = '품번'
+        verbose_name = verbose_name_plural = '품목'
 
     def __str__(self):
         return f'{self.code} {self.name}'
@@ -179,7 +179,7 @@ class WorkOrder(models.Model):
     STATUSES = [(PLANNED, '계획'), (RUNNING, '진행'), (DONE, '완료')]
 
     number = models.CharField('작업지시 번호', max_length=50, unique=True)
-    item = models.ForeignKey(Item, on_delete=models.PROTECT, verbose_name='품번')
+    item = models.ForeignKey(Item, on_delete=models.PROTECT, verbose_name='품목')
     process = models.ForeignKey(Process, on_delete=models.PROTECT, null=True, blank=True, verbose_name='공정')
     planned_qty = models.DecimalField('계획 수량', max_digits=12, decimal_places=3)
     due_date = models.DateField('납기', null=True, blank=True)
@@ -204,7 +204,7 @@ class WorkOrder(models.Model):
 
 class RoutingStep(models.Model):
     """품번별 공정 순서. 작업 실적은 이 순서를 건너뛸 수 없다."""
-    item = models.ForeignKey(Item, on_delete=models.CASCADE, related_name='routing', verbose_name='품번')
+    item = models.ForeignKey(Item, on_delete=models.CASCADE, related_name='routing', verbose_name='품목')
     seq = models.PositiveSmallIntegerField('순서', help_text='10, 20, 30처럼 띄워 두면 중간에 공정을 넣기 쉽다')
     process = models.ForeignKey(Process, on_delete=models.PROTECT, verbose_name='공정')
     history = HistoricalRecords()
@@ -282,12 +282,12 @@ class ImportProfile(models.Model):
 
 class Lot(models.Model):
     number = models.CharField('LOT/시리얼 번호', max_length=80, unique=True)
-    item = models.ForeignKey(Item, on_delete=models.PROTECT, verbose_name='품번')
+    item = models.ForeignKey(Item, on_delete=models.PROTECT, verbose_name='품목')
     work_order = models.ForeignKey(WorkOrder, on_delete=models.PROTECT, null=True, blank=True,
                                    related_name='lots', verbose_name='작업지시')
     is_serial = models.BooleanField('시리얼', default=False)
     qty = models.DecimalField('수량', max_digits=12, decimal_places=3, default=1)
-    supplier = models.CharField('협력사', max_length=100, blank=True, help_text='구매 자재 LOT이면 입력 (협력사 성적표에 사용)')
+    supplier = models.CharField('공급자', max_length=100, blank=True, help_text='구매 자재 LOT이면 입력 (공급자 성적표에 사용)')
     partner = models.ForeignKey('core.Partner', on_delete=models.PROTECT, null=True, blank=True, related_name='lots',
                                 limit_choices_to={'is_supplier': True}, verbose_name='거래처')
     created_at = models.DateTimeField('생성', default=timezone.now)
@@ -389,7 +389,7 @@ def _nc_number():
 
 
 class Nonconformance(models.Model):
-    ORIGINS = [('INCOMING', '수입검사·협력사'), ('PROCESS', '공정 내부'), ('OUTGOING', '출하검사'), ('CLAIM', '고객 클레임'),
+    ORIGINS = [('INCOMING', '수입검사·공급자'), ('PROCESS', '공정 내부'), ('OUTGOING', '출하검사'), ('CLAIM', '고객 클레임'),
                ('RETURN', '반품')]
     AFTER_APPROVAL = {'cost', 'customer_notified_on', 'capa_required', 'mailed_at'}  # 승인 뒤에도 기록하는 칸
     INTERLOCK = ['lot', 'detected_at', 'disposition', 'customer_approval_ref']  # 종결 뒤 바뀌면 보류 계산이 어긋나는 칸
@@ -406,15 +406,15 @@ class Nonconformance(models.Model):
     inspected_qty = models.DecimalField('검사·로트 수량', max_digits=12, decimal_places=3, null=True, blank=True)
     description = models.TextField('부적합 내용', help_text='5W1H: 언제·어디서·누가·무엇을·어떻게·왜')
     measured_value = models.CharField('규격 대비 측정값', max_length=200, blank=True, help_text='예: 두께 10.8mm (규격 9.5~10.5)')
-    special_char = models.CharField('특별특성', max_length=2, choices=[('CC', 'CC'), ('SC', 'SC')], blank=True)
+    special_char = models.CharField('특별특성', max_length=2, choices=[('CC', 'CC(핵심·안전)'), ('SC', 'SC(중요)')], blank=True)
     contained_qty = models.DecimalField('격리 수량', max_digits=12, decimal_places=3, null=True, blank=True)
     sorting_result = models.TextField('재고·재공·출하분 선별 결과', blank=True)
     customer_notify = models.BooleanField('고객 통보 필요', default=False)
     customer_notified_on = models.DateField('고객 통보일', null=True, blank=True)
     capa_required = models.BooleanField('시정조치 필요', null=True, blank=True)
     detected_at = models.DateTimeField('발견 일시', default=timezone.now)
-    defect_type = models.CharField('불량유형', max_length=100, blank=True, help_text='예: 치수, 이물, 외관, 용량 (파레토 집계 단위)')
-    defect_qty = models.DecimalField('불량 수량', max_digits=12, decimal_places=3, default=0)
+    defect_type = models.CharField('부적합 유형', max_length=100, blank=True, help_text='예: 치수, 이물, 외관, 용량 (파레토 집계 단위)')
+    defect_qty = models.DecimalField('부적합 수량', max_digits=12, decimal_places=3, default=0)
     cost = models.DecimalField('실패비용(원)', max_digits=14, decimal_places=0, default=0,
                                help_text='폐기·재작업·선별·운송 등 이 부적합으로 든 비용')
     disposition = models.CharField('처분', max_length=10, choices=DISPOSITIONS, blank=True)
@@ -456,9 +456,9 @@ class Nonconformance(models.Model):
         rows = [
             ['① 구분', '발생 유형', self.get_origin_display()], ['', '발견 공정', d(self.process)],
             ['', '발견자', d(self.detected_by)], ['', '발견 일시', when(self.detected_at)],
-            ['② 대상', 'LOT', self.lot], ['', '품번', self.lot.item], ['', '협력사', d(self.lot.supplier)],
-            ['', '불량 수량', self.defect_qty], ['', '검사·로트 수량', d(self.inspected_qty)],
-            ['③ 현상', '불량유형', d(self.defect_type)], ['', '상세 내용', self.description],
+            ['② 대상', 'LOT', self.lot], ['', '품번', self.lot.item], ['', '공급자', d(self.lot.supplier)],
+            ['', '부적합 수량', self.defect_qty], ['', '검사·로트 수량', d(self.inspected_qty)],
+            ['③ 현상', '부적합 유형', d(self.defect_type)], ['', '상세 내용', self.description],
             ['', '규격 대비 측정값', d(self.measured_value)], ['', '특별특성', d(self.special_char, '해당 없음')],
             ['④ 긴급 조치', '격리 수량', d(self.contained_qty)], ['', '선별 결과', d(self.sorting_result)], ['', '고객 통보', notify],
             ['⑤ 처분', '처분', d(self.get_disposition_display())], ['', '특채 고객 승인번호', d(self.customer_approval_ref)],
@@ -786,15 +786,16 @@ class Department(MasterModel):
 
 
 class Partner(MasterModel):
-    """협력사·고객사·외주처·교정기관 (한 회사가 여러 구분을 가질 수 있다)."""
-    ROLE_MSG = '협력사·고객사·외주처·교정기관 중 하나 이상을 고르세요.'
+    """공급자·고객사·외주처·교정기관 (한 회사가 여러 구분을 가질 수 있다)."""
+    ROLE_MSG = '공급자·고객사·외주처·교정기관 중 하나 이상을 고르세요.'
     NEW, APPROVED, CONDITIONAL, SUSPENDED = 'new', 'approved', 'conditional', 'suspended'
     STATUS_CHOICES = [(NEW, '신규 평가'), (APPROVED, '승인'), (CONDITIONAL, '조건부 승인'), (SUSPENDED, '거래 중지')]
     GRADE_CHOICES = [(g, g) for g in 'ABCD']
 
     code = models.CharField('거래처 코드', max_length=20, unique=True)
     name = models.CharField('거래처 이름', max_length=100)
-    is_supplier = models.BooleanField('협력사', default=False)
+    is_supplier = models.BooleanField('공급자(자재·부품)', default=False,
+                                      help_text='외부 공급자(ISO 9001 8.4)에는 외주처·교정기관도 들어간다.')
     is_customer = models.BooleanField('고객사', default=False)
     is_outsource = models.BooleanField('외주처', default=False)
     is_calibrator = models.BooleanField('교정기관', default=False)

@@ -54,7 +54,7 @@ class InspectionRulesTest(TestCase):
         self.assertIsNone(measurement(self.char, 'nan'))
 
     def test_receive(self):
-        lot, created = receive_lot('NEW-1', self.item, '5', '협력사A')
+        lot, created = receive_lot('NEW-1', self.item, '5', '공급자A')
         self.assertTrue(created)
         with self.assertRaisesMessage(ValidationError, RECEIVE_MSG):
             receive_lot('NEW-2', self.item, '0', '')

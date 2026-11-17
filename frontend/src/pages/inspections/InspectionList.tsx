@@ -16,7 +16,7 @@ const COLUMNS: ColumnsType<InspectionRow> = [
   { title: '검사 일시', dataIndex: 'inspected_at', sorter: true, render: (v: string) => v.slice(0, 16).replace('T', ' ') },
   { title: 'LOT', dataIndex: 'lot_number', sorter: true },
   { title: '품번', dataIndex: 'item_code', sorter: true },
-  { title: '협력사', dataIndex: 'supplier', sorter: true },
+  { title: '공급자', dataIndex: 'supplier', sorter: true },
   { title: '검사기준', dataIndex: 'spec_title', sorter: true },
   { title: '검사자', dataIndex: 'inspector', sorter: true },
   { title: '판정', dataIndex: 'result_display', key: 'result', sorter: true, render: (v: InspectionRow['result_display']) => <Tag color={COLOR[v]}>{v}</Tag> },
@@ -51,7 +51,7 @@ function Peek({ row }: { row: InspectionRow }) {
       <span>
         {row.item_code} · {row.item_name}
       </span>
-      <span>협력사</span>
+      <span>공급자</span>
       <span>{row.supplier}</span>
       <span>검사기준</span>
       <span>{row.spec_title}</span>

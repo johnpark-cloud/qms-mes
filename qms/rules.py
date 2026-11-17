@@ -55,7 +55,7 @@ def submit_inspection(lot, spec, user, gauge, values, defect_type='', defect_qty
         insp.finalize()
         nc = insp.nonconformance
         if nc:
-            if insp.result == Inspection.FAIL:  # 불합격 부적합에만 검사원이 고른 불량유형·수량을 채운다 (SPC 경보 부적합은 그대로)
+            if insp.result == Inspection.FAIL:  # 불합격 부적합에만 검사원이 고른 부적합 유형·수량을 채운다 (SPC 경보 부적합은 그대로)
                 nc.defect_type = defect_type.strip()[:100]
                 nc.defect_qty = _qty(defect_qty)
             nc.inspected_qty, nc.detected_by = lot.qty, user
