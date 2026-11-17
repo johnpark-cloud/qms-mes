@@ -66,6 +66,30 @@ class PartnerTest(TestCase):
         p.is_supplier = True
         p.full_clean()
 
+    def test_code_numbered_after_highest_p_code(self):
+        Partner.objects.create(code='P0007', name='가', is_supplier=True)
+        Partner.objects.create(code='S1', name='나', is_supplier=True)  # P숫자 꼴이 아닌 코드는 세지 않는다
+        p = Partner(name='다', is_customer=True)
+        p.full_clean()
+        self.assertEqual(p.code, 'P0008')
+        p = Partner(code='X-1', name='라', is_customer=True)
+        p.full_clean()
+        self.assertEqual(p.code, 'X-1')  # 직접 쓴 코드는 그대로
+
+    def test_old_qc_columns_copied_to_contacts(self):
+        import importlib
+        from django.apps import apps
+        mig = importlib.import_module('core.migrations.0017_partner_contacts')
+        a = Partner.objects.create(code='A', name='가', is_supplier=True, qc_name='김', qc_phone='02', qc_email='k@x.kr')
+        b = Partner.objects.create(code='B', name='나', is_supplier=True)
+        c = Partner.objects.create(code='C', name='다', is_supplier=True, qc_phone='03', contacts=[{'name': '이미'}])
+        mig.copy_qc(apps, None)
+        a.refresh_from_db(); b.refresh_from_db(); c.refresh_from_db()
+        self.assertEqual(a.contacts, [{'role': '품질', 'name': '김', 'phone': '02', 'email': 'k@x.kr'}])
+        self.assertEqual(a.qc_name, '김')  # 옛 칸은 지우지 않는다
+        self.assertEqual(b.contacts, [])
+        self.assertEqual(c.contacts, [{'name': '이미'}])  # 이미 있으면 덮지 않는다
+
     def test_engineer_can_edit_certificate_not_partner(self):
         eng = staff('eng', '품질엔지니어')
         self.assertTrue(eng.has_perm('core.add_partnercertificate'))

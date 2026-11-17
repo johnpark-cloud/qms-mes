@@ -128,7 +128,8 @@ class RecordNewView(APIView):
         model, spec = _create_spec(request.user, label)
         form = modelform_factory(model, fields=spec.create)()
         return Response({'title': str(model._meta.verbose_name), 'list_url': f'/app/r/{model._meta.app_label}/{model._meta.model_name}',
-                         'fields': [recordspec.creator(model, n, form) for n in spec.create]})
+                         'fields': [recordspec.creator(model, n, form) for n in spec.create],
+                         'groups': recordspec.groups_of(spec)})
 
 
 def _perm(user, model, action):
@@ -180,6 +181,7 @@ def _detail(obj, spec, user):
     locked = by_parent or is_locked(obj)
     return {'ct': meta.label_lower, 'id': obj.pk, 'title': str(obj), 'kind': str(meta.verbose_name),
             'status': status_of(obj), 'fields': fields, 'children': children, 'side': list(spec.side),
+            'groups': recordspec.groups_of(spec),
             'admin_url': f'/admin/{meta.app_label}/{meta.model_name}/{obj.pk}/change/' if user.is_superuser else None,
             'list_url': f'/app/r/{meta.app_label}/{meta.model_name}',
             'version': record_version(obj, ()), 'locked': locked,

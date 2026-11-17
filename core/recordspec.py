@@ -34,6 +34,7 @@ class Spec(NamedTuple):
     close: bool = False  # 「종결」 버튼(POST …/close/): 서버가 종결일을 넣고 모델 clean 규칙이 막는다(REC-09)
     lock_parent: str = ''  # 이 부모가 승인되면 잠긴다(예: PPAP 요소). 기록 화면에서는 시스템 관리자도 못 고친다(REC-10)
     create: tuple = ()  # 기록 화면 「새로 만들기」 칸(외래키 가능). 비면 관리 화면 추가 폼. 규칙은 모델 clean/save가 막는다
+    groups: tuple = ()  # (이름, 예/아니오 칸들): 한 줄에 체크 상자로 모아 보인다
 
 
 # 승인 서명·판정 경로로만 바뀌는 칸. 범용 저장(PATCH)은 이 칸을 받지 않는다(REC-06).
@@ -48,6 +49,14 @@ LABELS = {'core.hold': {'lot': 'LOT', 'nonconformance': '부적합', 'created_at
           'qms.ppapelement': {'record': '증적 기록'},
           'qms.evidence': {'record': '증적 기록'},
           'core.workorder': {'progress': '진도율(%)'}}
+
+
+# 여러 줄 표 칸(JSON 목록): 열 (키, 이름). 기록 화면에서 줄을 더하고 뺀다. 검사는 모델 clean이 한다
+ROWS = {'core.partner': {'contacts': (('role', '업무'), ('name', '이름'), ('phone', '전화'), ('email', '이메일'))}}
+
+
+def groups_of(spec):
+    return [{'label': label, 'keys': list(keys)} for label, keys in spec.groups]
 
 
 def sign_fields(spec):
@@ -252,18 +261,18 @@ SPECS = {
         create=('lot', 'partner', 'customer', 'qty')),
     # 기준정보: 코드·대상처럼 다른 기록이 가리키는 칸, 외래키, JSON(선택지·매핑)은 관리 화면에서
     'core.partner': Spec(
-        fields=('code', 'name', 'is_customer', 'is_supplier', 'is_outsource', 'is_calibrator', 'qc_name', 'qc_phone',
-                'qc_email', 'status', 'grade', 'evaluated_on', 'active', 'note'),
+        fields=('code', 'name', 'is_customer', 'is_supplier', 'is_outsource', 'is_calibrator', 'contacts',
+                'status', 'grade', 'evaluated_on', 'active', 'note'),
         columns=('code', 'name', 'is_customer', 'is_supplier', 'status', 'grade'),
-        search=('code', 'name', 'qc_name'),
+        search=('code', 'name', 'contacts'),
         tabs=(ALL, ('customer', '고객', lambda qs: qs.filter(is_customer=True)),
               ('supplier', '공급', lambda qs: qs.filter(is_supplier=True))),
         children=(Child('certificates', '인증', ('standard', 'cert_no', 'valid_until', 'file'), ('valid_until',)),),
         order=('code',),
-        edit=('name', 'is_customer', 'is_supplier', 'is_outsource', 'is_calibrator', 'qc_name', 'qc_phone', 'qc_email',
+        edit=('name', 'is_customer', 'is_supplier', 'is_outsource', 'is_calibrator', 'contacts',
               'status', 'grade', 'evaluated_on', 'active', 'note'),
-        create=('code', 'name', 'is_customer', 'is_supplier', 'is_outsource', 'is_calibrator', 'qc_name', 'qc_phone',
-                'qc_email', 'note')),
+        create=('name', 'is_customer', 'is_supplier', 'is_outsource', 'is_calibrator', 'contacts', 'note'),  # 코드는 모델이 매긴다
+        groups=(('구분', ('is_customer', 'is_supplier', 'is_outsource', 'is_calibrator')),)),
     'core.department': Spec(
         fields=('code', 'name', 'parent', 'manager', 'sort', 'active', 'note'),
         columns=('code', 'name', 'parent', 'manager', 'active'),
@@ -344,6 +353,10 @@ def value_of(obj, name):
     v = getattr(obj, name)
     if v is None or v == '':
         return '', None
+    cols = ROWS.get(obj._meta.label_lower, {}).get(name)
+    if cols:  # 한 줄에 한 사람: "업무 이름 · 전화 · 이메일"
+        return '\n'.join(' · '.join(x for x in (f"{r.get('role', '')} {r.get('name', '')}".strip(),
+                                                *(r.get(k, '') for k, _ in cols[2:])) if x) for r in v), None
     if isinstance(v, models.Model):
         return str(v), record_url(v)
     if isinstance(field, models.FileField):
@@ -368,6 +381,10 @@ def editor(obj, name):
             objs.insert(0, v)
         return {'key': name, 'label': str(f.verbose_name), 'type': 'choice', 'value': str(v.pk) if v else None,
                 'required': not f.blank, 'choices': [{'value': str(o.pk), 'label': str(o)} for o in objs]}
+    cols = ROWS.get(obj._meta.label_lower, {}).get(name)
+    if cols:
+        return {'key': name, 'label': str(f.verbose_name), 'type': 'rows', 'value': v or [], 'required': False,
+                'choices': None, 'columns': [{'key': k, 'label': n} for k, n in cols]}
     if f.choices:
         kind = 'choice'
     elif isinstance(f, models.BooleanField):

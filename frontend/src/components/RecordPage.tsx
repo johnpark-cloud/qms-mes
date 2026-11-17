@@ -11,7 +11,8 @@ interface Props {
   status?: string
   /** 주요 버튼 1개. 나머지 동작은 menu(「⋯」)로 보낸다. */
   actions: ReactNode
-  props: { label: string; node: ReactNode }[]
+  /** wide: 한 줄 전체를 쓴다(담당자 표처럼 여러 칸 입력) */
+  props: { label: string; node: ReactNode; wide?: boolean }[]
   children: ReactNode
   side: { key: string; label: string; node: ReactNode }[]
   /** 기록 종류(app.model)와 번호. 있으면 「이력」 버튼과 「⋯」 맨 아래 삭제(요청)를 붙인다. */
@@ -55,7 +56,7 @@ export default function RecordPage({ title, status, actions, props, children, si
         <div className="record-main">
           <dl className="record-props">
             {props.map((p) => (
-              <div key={p.label}>
+              <div key={p.label} className={p.wide ? 'wide' : undefined}>
                 <dt>{p.label}</dt>
                 <dd>{p.node}</dd>
               </div>

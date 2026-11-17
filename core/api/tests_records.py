@@ -820,9 +820,34 @@ class RecordsCreateApiTest(TestCase):
 
     def test_master_data_sets_created_by(self):
         from core.models import Partner
-        r = self.post('core.partner', {'code': 'S1', 'name': '공급사', 'is_supplier': True})
+        r = self.post('core.partner', {'name': '공급사', 'is_supplier': True})
         self.assertEqual(r.status_code, 201, r.content)
-        self.assertEqual(Partner.objects.get(code='S1').created_by, self.root)
+        self.assertEqual(Partner.objects.get(name='공급사').created_by, self.root)
+
+    def test_partner_new_form_numbers_code_and_takes_contacts(self):
+        from core.models import Partner
+        d = self.client.get('/api/records/core.partner/new/').json()
+        f = {e['key']: e for e in d['fields']}
+        self.assertNotIn('code', f)  # 코드는 모델이 매긴다
+        self.assertEqual(f['contacts']['type'], 'rows')
+        self.assertEqual([c['key'] for c in f['contacts']['columns']], ['role', 'name', 'phone', 'email'])
+        self.assertEqual(d['groups'], [{'label': '구분', 'keys': ['is_customer', 'is_supplier', 'is_outsource', 'is_calibrator']}])
+        rows = [{'role': '품질', 'name': ' 김품질 ', 'phone': '010', 'email': 'q@x.kr'}, {'role': '', 'name': '', 'phone': '', 'email': ''}]
+        r = self.post('core.partner', {'name': '가', 'is_customer': True, 'contacts': rows})
+        self.assertEqual(r.status_code, 201, r.content)
+        p = Partner.objects.get(name='가')
+        self.assertEqual(p.code, 'P0001')
+        self.assertEqual(p.contacts, [{'role': '품질', 'name': '김품질', 'phone': '010', 'email': 'q@x.kr'}])  # 빈 줄은 버린다
+        self.assertEqual(self.post('core.partner', {'name': '나', 'is_supplier': True, 'contacts': []}).status_code, 201)
+        self.assertEqual(Partner.objects.get(name='나').code, 'P0002')
+        r = self.post('core.partner', {'name': '다', 'is_supplier': True, 'contacts': [{'role': '영업', 'name': '', 'phone': '1', 'email': ''}]})
+        self.assertEqual(r.status_code, 400)
+        self.assertIn('1번째 담당자의 이름을 입력하세요.', r.content.decode())
+        r = self.post('core.partner', {'name': '다', 'is_supplier': True, 'contacts': [{'name': '이', 'email': 'nope'}]})
+        self.assertIn('1번째 담당자의 이메일 형식이 올바르지 않습니다.', r.content.decode())
+        detail = self.client.get(f'/api/records/core.partner/{p.pk}/').json()
+        self.assertEqual(detail['groups'][0]['label'], '구분')
+        self.assertIn('품질 김품질 · 010 · q@x.kr', [x['value'] for x in detail['fields']])
 
     def test_needs_add_permission(self):
         u = User.objects.create_user('v', password='pw', is_staff=True)

@@ -46,7 +46,8 @@
 .record-main, .record-side { min-width: 0; }
 .record-props { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px 24px; margin: 0 0 20px; }
 .record-props dt { color: var(--app-label); font-size: 13px; margin: 0 0 2px; }
-.record-props dd { margin: 0; font-size: 15px; min-width: 0; overflow-wrap: anywhere; }
+.record-props dd { margin: 0; font-size: 15px; min-width: 0; overflow-wrap: anywhere; white-space: pre-line; }
+.record-props > .wide { grid-column: 1 / -1; }
 @media (max-width: 960px) { .record-body { grid-template-columns: minmax(0, 1fr); } }
 @media (max-width: 767px) { .record-props { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 /* 판정 띠: 색과 글자를 함께 쓴다(색만으로 구분하지 않는다). */

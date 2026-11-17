@@ -33,7 +33,7 @@ docs/        구조·업무 규칙·테스트 문서, superpowers/ 설계·계�
 
 | 파일 | 역할 |
 | --- | --- |
-| `models.py` | `Approvable`(승인 필드·잠금 기반 클래스), 품번 `Item`·공정 `Process`·BOM `BomLine`·라우팅 `RoutingStep`, 작업지시 `WorkOrder`·실적 `WorkResult`, LOT `Lot`·계보 `LotLink`, 부적합 `Nonconformance`·사진 `NonconformancePhoto`, 보류 `Hold`, 출하 `Shipment`, 삭제·수정 요청 `EditRequest`, 엑셀 가져오기 설정 `ImportProfile`, 개정 이력 `RevisionLog`(신청 → 승인자 확정, 확정 후 수정·삭제 불가), 기준정보 `MasterModel` 기반의 부서 `Department`(조직도: 상위 부서·부서장)·거래처 `Partner`(구분·품질 담당자 1명·인증서 `PartnerCertificate`), 사용자 정의 칸 `FieldDef`(값은 각 기준정보의 `extra` JSON), 기록 첨부 `Attachment`(ContentType + id, 파일은 `data/attachments/`). `Lot`·`Shipment`의 `partner`가 거래처를 가리킨다 |
+| `models.py` | `Approvable`(승인 필드·잠금 기반 클래스), 품번 `Item`·공정 `Process`·BOM `BomLine`·라우팅 `RoutingStep`, 작업지시 `WorkOrder`·실적 `WorkResult`, LOT `Lot`·계보 `LotLink`, 부적합 `Nonconformance`·사진 `NonconformancePhoto`, 보류 `Hold`, 출하 `Shipment`, 삭제·수정 요청 `EditRequest`, 엑셀 가져오기 설정 `ImportProfile`, 개정 이력 `RevisionLog`(신청 → 승인자 확정, 확정 후 수정·삭제 불가), 기준정보 `MasterModel` 기반의 부서 `Department`(조직도: 상위 부서·부서장)·거래처 `Partner`(코드 자동 부여 `next_code`, 구분, 담당자 여러 명 `contacts` JSON, 인증서 `PartnerCertificate`; 옛 `qc_*` 칸은 남아 있으나 쓰지 않음), 사용자 정의 칸 `FieldDef`(값은 각 기준정보의 `extra` JSON), 기록 첨부 `Attachment`(ContentType + id, 파일은 `data/attachments/`). `Lot`·`Shipment`의 `partner`가 거래처를 가리킨다 |
 | `admin.py` | `BaseAdmin`(삭제는 시스템 관리자만, 승인 잠금, 요청 링크, 상세 화면 관련 기록 `related_panel`), 부적합 폼(MRB 처분 시 비밀번호·보완 필수 칸 검사) |
 | `records.py` | 삭제(`delete_record`), 잠금(`is_locked`), 잠금 해제 확인(`can_edit_locked`) 규칙 |
 | `views.py` | LOT 추적, 통합 검색, 부적합 간편 등록, 승인 서명, 삭제·수정 요청, 출력, 부적합 메일·사진 ZIP, 엑셀 가져오기 |

@@ -360,7 +360,8 @@ class PartnerCertificateInline(admin.TabularInline):
 class PartnerAdmin(MasterAdmin):
     list_display = ['code', 'name', 'status', 'grade', 'is_supplier', 'is_customer', 'is_outsource', 'is_calibrator', 'active']
     list_filter = ['status', 'is_supplier', 'is_customer', 'active']
-    search_fields = ['code', 'name', 'qc_name']
+    search_fields = ['code', 'name', 'contacts']
+    exclude = MasterAdmin.exclude + ['qc_name', 'qc_phone', 'qc_email']  # 담당자(contacts)로 옮긴 옛 칸
     inlines = [PartnerCertificateInline]
 
 

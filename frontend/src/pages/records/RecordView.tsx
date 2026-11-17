@@ -15,14 +15,17 @@ import { addRecent } from '../../lib/recent'
 interface Field { key: string; label: string; value: string; url: string | null }
 interface Row { id: number; url: string | null; status: string | null; cells: Record<string, string> }
 interface Child { key: string; label: string; columns: { key: string; label: string }[]; rows: Row[] }
-type Value = string | number | boolean | null
+type Value = string | number | boolean | null | Record<string, string>[]
 export interface Edit {
-  key: string; label: string; type: 'str' | 'text' | 'int' | 'date' | 'datetime' | 'bool' | 'choice'; value: Value; required: boolean
+  key: string; label: string; type: 'str' | 'text' | 'int' | 'date' | 'datetime' | 'bool' | 'choice' | 'rows'; value: Value; required: boolean
   choices: { value: string; label: string }[] | null
+  columns?: { key: string; label: string }[]  // type 'rows': 한 줄에 들어갈 칸
 }
+/** 한 칸에 체크 상자로 모아 보일 예/아니오 칸들 (core/recordspec.py groups_of) */
+export interface Group { label: string; keys: string[] }
 interface Detail {
   ct: string; id: number; title: string; kind: string; status: string | null
-  fields: Field[]; children: Child[]; side: string[]; admin_url: string | null; list_url: string
+  fields: Field[]; children: Child[]; side: string[]; admin_url: string | null; list_url: string; groups: Group[]
   version: number; locked: boolean; edit: Edit[]; can_change: boolean; can_approve: boolean
   can_dispose: boolean; dispose: Edit[] | null; can_close: boolean; links: { label: string; url: string }[]
   requests: { edit: boolean; delete: boolean }
@@ -55,9 +58,60 @@ function History({ label, id }: { label: string; id: number }) {
   )
 }
 
+// 여러 줄 입력(거래처 담당자): 한 줄에 한 사람, 줄 추가·빼기
+function RowsEditor({ e, value, onChange }: { e: Edit; value?: Record<string, string>[] | null; onChange?: (v: Record<string, string>[]) => void }) {
+  const rows = value ?? []
+  const cols = e.columns ?? []
+  const set = (i: number, k: string, v: string) => onChange?.(rows.map((r, j) => (j === i ? { ...r, [k]: v } : r)))
+  return (
+    <div style={{ display: 'grid', gap: 8 }}>
+      {rows.map((r, i) => (
+        <div key={i} style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+          {cols.map((c) => (
+            <Input key={c.key} value={r[c.key] ?? ''} placeholder={c.label} aria-label={`${i + 1}번째 ${c.label}`}
+              style={{ flex: c.key === 'email' ? '2 1 200px' : '1 1 120px' }}
+              onChange={(ev) => set(i, c.key, ev.target.value)} />
+          ))}
+          <Button onClick={() => onChange?.(rows.filter((_, j) => j !== i))}>빼기</Button>
+        </div>
+      ))}
+      <Button type="dashed" onClick={() => onChange?.([...rows, Object.fromEntries(cols.map((c) => [c.key, '']))])}>
+        + {e.label} 추가
+      </Button>
+    </div>
+  )
+}
+
+/** groups에 든 예/아니오 칸은 처음 나온 자리에 한 칸으로 모은다. rows 칸은 한 줄 전체를 쓴다. */
+export function groupProps<T extends { key: string; label: string }>(
+  items: T[], groups: Group[], one: (x: T) => ReactNode, many: (xs: T[]) => ReactNode, wide: (x: T) => boolean,
+) {
+  const out: { label: string; node: ReactNode; wide?: boolean }[] = []
+  for (const x of items) {
+    const g = groups.find((g) => g.keys.includes(x.key))
+    if (!g) out.push({ label: x.label, node: one(x), wide: wide(x) })
+    else if (g.keys.find((k) => items.some((y) => y.key === k)) === x.key) out.push({ label: g.label, node: many(items.filter((y) => g.keys.includes(y.key))) })
+  }
+  return out
+}
+
+/** 묶음 체크 상자 입력: 칸마다 Form.Item, 이름은 상자 옆 글자로 */
+export function CheckGroup({ edits }: { edits: Edit[] }) {
+  return (
+    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px 16px' }}>
+      {edits.map((e) => (
+        <Form.Item key={e.key} name={e.key} valuePropName="checked" noStyle>
+          <Checkbox>{e.label}</Checkbox>
+        </Form.Item>
+      ))}
+    </div>
+  )
+}
+
 // Form.Item이 넣어 주는 value·checked·onChange·id를 입력 칸에 그대로 넘긴다
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function Editor({ e, ...rest }: { e: Edit; [k: string]: any }) {
+  if (e.type === 'rows') return <RowsEditor e={e} {...rest} />
   if (e.type === 'bool') return <Checkbox {...rest} />
   if (e.type === 'int') return <InputNumber style={{ width: '100%' }} {...rest} />
   if (e.type === 'date') return <Input type="date" {...rest} />
@@ -258,19 +312,23 @@ export default function RecordView() {
           ...d.links.map((l) => ({ key: l.url, label: <a href={l.url}>{l.label}</a> })),
           ...(d.admin_url ? [{ key: 'admin', label: <a href={d.admin_url}>관리 화면에서 열기</a> }] : []),
         ]}
-        props={d.fields.map((f) => {
-          const e = editable.get(f.key)
-          if (!editing || !e) return { label: f.label, node: <Go url={f.url}>{f.value || '—'}</Go> }
-          return {
-            label: f.label,
-            node: (
+        props={groupProps(d.fields, d.groups ?? [],
+          (f) => {
+            const e = editable.get(f.key)
+            if (!editing || !e) return <Go url={f.url}>{f.value || '—'}</Go>
+            return (
               <Form.Item name={e.key} valuePropName={e.type === 'bool' ? 'checked' : 'value'} style={{ margin: 0 }}
                 rules={e.required && e.type !== 'bool' ? [{ required: true, message: `${e.label}을(를) 입력하세요.` }] : []}>
                 <Editor e={e} />
               </Form.Item>
-            ),
-          }
-        })}
+            )
+          },
+          (fs) => {
+            const es = fs.map((f) => editable.get(f.key)).filter((e): e is Edit => !!e)
+            if (editing && es.length) return <CheckGroup edits={es} />
+            return fs.filter((f) => f.value === '예').map((f) => f.label).join(', ') || '—'
+          },
+          (f) => editable.get(f.key)?.type === 'rows')}
         side={d.side.filter((k) => SIDE[k]).map((k) => ({ key: k, ...SIDE[k] }))}
       >
         {d.children.map((c) => (

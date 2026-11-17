@@ -4,11 +4,11 @@ import { useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { ApiError, api } from '../../api/client'
 import RecordPage from '../../components/RecordPage'
-import { Editor } from './RecordView'
-import type { Edit } from './RecordView'
+import { CheckGroup, Editor, groupProps } from './RecordView'
+import type { Edit, Group } from './RecordView'
 
 // core/api/records.py RecordNewView 응답
-interface NewForm { title: string; list_url: string; fields: Edit[] }
+interface NewForm { title: string; list_url: string; fields: Edit[]; groups: Group[] }
 
 /** 새로 만들기(/app/r/<app>/<model>/new): 설명서 create 칸만 입력, 서버가 모델 규칙대로 저장한다 */
 export default function RecordNew() {
@@ -53,15 +53,15 @@ export default function RecordNew() {
             <Button type="primary" loading={saving} onClick={save}>저장</Button>
           </>
         }
-        props={d.fields.map((e) => ({
-          label: e.label,
-          node: (
+        props={groupProps(d.fields, d.groups ?? [],
+          (e) => (
             <Form.Item name={e.key} valuePropName={e.type === 'bool' ? 'checked' : 'value'} style={{ margin: 0 }}
               rules={e.required && e.type !== 'bool' ? [{ required: true, message: `${e.label}을(를) 입력하세요.` }] : []}>
               <Editor e={e} />
             </Form.Item>
           ),
-        }))}
+          (es) => <CheckGroup edits={es} />,
+          (e) => e.type === 'rows')}
         side={[]}
       >
         {null}
