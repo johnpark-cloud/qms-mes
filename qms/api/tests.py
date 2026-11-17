@@ -621,6 +621,22 @@ class InspectionApiTest(TestCase):
         ws = load_workbook(BytesIO(r.content)).active
         self.assertEqual([c.value for c in ws[1]], ['검사 일시', 'LOT', '품번', '품명', '협력사', '검사기준', '검사자', '판정', '부적합'])
 
+    def test_list_sort_and_filter(self):
+        self.make(self.lots[0], 'INCOMING', '10.0')
+        self.make(self.lots[1], 'INCOMING', '11.0')
+        self.make(self.lots[3], 'INCOMING', '10.0')
+        r = self.c().get('/api/qms/inspections/?tab=INCOMING&sort=lot_number').json()
+        self.assertEqual([x['lot_number'] for x in r['results']], ['L-1', 'L-2', 'L-4'])
+        self.assertEqual({x['key'] for x in r['filters']}, {'inspected_at', 'result', 'inspector'})
+        r = self.c().get('/api/qms/inspections/?tab=INCOMING&f_result=FAIL').json()
+        self.assertEqual([x['lot_number'] for x in r['results']], ['L-2'])
+        self.assertEqual(r['summary']['total'], 1)
+        r = self.c().get('/api/qms/inspections/?tab=INCOMING&f_inspected_at_to=2000-01-01').json()
+        self.assertEqual(r['count'], 0)
+        r = self.c().get('/api/qms/inspections/?tab=INCOMING&f_result=PASS&sort=-lot_number&export=xlsx')
+        ws = load_workbook(BytesIO(r.content)).active
+        self.assertEqual([ws.cell(i, 2).value for i in range(2, ws.max_row + 1)], ['L-4', 'L-1'])
+
     def test_list_summary_follows_tab_and_search(self):
         self.make(self.lots[0], 'INCOMING', '10.0')
         self.make(self.lots[1], 'INCOMING', '11.0')

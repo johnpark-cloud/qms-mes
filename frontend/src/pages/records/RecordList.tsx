@@ -3,12 +3,12 @@ import { Spin } from 'antd'
 import { useCallback } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { api } from '../../api/client'
-import DataList from '../../components/DataList'
+import DataList, { type ListFilter } from '../../components/DataList'
 
 // core/api/records.py RecordListView 응답
 interface Row { id: number; url: string | null; status: string | null; cells: Record<string, string> }
 interface ListPage {
-  title: string; tabs: { key: string; label: string }[]; columns: { key: string; label: string }[]
+  title: string; tabs: { key: string; label: string }[]; columns: { key: string; label: string; sortable: boolean }[]; filters: ListFilter[]
   count: number; page: number; has_more: boolean; results: Row[]; can_add: boolean; new_url: string
 }
 
@@ -21,7 +21,7 @@ export default function RecordList() {
   const head = useQuery({ queryKey: ['record-list-head', label], queryFn: () => api<ListPage>(base) })
   // DataList는 fetchPage가 바뀌면 다시 불러온다 → 주소가 같으면 같은 함수
   const fetchPage = useCallback(
-    (tab: string, q: string, page: number) => api<ListPage>(`${base}?tab=${tab}&q=${encodeURIComponent(q)}&page=${page}`),
+    (tab: string, q: string, page: number, extra: string) => api<ListPage>(`${base}?tab=${tab}&q=${encodeURIComponent(q)}&page=${page}${extra}`),
     [base],
   )
   if (!head.data) return <Spin />
@@ -31,10 +31,11 @@ export default function RecordList() {
       <h1 className="page-title">{h.title}</h1>
       <DataList<Row>
         key={label}
-        columns={h.columns.map((c) => ({ title: c.label, key: c.key, render: (_: unknown, r: Row) => r.cells[c.key] }))}
+        columns={h.columns.map((c) => ({ title: c.label, key: c.key, sorter: c.sortable, render: (_: unknown, r: Row) => r.cells[c.key] }))}
+        filters={h.filters}
         tabs={h.tabs}
         fetchPage={fetchPage}
-        exportHref={(tab, q) => `${base}?tab=${tab}&q=${encodeURIComponent(q)}&export=xlsx`}
+        exportHref={(tab, q, extra) => `${base}?tab=${tab}&q=${encodeURIComponent(q)}${extra}&export=xlsx`}
         onOpen={(r) => nav(`/r/${app}/${model}/${r.id}`)}
         rowKey={(r) => r.id}
         toolbar={h.can_add ? (h.new_url.startsWith('/app/') ? <Link to={h.new_url.slice(4)}>새로 만들기</Link> : <a href={h.new_url}>새로 만들기</a>) : undefined}

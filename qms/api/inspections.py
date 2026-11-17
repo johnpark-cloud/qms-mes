@@ -8,6 +8,7 @@ from django.utils import timezone
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from core.api import listing
 from core.api.permissions import require_perm
 from core.export import document_xlsx, table_xlsx, xlsx_response
 from core.models import Hold, Item, Lot, Nonconformance
@@ -241,6 +242,11 @@ class InspectionListView(APIView):
               .select_related('lot__item', 'spec', 'inspector', 'nonconformance').order_by('-inspected_at', '-pk'))
         if q:
             qs = qs.filter(Q(lot__number__icontains=q) | Q(lot__item__code__icontains=q) | Q(lot__supplier__icontains=q))
+        sorts, filters = listing.field_controls(Inspection, ('inspected_at', 'result', 'inspector'),
+                                                Inspection.objects.filter(spec__inspection_type=tab))
+        sorts.update(lot_number='lot__number', item_code='lot__item__code', item_name='lot__item__name',
+                     supplier='lot__supplier', spec_title='spec__item__code', inspector='inspector__username')
+        qs = listing.apply(qs, request.query_params, sorts, filters, ('-inspected_at', '-pk'))
         if request.query_params.get('export') == 'xlsx':
             rows = [[_day(x.inspected_at), x.lot.number, x.lot.item.code, x.lot.item.name, x.lot.supplier, str(x.spec),
                      _who(x.inspector), x.get_result_display() or '미판정', x.nonconformance.number if x.nonconformance else '']
@@ -254,7 +260,8 @@ class InspectionListView(APIView):
                                failed=Count('pk', filter=Q(result=Inspection.FAIL)), pending=Count('pk', filter=Q(result='')))
         count = summary['total']
         start = (page - 1) * PAGE_SIZE
-        return Response({'count': count, 'page': page, 'has_more': start + PAGE_SIZE < count, 'summary': summary, 'results': [
+        return Response({'count': count, 'page': page, 'has_more': start + PAGE_SIZE < count, 'summary': summary,
+                         'filters': listing.public(filters), 'sortable': sorted(sorts), 'results': [
             {'id': x.pk, 'inspected_at': timezone.localtime(x.inspected_at).isoformat(), 'lot_number': x.lot.number, 'item_code': x.lot.item.code,
              'item_name': x.lot.item.name, 'supplier': x.lot.supplier, 'spec_title': str(x.spec), 'inspector': _who(x.inspector),
              'result': x.result, 'result_display': x.get_result_display() or '미판정',

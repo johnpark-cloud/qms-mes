@@ -6,24 +6,24 @@ import { useNavigate, useSearchParams } from 'react-router-dom'
 import { api } from '../../api/client'
 import type { InspectionDetail, InspectionRow, InspectionSummary } from '../../api/inspect'
 import { INSPECTION_TYPES, type Page } from '../../api/specs'
-import DataList from '../../components/DataList'
+import DataList, { type ListFilter } from '../../components/DataList'
 import Tile from '../../components/Tile'
 import { addRecent } from '../../lib/recent'
 
 const COLOR = { 합격: 'green', 불합격: 'red', 미판정: 'orange' } as const
 
 const COLUMNS: ColumnsType<InspectionRow> = [
-  { title: '검사 일시', dataIndex: 'inspected_at', render: (v: string) => v.slice(0, 16).replace('T', ' ') },
-  { title: 'LOT', dataIndex: 'lot_number' },
-  { title: '품번', dataIndex: 'item_code' },
-  { title: '협력사', dataIndex: 'supplier' },
-  { title: '검사기준', dataIndex: 'spec_title' },
-  { title: '검사자', dataIndex: 'inspector' },
-  { title: '판정', dataIndex: 'result_display', render: (v: InspectionRow['result_display']) => <Tag color={COLOR[v]}>{v}</Tag> },
+  { title: '검사 일시', dataIndex: 'inspected_at', sorter: true, render: (v: string) => v.slice(0, 16).replace('T', ' ') },
+  { title: 'LOT', dataIndex: 'lot_number', sorter: true },
+  { title: '품번', dataIndex: 'item_code', sorter: true },
+  { title: '협력사', dataIndex: 'supplier', sorter: true },
+  { title: '검사기준', dataIndex: 'spec_title', sorter: true },
+  { title: '검사자', dataIndex: 'inspector', sorter: true },
+  { title: '판정', dataIndex: 'result_display', key: 'result', sorter: true, render: (v: InspectionRow['result_display']) => <Tag color={COLOR[v]}>{v}</Tag> },
   { title: '부적합', dataIndex: 'nc_number' },
 ]
 
-const exportHref = (tab: string, q: string) => `/api/qms/inspections/?tab=${tab}&q=${encodeURIComponent(q)}&export=xlsx`
+const exportHref = (tab: string, q: string, extra: string) => `/api/qms/inspections/?tab=${tab}&q=${encodeURIComponent(q)}${extra}&export=xlsx`
 
 // 합격률은 판정된 것만 분모로 센다(미판정 제외).
 function Summary({ s }: { s: InspectionSummary }) {
@@ -71,12 +71,18 @@ export default function InspectionList() {
   const t = sp.get('tab')
   const tab = INSPECTION_TYPES.some((x) => x.value === t) ? (t as string) : INSPECTION_TYPES[0].value
   const [summary, setSummary] = useState<InspectionSummary | null>(null)
+  const [filters, setFilters] = useState<ListFilter[]>([])
   const first = useRef(0) // 늦게 온 이전 탭·검색의 요약이 새 요약을 덮지 않게 한다
   // 요약은 첫 쪽 응답에 함께 온다(탭·검색 반영).
-  const fetchPage = useCallback(async (tab: string, q: string, page: number) => {
+  const fetchPage = useCallback(async (tab: string, q: string, page: number, extra: string) => {
     const my = page === 1 ? ++first.current : 0
-    const r = await api<Page<InspectionRow> & { summary: InspectionSummary }>(`/api/qms/inspections/?tab=${tab}&q=${encodeURIComponent(q)}&page=${page}`)
-    if (my && my === first.current) setSummary(r.summary)
+    const r = await api<Page<InspectionRow> & { summary: InspectionSummary; filters: ListFilter[] }>(
+      `/api/qms/inspections/?tab=${tab}&q=${encodeURIComponent(q)}&page=${page}${extra}`,
+    )
+    if (my && my === first.current) {
+      setSummary(r.summary)
+      setFilters(r.filters)
+    }
     return r
   }, [])
   return (
@@ -90,6 +96,7 @@ export default function InspectionList() {
         onTab={(k) => setSp({ tab: k }, { replace: true })}
         fetchPage={fetchPage}
         exportHref={exportHref}
+        filters={filters}
         peek={(r) => <Peek row={r} />}
         onOpen={(r) => {
           addRecent({ label: `${r.lot_number} ${r.spec_title}`, href: `/app/inspections/${r.id}` })

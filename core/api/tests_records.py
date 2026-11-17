@@ -1,9 +1,11 @@
 import datetime
+from io import BytesIO
 
 from django.contrib.auth.models import Permission, User
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase
 from django.utils import timezone
+from openpyxl import load_workbook
 
 from core import recordspec
 from core.models import ModuleSwitch
@@ -75,6 +77,41 @@ class RecordsApiTest(TestCase):
         self.assertIn('spreadsheetml', r['Content-Type'])
         d = self.client.get('/api/records/qms.qualification/?tab=expired').json()
         self.assertEqual(d['count'], 1)
+
+    def test_list_sort_and_filter(self):  # 열 머리 정렬, 선택지·참/거짓·외래키·날짜 필터, 엑셀도 같은 조건
+        from qms.models import Gauge
+        old = timezone.localdate() - datetime.timedelta(days=30)
+        Gauge.objects.create(number='G-3', name='게이지', last_calibrated=old)
+        d = self.client.get('/api/records/qms.gauge/?tab=all&sort=-number').json()
+        self.assertEqual([r['cells']['number'] for r in d['results']], ['G-3', 'G-2', 'G-1'])
+        self.assertTrue(next(c for c in d['columns'] if c['key'] == 'number')['sortable'])
+        self.assertFalse(next(c for c in d['columns'] if c['key'] == 'next_due')['sortable'])  # 속성은 정렬 못 함
+        f = {x['key']: x for x in d['filters']}
+        self.assertEqual(f['active']['type'], 'choice')
+        self.assertEqual(f['last_calibrated']['type'], 'date')
+        self.assertNotIn('path', f['active'])
+        d = self.client.get('/api/records/qms.gauge/?tab=all&f_active=0').json()
+        self.assertEqual([r['cells']['number'] for r in d['results']], ['G-2'])
+        d = self.client.get(f'/api/records/qms.gauge/?tab=all&f_last_calibrated_to={old.isoformat()}').json()
+        self.assertEqual([r['cells']['number'] for r in d['results']], ['G-3'])
+        d = self.client.get('/api/records/qms.gauge/?tab=all&sort=nope&f_active=xx&f_last_calibrated_from=2026-13-01').json()
+        self.assertEqual(d['count'], 3)  # 잘못된 값은 무시
+        r = self.client.get('/api/records/qms.gauge/?tab=all&f_active=1&sort=-number&export=xlsx')
+        ws = load_workbook(BytesIO(r.content)).active
+        self.assertEqual([ws.cell(i, 1).value for i in range(2, ws.max_row + 1)], ['G-3', 'G-1'])
+        # 외래키: 있는 값만 선택지, 날짜+시각 칸은 날짜로 거른다
+        d = self.client.get('/api/records/core.nonconformance/?tab=all').json()
+        f = {x['key']: x for x in d['filters']}
+        self.assertEqual([o['label'] for o in f['lot']['options']], ['L-1'])
+        from core.models import Item, Lot, Nonconformance
+        other = Lot.objects.create(number='L-9', item=Item.objects.get(code='R1'))
+        Nonconformance.objects.create(lot=other, description='긁힘')
+        n = Nonconformance.objects.count()
+        self.assertEqual(self.client.get(f'/api/records/core.nonconformance/?tab=all&f_lot={other.pk}').json()['count'], 1)
+        self.assertEqual(self.client.get('/api/records/core.nonconformance/?tab=all&f_lot=999999').json()['count'], n)
+        today = timezone.localdate().isoformat()
+        self.assertEqual(self.client.get(f'/api/records/core.nonconformance/?tab=all&f_detected_at_from={today}').json()['count'], n)
+        self.assertEqual(self.client.get('/api/records/core.nonconformance/?tab=all&f_detected_at_to=2000-01-01').json()['count'], 0)
 
     def test_detail_fields_children_side(self):
         d = self.client.get(f'/api/records/qms.document/{self.doc.pk}/').json()

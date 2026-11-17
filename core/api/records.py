@@ -25,6 +25,7 @@ from core.models import Approvable, EditRequest, Lot, Nonconformance, is_approve
 from core.records import can_edit_locked, is_locked
 from core.relations import record_url, status_of
 
+from . import listing
 from .permissions import require_perm
 
 PAGE_SIZE = 50
@@ -40,8 +41,8 @@ def _model(user, label):
     return model, spec
 
 
-def _columns(model, names):
-    return [{'key': n, 'label': recordspec.label_of(model, n)} for n in names]
+def _columns(model, names, sorts=()):
+    return [{'key': n, 'label': recordspec.label_of(model, n), 'sortable': n in sorts} for n in names]
 
 
 def _row(obj, names):
@@ -65,6 +66,8 @@ class RecordListView(APIView):
             for f in spec.search:
                 cond |= Q(**{f'{f}__icontains': q})
             qs = qs.filter(cond)
+        sorts, filters = listing.field_controls(model, spec.columns, model.objects.all())
+        qs = listing.apply(qs, request.query_params, sorts, filters, spec.order)
         title = str(model._meta.verbose_name)
         if request.query_params.get('export') == 'xlsx':
             cols = _columns(model, spec.columns)
@@ -77,7 +80,8 @@ class RecordListView(APIView):
         count = qs.count()
         start = (page - 1) * PAGE_SIZE
         return Response({'title': title, 'tabs': [{'key': k, 'label': n} for k, n, _ in spec.tabs],
-                         'columns': _columns(model, spec.columns), 'count': count, 'page': page,
+                         'columns': _columns(model, spec.columns, sorts), 'filters': listing.public(filters),
+                         'count': count, 'page': page,
                          'has_more': start + PAGE_SIZE < count,
                          'results': [_row(o, spec.columns) for o in qs[start:start + PAGE_SIZE]],
                          'can_add': request.user.has_perm(f'{model._meta.app_label}.add_{model._meta.model_name}'),
