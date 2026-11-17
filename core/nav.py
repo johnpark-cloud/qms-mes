@@ -11,7 +11,7 @@ from core.recordspec import SPECS
 # 새 화면이 있는 관리 목록 → React 화면 (설명서가 있는 목록은 /app/r/<app>/<model>)
 APP_PAGES = {'/admin/core/item/': '/app/items', '/admin/core/process/': '/app/processes', '/admin/qms/inspectionspec/': '/app/specs',
              '/admin/qms/controlplan/': '/app/plans', '/admin/qms/customerrule/': '/app/customer-rules',
-             '/admin/qms/inspection/': '/app/inspections'}
+             '/admin/qms/inspection/': '/app/inspections', '/me/': '/app/me'}
 
 
 def nav_url(name):

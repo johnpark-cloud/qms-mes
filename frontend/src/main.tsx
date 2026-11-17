@@ -28,6 +28,7 @@ import SpecList from './pages/specs/SpecList'
 import SpecPage from './pages/specs/SpecPage'
 import SpecPrint from './pages/specs/SpecPrint'
 import Memos from './pages/Memos'
+import MyLeavePay from './pages/MyLeavePay'
 import RecordList from './pages/records/RecordList'
 import RecordNew from './pages/records/RecordNew'
 import RecordView from './pages/records/RecordView'
@@ -80,6 +81,7 @@ function App() {
               <Route path="trace" element={<Trace />} />
               <Route path="memos" element={<Memos />} />
               <Route path="audit" element={<AuditLog />} />
+              <Route path="me" element={<MyLeavePay />} />
               <Route path="r/:app/:model" element={<RecordList />} />
               <Route path="r/:app/:model/new" element={<RecordNew />} />
               <Route path="r/:app/:model/:id" element={<RecordView />} />

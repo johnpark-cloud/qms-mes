@@ -6,12 +6,14 @@ from django.views.generic import RedirectView
 from django.views.static import serve
 
 from core import views as core_views
-from personal import views as personal_views
+from personal import api as personal_api, views as personal_views
 from qms import views as qms_views
 
 urlpatterns = [
     path('', RedirectView.as_view(url='/todo/')),
     path('admin/', admin.site.urls),
+    path('api/personal/me/', personal_api.MeView.as_view()),
+    path('api/personal/leave/<int:pk>/', personal_api.LeaveUseView.as_view()),
     path('api/', include('core.api.urls')),
     path('app/', core_views.spa),
     path('app/audit', core_views.spa, name='app_audit'),

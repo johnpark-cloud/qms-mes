@@ -1,5 +1,5 @@
 ﻿"""관리 화면에 실제 HTTP 요청을 보내 인터록을 끝까지 확인한다 (임시 DB 사용)."""
-import http.cookiejar, os, re, subprocess, sys, tempfile, time, urllib.error, urllib.parse, urllib.request
+import http.cookiejar, json, os, re, subprocess, sys, tempfile, time, urllib.error, urllib.parse, urllib.request
 
 PROJ = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 PY = os.path.join(PROJ, '.venv', 'Scripts', 'python.exe')
@@ -291,10 +291,10 @@ try:
     check('LOT 타임라인 표시', 'class="timeline"' in get('/trace/?lot=CELL-A'))
     check('심사 자료 출력 화면 200', '심사 자료 출력' in get('/audit-pack/'))
     try:
-        me = post_opener.open(BASE + '/me/'); me_code, me_html = me.status, me.read().decode()
+        me = post_opener.open(BASE + '/api/personal/me/'); me_code, me_body = me.status, json.loads(me.read())
     except urllib.error.HTTPError as e:
-        me_code, me_html = e.code, ''
-    check('내 연차·급여 화면 200 (리다이렉트 아님)', me_code == 200 and '연차 사용 등록' in me_html, me_code)
+        me_code, me_body = e.code, {}
+    check('내 연차·급여 API 200', me_code == 200 and 'uses' in me_body, me_code)
     def save_layout(body):
         token = next(c.value for c in jar if c.name == 'csrftoken')
         try:

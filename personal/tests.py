@@ -45,10 +45,16 @@ class LeaveTests(TestCase):
         LeaveUse.objects.create(owner=u, used_on=date(2025, 6, 30), reason='지난기간')
         self.client.force_login(u)
         from unittest import mock
-        with mock.patch('personal.views.timezone.localdate', return_value=date(2026, 3, 10)):
-            r = self.client.get('/me/')
-        self.assertEqual(r.context['leave']['used'], Decimal('2'))
-        self.assertEqual([x.reason for x in r.context['uses']], ['올해분', '작년분'])
+        with mock.patch('personal.api.timezone.localdate', return_value=date(2026, 3, 10)):
+            d = self.client.get('/api/personal/me/').json()
+        self.assertEqual((d['leave']['used'], d['leave']['remaining']), ('2', '13'))
+        self.assertEqual([x['reason'] for x in d['uses']], ['올해분', '작년분'])
+        self.assertEqual(d['hired_on'], '2024-07-01')
+
+    def test_old_page_redirects_to_new_screen(self):
+        u = User.objects.create_user('a', is_staff=True)
+        self.client.force_login(u)
+        self.assertRedirects(self.client.get('/me/'), '/app/me', fetch_redirect_response=False)
 
     def test_half_day_edit_keeps_value(self):
         from django.forms import modelform_factory
@@ -96,9 +102,11 @@ class OwnerOnlyTests(TestCase):
             for action in ('change', 'delete', 'history'):
                 self.assertEqual(self.client.get(f'/admin/personal/{name}/{pk}/{action}/').status_code, 404, (name, action))
         self.assertNotContains(self.client.get('/admin/personal/payslip/'), '2026-01')
-        r = self.client.get('/me/')
-        self.assertNotContains(r, '7,777,777')
+        r = self.client.get('/api/personal/me/')
+        self.assertEqual(r.status_code, 200)
         self.assertNotContains(r, '7777777')
+        self.assertEqual(self.client.delete(f'/api/personal/leave/{self.use.pk}/').status_code, 404)
+        self.assertTrue(LeaveUse.objects.filter(pk=self.use.pk).exists())
 
     def test_generic_urls_and_file_closed(self):
         for url in (f'/print/personal/payslip/{self.slip.pk}/', f'/request/DELETE/personal/payslip/{self.slip.pk}/',
@@ -139,7 +147,9 @@ class OwnerOnlyTests(TestCase):
 
     def test_owner_sees_and_downloads(self):
         self.client.force_login(self.b)
-        self.assertContains(self.client.get('/me/'), '7,777,777')
+        d = self.client.get('/api/personal/me/').json()
+        self.assertEqual(d['slips'][0]['net'], '7777777')
+        self.assertEqual(d['slips'][0]['file_url'], f'/me/payslip/{self.slip.pk}/file/')
         r = self.client.get(f'/me/payslip/{self.slip.pk}/file/')
         self.assertEqual(r.status_code, 200)
         r.getvalue()  # 끝까지 읽어 파일을 닫는다(close()를 직접 부르면 PostgreSQL 테스트 DB 연결이 끊긴다)
@@ -160,6 +170,26 @@ class OwnerOnlyTests(TestCase):
         with self.captureOnCommitCallbacks(execute=True):
             Payslip.objects.get(pk=self.slip.pk).delete()
         self.assertFalse(storage.exists(new))
+
+    def test_api_add_delete_leave_and_hire_date(self):
+        self.client.force_login(self.b)
+        r = self.client.post('/api/personal/me/', {'used_on': '2026-02-02', 'days': '0.50', 'reason': '병원', 'owner': self.a.pk},
+                             content_type='application/json')
+        self.assertEqual(r.status_code, 201, r.content)
+        use = LeaveUse.objects.get(reason='병원')
+        self.assertEqual((use.owner, use.days), (self.b, Decimal('0.5')))
+        r = self.client.post('/api/personal/me/', {'used_on': '', 'days': '3'}, content_type='application/json')
+        self.assertEqual(r.status_code, 400)
+        self.assertEqual(set(r.json()['fields']), {'used_on', 'days'})
+        r = self.client.put('/api/personal/me/', {'hired_on': '2020-05-01'}, content_type='application/json')
+        self.assertEqual(r.status_code, 200, r.content)
+        self.assertEqual(LeaveProfile.objects.get(owner=self.b).hired_on, date(2020, 5, 1))
+        self.client.put('/api/personal/me/', {'hired_on': '2021-05-01'}, content_type='application/json')
+        self.assertEqual(LeaveProfile.objects.get(owner=self.b).hired_on, date(2021, 5, 1))
+        self.assertEqual(self.client.delete(f'/api/personal/leave/{use.pk}/').status_code, 204)
+        self.assertFalse(LeaveUse.objects.filter(pk=use.pk).exists())
+        self.client.logout()
+        self.assertEqual(self.client.get('/api/personal/me/').status_code, 403)
 
     def test_save_forces_owner(self):
         r = self.client.post('/admin/personal/leaveuse/add/', {'used_on': '2026-02-02', 'days': '1.00', 'reason': ''})
