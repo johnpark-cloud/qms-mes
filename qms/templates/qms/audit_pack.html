@@ -1,79 +1,118 @@
-{% extends "core/print.html" %}
-{% block style %}
+{% extends "admin/base_site.html" %}
+{% block extrastyle %}{{ block.super }}<style>
   .photos { display: flex; flex-wrap: wrap; gap: 6px; }
-  .photos img { width: 120px; height: 90px; object-fit: cover; border: 1px solid #555; }
-  .err { color: #b00020; font-weight: bold; }
-  th.auto, td.auto { width: auto; }
-  h2 { page-break-after: avoid; }
-  @media print { .noprint { display: none; } }
-{% endblock %}
-{% block fields %}
-<form method="get" class="noprint">
-  <label for="item">품번</label>
+  .photos img { width: 120px; height: 90px; object-fit: cover; border-radius: 4px; }
+  .pack-nc td { white-space: pre-wrap; }
+  .pack-meta { color: var(--f-label); margin: 0 0 1.5rem; }
+  .card h2 { page-break-after: avoid; }
+  .pack-footer { color: var(--f-label); }
+  /* 인쇄·PDF: 머리말·메뉴·조회 칸을 빼고 흰 종이에 검은 글씨 */
+  @media print {
+    #header, #nav-sidebar, .breadcrumbs, .noprint, #toggle-nav-sidebar { display: none !important; }
+    html, body, #container, #main, #content, .card { background: #fff !important; color: #000 !important; box-shadow: none !important; }
+    .card { border: 0; padding: 0; }
+    .card th, .card td { color: #000 !important; border-color: #999 !important; }
+  }
+</style>{% endblock %}
+{% block page_actions %}<button type="button" class="button noprint" onclick="window.print()">인쇄 / PDF로 저장</button>{% endblock %}
+{% block content %}
+<form method="get" class="toolbar noprint">
+  <label for="item">품목</label>
   <select id="item" name="item">
     <option value="">선택</option>
     {% for i in items %}<option value="{{ i.pk }}" {% if item and item.pk == i.pk %}selected{% endif %}>{{ i.code }} {{ i.name }}</option>{% endfor %}
   </select>
   <label for="from">시작일</label><input id="from" type="date" name="from" value="{{ from|date:'Y-m-d' }}">
   <label for="to">종료일</label><input id="to" type="date" name="to" value="{{ to|date:'Y-m-d' }}">
-  <button type="submit">조회</button>
-  {% if item %}<a href="{% url 'audit_pack_zip' %}?item={{ item.pk }}&from={{ from|date:'Y-m-d' }}&to={{ to|date:'Y-m-d' }}">사진·첨부 ZIP 받기</a>{% endif %}
+  <button type="submit" class="button">조회</button>
+  {% if item %}<a class="button ghost" href="{% url 'audit_pack_zip' %}?item={{ item.pk }}&from={{ from|date:'Y-m-d' }}&to={{ to|date:'Y-m-d' }}">사진·첨부 ZIP 받기</a>{% endif %}
 </form>
-{% for e in errors %}<p class="err">{{ e }}</p>{% endfor %}
-{% if item %}<p>품번 {{ item.code }} {{ item.name }} · 기간 {{ from|date:"Y-m-d" }} ~ {{ to|date:"Y-m-d" }}</p>{% endif %}
-{% endblock %}
-{% block extra %}
-{% if not item %}<p>품번을 선택하면 심사 자료가 한 페이지로 모입니다.</p>{% else %}
-{% if truncated %}<p class="err">기록이 {{ limit }}건을 넘어 앞 {{ limit }}건만 보여 줍니다. 기간을 줄이세요.</p>{% endif %}
+{% for e in errors %}<p class="errornote">{{ e }}</p>{% endfor %}
 
-<h2>1. 검사 요약</h2>
-{% if summary %}<table><tr><th class="auto">검사 구분</th><th class="auto">건수</th><th class="auto">합격</th><th class="auto">합격률</th></tr>
-  {% for s in summary %}<tr><td>{{ s.label }}</td><td>{{ s.total }}</td><td>{{ s.passed }}</td><td>{{ s.rate }}%</td></tr>{% endfor %}</table>
-{% else %}<p>기간 안 검사 기록이 없습니다.</p>{% endif %}
+{% if not item %}
+<section class="card">{% include "admin/empty_state.html" with message="품목을 선택하면 심사 자료가 한 페이지로 모입니다." %}</section>
+{% else %}
+<p class="pack-meta">품번 {{ item.code }} {{ item.name }} · 기간 {{ from|date:"Y-m-d" }} ~ {{ to|date:"Y-m-d" }}</p>
+{% if truncated %}<p class="errornote">기록이 {{ limit }}건을 넘어 앞 {{ limit }}건만 보여 줍니다. 기간을 줄이세요.</p>{% endif %}
 
-<h2>2. 부적합 보고서</h2>
-{% for n in ncs %}
-<table style="margin-bottom:8px">
-  <tr><th>{{ n.number }}</th><td>LOT {{ n.lot.number }} · {{ n.detected_at|date:"Y-m-d H:i" }} · {{ n.defect_type|default:"-" }} · 불량 {{ n.defect_qty|floatformat:"-3" }}<br>{{ n.description }}</td></tr>
-  {% with photos=n.photos.all %}{% if photos %}<tr><th>사진</th><td><div class="photos">{% for p in photos %}<img src="{{ p.file.url }}" alt="{{ n.number }} {{ p.caption }}">{% endfor %}</div></td></tr>{% endif %}{% endwith %}
-</table>
-{% empty %}<p>기간 안 부적합이 없습니다.</p>{% endfor %}
+<section class="card">
+  <h2>1. 검사 요약</h2>
+  {% if summary %}<table>
+    <thead><tr><th>검사 구분</th><th class="num">건수</th><th class="num">합격</th><th class="num">합격률(%)</th></tr></thead>
+    <tbody>{% for s in summary %}<tr><td>{{ s.label }}</td><td class="num">{{ s.total }}</td><td class="num">{{ s.passed }}</td><td class="num">{{ s.rate }}</td></tr>{% endfor %}</tbody>
+  </table>
+  {% else %}<p class="empty">기간 안 검사 기록이 없습니다.</p>{% endif %}
+</section>
 
-<h2>3. 처분·승인</h2>
-{% if ncs %}<table><tr><th class="auto">번호</th><th class="auto">처분</th><th class="auto">승인</th></tr>
-  {% for n in ncs %}<tr><td>{{ n.number }}</td><td>{{ n.get_disposition_display|default:"미정" }}</td>
-    <td>{% if n.approved_at %}{{ n.approved_by }} · {{ n.approved_at|date:"Y-m-d H:i" }}{% else %}미승인{% endif %}</td></tr>{% endfor %}</table>
-{% else %}<p>처분할 부적합이 없습니다.</p>{% endif %}
+<section class="card">
+  <h2>2. 부적합 보고서</h2>
+  {% for n in ncs %}
+  <table class="pack-nc" style="margin-bottom:12px">
+    <tbody>
+    <tr><th style="width:12rem">{{ n.number }}</th><td>LOT {{ n.lot.number }} · {{ n.detected_at|date:"Y-m-d H:i" }} · {{ n.defect_type|default:"-" }} · 부적합 수량 {{ n.defect_qty|floatformat:"-3" }}
+{{ n.description }}</td></tr>
+    {% with photos=n.photos.all %}{% if photos %}<tr><th>사진</th><td><div class="photos">{% for p in photos %}<img src="{{ p.file.url }}" alt="{{ n.number }} {{ p.caption }}">{% endfor %}</div></td></tr>{% endif %}{% endwith %}
+    </tbody>
+  </table>
+  {% empty %}<p class="empty">기간 안 부적합이 없습니다.</p>{% endfor %}
+</section>
+
+<section class="card">
+  <h2>3. 처분·승인</h2>
+  {% if ncs %}<table>
+    <thead><tr><th>번호</th><th>처분</th><th>승인</th></tr></thead>
+    <tbody>{% for n in ncs %}<tr><td>{{ n.number }}</td><td>{{ n.get_disposition_display|default:"미정" }}</td>
+      <td>{% if n.approved_at %}{{ n.approved_by }} · {{ n.approved_at|date:"Y-m-d H:i" }}{% else %}<span class="status status--critical">미승인</span>{% endif %}</td></tr>{% endfor %}</tbody>
+  </table>
+  {% else %}<p class="empty">처분할 부적합이 없습니다.</p>{% endif %}
+</section>
 
 {% if capas is not None and claims is not None and scars is not None %}
-<h2>4. 연결 CAPA·8D·SCAR</h2>
-{% if capas or claims or scars %}<table><tr><th class="auto">종류</th><th class="auto">번호</th><th class="auto">내용</th></tr>
-  {% for c in capas %}<tr><td>CAPA</td><td>{{ c.number }}</td><td>{{ c.title }}</td></tr>{% endfor %}
-  {% for c in claims %}<tr><td>8D</td><td>{{ c.number }}</td><td>{{ c.customer }} · {{ c.description }}</td></tr>{% endfor %}
-  {% for s in scars %}<tr><td>SCAR</td><td>{{ s.number }}</td><td>{{ s.supplier }} · {{ s.request }}</td></tr>{% endfor %}</table>
-{% else %}<p>연결된 CAPA·8D·SCAR가 없습니다.</p>{% endif %}
+<section class="card">
+  <h2>4. 연결 시정조치(CAPA)·8D·SCAR</h2>
+  {% if capas or claims or scars %}<table>
+    <thead><tr><th>종류</th><th>번호</th><th>내용</th></tr></thead>
+    <tbody>
+    {% for c in capas %}<tr><td>CAPA</td><td>{{ c.number }}</td><td>{{ c.title }}</td></tr>{% endfor %}
+    {% for c in claims %}<tr><td>8D</td><td>{{ c.number }}</td><td>{{ c.customer }} · {{ c.description }}</td></tr>{% endfor %}
+    {% for s in scars %}<tr><td>SCAR</td><td>{{ s.number }}</td><td>{{ s.supplier }} · {{ s.request }}</td></tr>{% endfor %}
+    </tbody>
+  </table>
+  {% else %}<p class="empty">연결된 CAPA·8D·SCAR가 없습니다.</p>{% endif %}
+</section>
 {% endif %}
 
 {% if changes is not None %}
-<h2>5. 4M 변경</h2>
-{% if changes %}<table><tr><th class="auto">번호</th><th class="auto">구분</th><th class="auto">적용</th><th class="auto">내용</th></tr>
-  {% for c in changes %}<tr><td>{{ c.number }}</td><td>{{ c.get_category_display }}</td><td>{{ c.effective_at|date:"Y-m-d" }}</td><td>{{ c.description }}</td></tr>{% endfor %}</table>
-{% else %}<p>기간 안 4M 변경이 없습니다.</p>{% endif %}
+<section class="card">
+  <h2>5. 4M 변경</h2>
+  {% if changes %}<table>
+    <thead><tr><th>번호</th><th>구분</th><th>적용</th><th>내용</th></tr></thead>
+    <tbody>{% for c in changes %}<tr><td>{{ c.number }}</td><td>{{ c.get_category_display }}</td><td>{{ c.effective_at|date:"Y-m-d" }}</td><td>{{ c.description }}</td></tr>{% endfor %}</tbody>
+  </table>
+  {% else %}<p class="empty">기간 안 4M 변경이 없습니다.</p>{% endif %}
+</section>
 {% endif %}
 
 {% if can_plan %}
-<h2>6. 관리계획서 · PFMEA</h2>
-{% if plan %}<p>{{ plan }} (Rev.{{ plan.revision }}, 승인 {{ plan.approved_at|date:"Y-m-d" }})</p>
-<table><tr><th class="auto">특성</th><th class="auto">공정</th><th class="auto">고장모드</th><th class="auto">S</th><th class="auto">O</th><th class="auto">D</th><th class="auto">이상 시 조치</th></tr>
-  {% for l in plan_lines %}<tr><td>{{ l.characteristic }}</td><td>{{ l.process|default_if_none:"-" }}</td><td>{{ l.failure_mode|default:"-" }}</td><td>{{ l.severity|default_if_none:"-" }}</td><td>{{ l.occurrence|default_if_none:"-" }}</td><td>{{ l.detection|default_if_none:"-" }}</td><td>{{ l.reaction|default:"-" }}</td></tr>{% endfor %}</table>
-{% else %}<p>승인된 관리계획서가 없습니다.</p>{% endif %}
+<section class="card">
+  <h2>6. 관리계획서 · PFMEA</h2>
+  {% if plan %}<p>{{ plan }} (Rev.{{ plan.revision }}, 승인 {{ plan.approved_at|date:"Y-m-d" }})</p>
+  <table>
+    <thead><tr><th>특성</th><th>공정</th><th>고장모드</th><th class="num">S</th><th class="num">O</th><th class="num">D</th><th>이상 시 조치</th></tr></thead>
+    <tbody>{% for l in plan_lines %}<tr><td>{{ l.characteristic }}</td><td>{{ l.process|default_if_none:"-" }}</td><td>{{ l.failure_mode|default:"-" }}</td><td class="num">{{ l.severity|default_if_none:"-" }}</td><td class="num">{{ l.occurrence|default_if_none:"-" }}</td><td class="num">{{ l.detection|default_if_none:"-" }}</td><td>{{ l.reaction|default:"-" }}</td></tr>{% endfor %}</tbody>
+  </table>
+  {% else %}<p class="empty">승인된 관리계획서가 없습니다.</p>{% endif %}
+</section>
 {% endif %}
 
 {% if memos is not None %}
-<h2>7. 메모</h2>
-{% for m in memos %}<p>[{{ m.created_at|date:"Y-m-d H:i" }}] {{ m.author }} · {{ m.get_speaker_kind_display }} {{ m.speaker_name }}: {{ m.body }}
-  {% for p in m.photos.all %}<img src="{{ p.file.url }}" alt="메모 사진" width="90">{% endfor %}</p>
-{% empty %}<p>붙은 메모가 없습니다.</p>{% endfor %}
+<section class="card">
+  <h2>7. 메모</h2>
+  {% for m in memos %}<p>[{{ m.created_at|date:"Y-m-d H:i" }}] {{ m.author }} · {{ m.get_speaker_kind_display }} {{ m.speaker_name }}: {{ m.body }}
+    {% for p in m.photos.all %}<img src="{{ p.file.url }}" alt="메모 사진" width="90">{% endfor %}</p>
+  {% empty %}<p class="empty">붙은 메모가 없습니다.</p>{% endfor %}
+</section>
 {% endif %}
 {% endif %}
+<p class="pack-footer">출력 일시: {% now "Y-m-d H:i" %} · 출력자: {{ request.user.username }}</p>
 {% endblock %}

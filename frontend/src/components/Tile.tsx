@@ -30,7 +30,7 @@ function useToneColor(tone?: string | null) {
 function Meta({ meta, tone }: Pick<Row, 'meta' | 'tone'>) {
   const { token } = theme.useToken()
   if (meta === undefined || meta === '' || meta === null) return null
-  if (tone && TAG[tone]) return <Tag color={TAG[tone]} style={{ marginInlineEnd: 0 }}>{meta}</Tag>
+  if (tone && TAG[tone]) return <Tag color={TAG[tone]} style={{ marginInlineEnd: 0, maxWidth: '100%', whiteSpace: 'normal', overflowWrap: 'anywhere' }}>{meta}</Tag>  // Tag 기본 nowrap이면 긴 글이 카드를 넘는다
   return <span style={{ color: token.colorTextSecondary }}>{meta}</span>
 }
 
