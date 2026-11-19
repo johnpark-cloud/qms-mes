@@ -6,8 +6,8 @@ import { api } from '../../api/client'
 import DataList, { type ListFilter } from '../../components/DataList'
 
 // core/api/records.py RecordListView 응답
-interface Row { id: number; url: string | null; status: string | null; cells: Record<string, string> }
-interface ListPage {
+export interface Row { id: number; url: string | null; status: string | null; cells: Record<string, string> }
+export interface ListPage {
   title: string; tabs: { key: string; label: string }[]; columns: { key: string; label: string; sortable: boolean }[]; filters: ListFilter[]
   count: number; page: number; has_more: boolean; results: Row[]; can_add: boolean; new_url: string | null
 }

@@ -109,3 +109,10 @@ a.flow-box:hover { border-color: currentColor; }
   .print-bar { display: none !important; }
   .doc-page { margin: 0; padding: 0; width: auto; min-height: 0; }
 }
+/* 메뉴 묶음 한눈에 보기: 넓으면 2~3열, 좁으면 1열 */
+.hub-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 420px), 1fr)); gap: 16px; }
+/* 검색 「메뉴 트리」: 밀러 열(묶음 → 메뉴 → 기록). 좁은 화면에서는 세로로 쌓는다 */
+.miller { display: grid; grid-template-columns: 1fr 1fr 1.4fr; gap: 0; margin-top: 8px; border: 1px solid var(--app-border); border-radius: 6px; height: 60vh; }
+.miller-col { overflow-y: auto; border-right: 1px solid var(--app-border); padding: 4px; }
+.miller-col:last-child { border-right: 0; }
+@media (max-width: 640px) { .miller { grid-template-columns: 1fr; height: auto; } .miller-col { max-height: 30vh; border-right: 0; border-bottom: 1px solid var(--app-border); } }

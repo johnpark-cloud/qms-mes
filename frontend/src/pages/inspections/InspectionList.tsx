@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
-import { Tag } from 'antd'
+import { Button, Tag } from 'antd'
 import type { ColumnsType } from 'antd/es/table'
 import { useCallback, useRef, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
@@ -97,6 +97,7 @@ export default function InspectionList() {
         fetchPage={fetchPage}
         exportHref={exportHref}
         filters={filters}
+        toolbar={<Button onClick={() => nav(`/nc-new?origin=${tab}`)}>부적합 등록</Button>}
         peek={(r) => <Peek row={r} />}
         onOpen={(r) => {
           addRecent({ label: `${r.lot_number} ${r.spec_title}`, href: `/app/inspections/${r.id}` })

@@ -28,6 +28,7 @@ import SpecList from './pages/specs/SpecList'
 import SpecPage from './pages/specs/SpecPage'
 import SpecPrint from './pages/specs/SpecPrint'
 import Memos from './pages/Memos'
+import Hub from './pages/Hub'
 import NcNew from './pages/NcNew'
 import MyLeavePay from './pages/MyLeavePay'
 import RecordList from './pages/records/RecordList'
@@ -82,6 +83,7 @@ function App() {
               <Route path="trace" element={<Trace />} />
               <Route path="memos" element={<Memos />} />
               <Route path="nc-new" element={<NcNew />} />
+              <Route path="hub/:group" element={<Hub />} />
               <Route path="audit" element={<AuditLog />} />
               <Route path="me" element={<MyLeavePay />} />
               <Route path="r/:app/:model" element={<RecordList />} />

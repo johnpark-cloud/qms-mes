@@ -48,12 +48,16 @@ export default function AppLayout() {
     ...user.nav.map((g) => ({
       key: g.group,
       label: g.group,
-      children: g.items.map((i) => ({ key: i.href, label: i.label })),
+      // 묶음마다 맨 위 「한눈에 보기」: 묶음 안 목록을 위젯으로 모아 보고 바로 추가한다(pages/Hub.tsx)
+      children: [
+        ...(g.items.length > 1 ? [{ key: '/app/hub/' + encodeURIComponent(g.group), label: '한눈에 보기' }] : []),
+        ...g.items.map((i) => ({ key: i.href, label: i.label })),
+      ],
     })),
   ]
   // 검사 목록은 탭마다 메뉴가 따로 있다. ?tab 이 없으면 화면처럼 수입검사로 본다.
-  const selected = '/app' + pathname + (pathname === '/inspections' ? `?tab=${new URLSearchParams(search).get('tab') || 'INCOMING'}` : '')
-  const open = user.nav.filter((g) => g.items.some((i) => i.href === selected)).map((g) => g.group)
+  const selected = '/app' + (pathname.startsWith('/hub/') ? '/hub/' + encodeURIComponent(decodeURIComponent(pathname.slice(5))) : pathname) + (pathname === '/inspections' ? `?tab=${new URLSearchParams(search).get('tab') || 'INCOMING'}` : '')
+  const open = user.nav.filter((g) => selected === '/app/hub/' + encodeURIComponent(g.group) || g.items.some((i) => i.href === selected)).map((g) => g.group)
 
   return (
     <Layout style={{ minHeight: '100vh' }}>

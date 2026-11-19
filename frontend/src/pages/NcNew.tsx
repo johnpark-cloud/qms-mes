@@ -78,7 +78,7 @@ export default function NcNew() {
         />
       )}
       {meta.error && <Alert style={{ marginBottom: 12 }} type="error" message={meta.error instanceof ApiError ? meta.error.detail : '불러오지 못했습니다.'} />}
-      <Form form={form} layout="vertical" initialValues={{ lot: lotText, origin: 'PROCESS', defect_qty: 1 }} onFinish={submit} autoComplete="off">
+      <Form form={form} layout="vertical" initialValues={{ lot: lotText, origin: params.get('origin') || 'PROCESS', defect_qty: 1 }} onFinish={submit} autoComplete="off">
         <Form.Item label="LOT 번호" name="lot" rules={[{ required: true, whitespace: true, message: 'LOT 번호를 입력하세요.' }]}>
           <AutoComplete options={lotOptions} onChange={setLotText} defaultActiveFirstOption={false}>
             <Input size="large" placeholder="스캔하거나 번호·품번 일부 입력" />
