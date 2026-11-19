@@ -116,6 +116,16 @@ class QuickNcForm(forms.Form):
         return lot
 
 
+def save_quick_nc(user, d):
+    """간편 등록 저장(옛 화면·새 화면 /api/core/nc-quick/ 공용). 사진 하나라도 틀리면 부적합도 남기지 않는다."""
+    with transaction.atomic():
+        nc = Nonconformance.objects.create(lot=d['lot'], origin=d['origin'], description=d['description'],
+                                           defect_qty=d['defect_qty'], detected_by=user)
+        for f in d['photos']:
+            NonconformancePhoto.objects.create(nonconformance=nc, file=f)
+    return nc
+
+
 @staff_member_required
 def nc_quick(request):
     """현장 간편 등록: 필수 5칸만 받고 나머지는 부적합 화면에서 보완한다. 저장하면 보류가 자동 생성된다."""
@@ -125,11 +135,7 @@ def nc_quick(request):
     if request.method == 'POST' and form.is_valid():
         d = form.cleaned_data
         try:
-            with transaction.atomic():
-                nc = Nonconformance.objects.create(lot=d['lot'], origin=d['origin'], description=d['description'],
-                                                   defect_qty=d['defect_qty'], detected_by=request.user)
-                for f in d['photos']:
-                    NonconformancePhoto.objects.create(nonconformance=nc, file=f)
+            nc = save_quick_nc(request.user, d)
         except ValidationError as e:
             form.add_error(None, e)
         else:

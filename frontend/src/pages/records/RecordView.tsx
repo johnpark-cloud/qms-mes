@@ -15,9 +15,9 @@ import { addRecent } from '../../lib/recent'
 interface Field { key: string; label: string; value: string; url: string | null }
 interface Row { id: number; url: string | null; status: string | null; cells: Record<string, string> }
 interface Child { key: string; label: string; columns: { key: string; label: string }[]; rows: Row[] }
-type Value = string | number | boolean | null | Record<string, string>[]
+type Value = string | number | boolean | null | Record<string, string>[] | string[]
 export interface Edit {
-  key: string; label: string; type: 'str' | 'text' | 'int' | 'date' | 'datetime' | 'bool' | 'choice' | 'rows'; value: Value; required: boolean
+  key: string; label: string; type: 'str' | 'text' | 'int' | 'date' | 'datetime' | 'bool' | 'choice' | 'rows' | 'tags'; value: Value; required: boolean
   choices: { value: string; label: string }[] | null
   columns?: { key: string; label: string }[]  // type 'rows': 한 줄에 들어갈 칸
 }
@@ -117,6 +117,7 @@ export function Editor({ e, ...rest }: { e: Edit; [k: string]: any }) {
   if (e.type === 'date') return <Input type="date" {...rest} />
   if (e.type === 'datetime') return <Input type="datetime-local" {...rest} />
   if (e.type === 'text') return <Input.TextArea autoSize={{ minRows: 2, maxRows: 8 }} {...rest} />
+  if (e.type === 'tags') return <Select mode="tags" open={false} tokenSeparators={[',']} suffixIcon={null} placeholder="입력하고 Enter (쉼표로 여러 개)" {...rest} />
   if (e.type === 'choice') return <Select options={e.choices ?? []} showSearch optionFilterProp="label" allowClear={!e.required} {...rest} />
   return <Input {...rest} />
 }

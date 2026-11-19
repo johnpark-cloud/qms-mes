@@ -701,6 +701,46 @@ try:
             ok, page_err = False, str(e)[:80]
         check('기록 화면: 새로 만들기', ok, page.url if ok else page_err)
 
+        # 메뉴 「부적합 등록」 → 새 화면 → 등록 → 보류 안내와 상세 링크
+        try:
+            page.goto('/app/todo')
+            page.locator('.ant-menu-submenu-title', has_text='품질보증').click()
+            page.get_by_role('menuitem', name='부적합 등록', exact=True).click()
+            page.wait_for_url('**/app/nc-new')
+            page.get_by_placeholder('스캔하거나 번호·품번 일부 입력').fill('RAW-2611-001')
+            page.get_by_label('부적합 내용').fill('E2E 간편 등록')
+            page.get_by_role('button', name='등록', exact=True).click()
+            page.get_by_text('LOT RAW-2611-001 보류').wait_for(timeout=5000)
+            page.get_by_role('link', name='부적합 상세 열기').click()
+            page.wait_for_url(re.compile(r'/app/r/core/nonconformance/\d+$'))
+            ok, page_err = True, ''
+        except Exception as e:
+            ok, page_err = False, str(e)[:80]
+        check('부적합 등록 새 화면 → 보류 → 상세', ok, page.url if ok else page_err)
+
+        # 사용자 정의 칸: 새 기록 화면에서 선택지를 Enter로 넣어 저장 (1단계 시스템 관리)
+        try:
+            page.goto('/app/r/core/fielddef/new')
+            page.locator('#target').click()
+            page.keyboard.type('부서')
+            page.keyboard.press('Enter')
+            page.locator('#key').fill('e2e_bank')
+            page.locator('#label').fill('E2E 은행')
+            page.locator('#kind').click()
+            page.keyboard.type('선택')
+            page.keyboard.press('Enter')
+            page.locator('#choices').click()
+            for t in ('국민', '신한'):
+                page.keyboard.type(t)
+                page.keyboard.press('Enter')
+            page.get_by_role('button', name='저장').click()
+            page.wait_for_url(re.compile(r'/app/r/core/fielddef/\d+$'))
+            page.get_by_text('국민, 신한').wait_for(timeout=5000)
+            ok, page_err = True, ''
+        except Exception as e:
+            ok, page_err = False, str(e)[:120]
+        check('사용자 정의 칸 새로 만들기 → 선택지 Enter 입력 → 상세 "국민, 신한"', ok, page.url if ok else page_err)
+
         # 세션이 끊기면 API를 부르는 화면이 로그인으로 보내야 한다 (client.ts 의 403 처리)
         page.context.clear_cookies()
         page.goto('/app/overview')

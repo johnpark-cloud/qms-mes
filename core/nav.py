@@ -14,7 +14,7 @@ APP_PAGES = {'/admin/core/item/': '/app/items', '/admin/core/process/': '/app/pr
              '/admin/qms/inspection/': '/app/inspections', '/me/': '/app/me',
              # 옛 서버 화면 → 같은 일을 하는 새 화면 (옛 주소도 계속 열린다)
              '/todo/': '/app/todo', '/overview/': '/app/overview', '/inspect/': '/app/inspect', '/import/': '/app/import',
-             '/trace/': '/app/trace', '/memo/inbox/': '/app/memos'}
+             '/trace/': '/app/trace', '/memo/inbox/': '/app/memos', '/nc/new/': '/app/nc-new'}
 
 
 def nav_url(name):

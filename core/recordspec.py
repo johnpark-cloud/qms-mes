@@ -304,7 +304,8 @@ SPECS = {
         search=('key', 'label'),
         side=('relations', 'history'),
         order=('target', 'sort'),
-        edit=('label', 'required', 'sort', 'active')),
+        edit=('label', 'choices', 'required', 'sort', 'active'),  # 키·대상은 저장 후 못 바꾼다(모델 clean)
+        create=('target', 'key', 'label', 'kind', 'choices', 'required', 'sort')),
     'qms.exceltemplate': Spec(
         fields=('name', 'target', 'file', 'mapping'),
         columns=('name', 'target', 'file'),
@@ -359,6 +360,8 @@ def value_of(obj, name):
                                                 *(r.get(k, '') for k, _ in cols[2:])) if x) for r in v), None
     if isinstance(v, models.Model):
         return str(v), record_url(v)
+    if isinstance(v, list) and all(isinstance(x, str) for x in v):  # 선택지 목록
+        return ', '.join(v), None
     if isinstance(field, models.FileField):
         return (v.name.rsplit('/', 1)[-1], v.url) if v else ('', None)
     if isinstance(v, bool):
@@ -385,6 +388,8 @@ def editor(obj, name):
     if cols:
         return {'key': name, 'label': str(f.verbose_name), 'type': 'rows', 'value': v or [], 'required': False,
                 'choices': None, 'columns': [{'key': k, 'label': n} for k, n in cols]}
+    if isinstance(f, models.JSONField) and f.default is list:  # 글 목록(사용자 정의 칸 선택지): 입력하고 Enter
+        return {'key': name, 'label': str(f.verbose_name), 'type': 'tags', 'value': v or [], 'required': False, 'choices': None}
     if f.choices:
         kind = 'choice'
     elif isinstance(f, models.BooleanField):

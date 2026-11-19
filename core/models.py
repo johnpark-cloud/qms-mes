@@ -914,6 +914,9 @@ class FieldDef(models.Model):
         return self.label
 
     def clean(self):
+        if not isinstance(self.choices, (list, type(None))) or any(not isinstance(c, str) for c in self.choices or []):
+            raise ValidationError({'choices': '선택지는 글 목록으로 적습니다.'})
+        self.choices = list(dict.fromkeys(c.strip() for c in self.choices or [] if c.strip()))  # 빈 값·중복 버림
         if self.pk:
             old = FieldDef.objects.filter(pk=self.pk).values('key', 'target_id').first()
             if old and (old['key'] != self.key or old['target_id'] != self.target_id):

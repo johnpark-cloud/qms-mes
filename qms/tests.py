@@ -850,7 +850,7 @@ class TimelineTest(TestCase):
 
     def test_actions_fresh_and_perms(self):
         from core.timeline import lot_actions
-        self.assertEqual([n for n, _ in lot_actions(self.raw, self.admin)], ['검사 입력', '부적합 등록'])
+        self.assertEqual(lot_actions(self.raw, self.admin), [('검사 입력', '/app/inspect?lot=RAW-1'), ('부적합 등록', '/app/nc-new?lot=RAW-1')])
         self.assertEqual(lot_actions(self.raw, User.objects.create_user('nobody', is_staff=True)), [])
 
     def test_trace_page(self):

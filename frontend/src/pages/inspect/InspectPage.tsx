@@ -1,7 +1,7 @@
 import { Alert, AutoComplete, Button, Form, Input, Modal, Select, Space, Tag, type InputRef } from 'antd'
 import type { ColumnsType } from 'antd/es/table'
 import { useEffect, useRef, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { ApiError } from '../../api/client'
 import { fetchQueue, lookupLot, receiveLot, type LotResult, type Opt, type QueueRow } from '../../api/inspect'
 import DataList from '../../components/DataList'
@@ -98,6 +98,8 @@ export default function InspectPage() {
   const [open, setOpen] = useState(false) // 조회 뒤 다시 포커스해도 목록이 저절로 열려 입고 창을 가리지 않게 직접 연다
 
   useEffect(() => scan.current?.focus(), [])
+  const [params] = useSearchParams()
+  const preset = params.get('lot') // LOT 이력의 「검사 입력」 단추가 ?lot= 로 연다
 
   const lotOptions = useLotOptions(text)
 
@@ -126,6 +128,11 @@ export default function InspectPage() {
       scan.current?.focus()
     }
   }
+
+  useEffect(() => {
+    if (preset) void find(preset)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [preset])
 
   const received = (r: LotResult) => {
     setReceive(null)

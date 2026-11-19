@@ -7,13 +7,14 @@ from django.shortcuts import get_object_or_404
 from django.utils.decorators import method_decorator
 from django.views.decorators.csrf import ensure_csrf_cookie
 from rest_framework.authentication import SessionAuthentication
+from rest_framework.parsers import MultiPartParser
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from core import audit, relations
 from core.api.permissions import require_perm
-from core.models import Hold, Item, Lot, RevisionLog, is_approver
+from core.models import Hold, Item, Lot, Nonconformance, RevisionLog, is_approver
 from core.modules import MODULES, active_set
 from core.nav import app_href, visible_nav
 from core.rules import confirm_revision_log
@@ -144,6 +145,28 @@ class LotSearchView(APIView):
         lots = list(qs[:20])
         held = set(Hold.objects.filter(lot__in=lots, released_at__isnull=True).values_list('lot_id', flat=True))
         return Response({'results': [_lot_row(x, x.pk in held) for x in lots]})
+
+
+class NcQuickView(APIView):
+    """부적합 간편 등록 새 화면(/app/nc-new). 검사·저장은 옛 화면(core/views.py nc_quick)과 같은 양식·함수를 쓴다."""
+    schema = None
+    parser_classes = [MultiPartParser]
+
+    def get(self, request):
+        require_perm(request.user, 'core.add_nonconformance')
+        return Response({'origins': [{'value': v, 'label': label} for v, label in Nonconformance.ORIGINS]})
+
+    def post(self, request):
+        from core.views import QuickNcForm, save_quick_nc
+        require_perm(request.user, 'core.add_nonconformance')
+        form = QuickNcForm(request.POST, request.FILES)
+        if not form.is_valid():
+            fields = {k: [str(m) for m in v] for k, v in form.errors.items()}
+            return Response({'detail': next(iter(fields.values()))[0], 'fields': fields}, status=400)
+        nc = save_quick_nc(request.user, form.cleaned_data)  # 모델 검증 오류는 handler가 400으로 바꾼다
+        lot = form.cleaned_data['lot'].number
+        return Response({'id': nc.pk, 'number': nc.number, 'lot': lot, 'url': relations.record_url(nc),
+                         'trace': relations.trace_url(lot)}, status=201)
 
 
 class TraceView(APIView):

@@ -789,9 +789,9 @@ class RecordsCreateApiTest(TestCase):
         self.assertEqual(f['work_order']['type'], 'choice')
         self.assertIn({'value': str(self.wo.pk), 'label': 'WO-1'}, f['work_order']['choices'])
         self.assertFalse(f['lot']['required'])
-        self.assertEqual(self.client.get('/api/records/core.fielddef/new/').status_code, 404)  # create 없는 설명서
+        self.assertEqual(self.client.get('/api/records/qms.exceltemplate/new/').status_code, 404)  # create 없는 설명서
         self.assertEqual(self.client.get('/api/records/core.workorder/').json()['new_url'], '/app/r/core/workorder/new')
-        self.assertEqual(self.client.get('/api/records/core.fielddef/').json()['new_url'], '/admin/core/fielddef/add/')
+        self.assertEqual(self.client.get('/api/records/qms.exceltemplate/').json()['new_url'], '/admin/qms/exceltemplate/add/')
 
     def test_create_work_order_and_result(self):
         from core.models import WorkOrder, WorkResult
@@ -848,6 +848,35 @@ class RecordsCreateApiTest(TestCase):
         detail = self.client.get(f'/api/records/core.partner/{p.pk}/').json()
         self.assertEqual(detail['groups'][0]['label'], '구분')
         self.assertIn('품질 김품질 · 010 · q@x.kr', [x['value'] for x in detail['fields']])
+
+    def test_fielddef_new_and_edit_choices_as_tags(self):
+        from django.contrib.contenttypes.models import ContentType
+        from core.models import Department, FieldDef
+        ct = ContentType.objects.get_for_model(Department)
+        self.assertEqual(self.client.get('/api/records/core.fielddef/').json()['new_url'], '/app/r/core/fielddef/new')
+        f = {e['key']: e for e in self.client.get('/api/records/core.fielddef/new/').json()['fields']}
+        self.assertEqual(list(f), ['target', 'key', 'label', 'kind', 'choices', 'required', 'sort'])
+        self.assertEqual((f['choices']['type'], f['choices']['value']), ('tags', []))
+        self.assertIn(str(ct.pk), [c['value'] for c in f['target']['choices']])
+        r = self.post('core.fielddef', {'target': str(ct.pk), 'key': 'cost_center', 'label': '원가 센터', 'kind': 'text', 'choices': []})
+        self.assertEqual(r.status_code, 201, r.content)
+        self.assertEqual(FieldDef.objects.get(key='cost_center').choices, [])
+        r = self.post('core.fielddef', {'target': str(ct.pk), 'key': 'bank', 'label': '은행', 'kind': 'choice', 'choices': [' ', '']})
+        self.assertEqual(r.json()['fields']['choices'], ['종류가 "선택"이면 선택지를 입력하세요.'])
+        r = self.post('core.fielddef', {'target': str(ct.pk), 'key': 'bank', 'label': '은행', 'kind': 'choice',
+                                        'choices': ['국민', ' 신한 ', '', '국민']})
+        self.assertEqual(r.status_code, 201, r.content)
+        fd = FieldDef.objects.get(key='bank')
+        self.assertEqual(fd.choices, ['국민', '신한'])  # 앞뒤 빈칸·빈 값·중복을 버린다
+        d = self.client.get(f'/api/records/core.fielddef/{fd.pk}/').json()
+        self.assertIn('국민, 신한', [x['value'] for x in d['fields']])
+        self.assertIn('choices', [e['key'] for e in d['edit']])
+        r = self.client.patch(f'/api/records/core.fielddef/{fd.pk}/', {'values': {'choices': ['국민', '신한', '우리']}, 'version': d['version']},
+                              content_type='application/json')
+        self.assertEqual(r.status_code, 200, r.content)
+        fd.refresh_from_db()
+        self.assertEqual(fd.choices, ['국민', '신한', '우리'])
+        self.assertEqual(fd.history.count(), 2)
 
     def test_needs_add_permission(self):
         u = User.objects.create_user('v', password='pw', is_staff=True)

@@ -583,6 +583,34 @@ class NcQuickTest(TestCase):
     def test_prefill(self):
         self.assertContains(self.client.get('/nc/new/?lot=L1'), 'value="L1"')
 
+    def test_api_creates_nc_and_hold(self):
+        """새 화면(/app/nc-new)도 옛 화면과 같은 검사·저장: 보류 자동, 사진, 대소문자·공백 무시."""
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        from .relations import record_url
+        r = self.client.post('/api/core/nc-quick/', {'lot': ' l1 \n', 'origin': 'INCOMING', 'description': '찍힘', 'defect_qty': '2',
+                                                     'photos': [SimpleUploadedFile('a.jpg', b'0' * 100)]})
+        self.assertEqual(r.status_code, 201, r.content)
+        nc = Nonconformance.objects.get()
+        self.assertEqual((nc.detected_by, nc.holds.count(), nc.photos.count()), (self.user, 1, 1))
+        self.assertEqual(r.json(), {'id': nc.pk, 'number': nc.number, 'lot': 'L1', 'url': record_url(nc), 'trace': '/app/trace?lot=L1'})
+
+    def test_api_errors_and_permission(self):
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        r = self.client.post('/api/core/nc-quick/', {'lot': 'NOPE', 'origin': 'INCOMING', 'description': '', 'defect_qty': '2'})
+        self.assertEqual(r.status_code, 400)
+        self.assertEqual(r.json()['fields']['lot'], ['등록되지 않은 LOT입니다.'])
+        self.assertIn('description', r.json()['fields'])
+        r = self.client.post('/api/core/nc-quick/', {'lot': 'L1', 'origin': 'INCOMING', 'description': '찍힘', 'defect_qty': '1',
+                                                     'photos': [SimpleUploadedFile('x.exe', b'0')]})
+        self.assertEqual(r.status_code, 400)
+        self.assertIn('photos', r.json()['fields'])
+        self.assertEqual(Nonconformance.objects.count(), 0)
+        origins = self.client.get('/api/core/nc-quick/').json()['origins']
+        self.assertEqual(origins[0], {'value': 'INCOMING', 'label': '수입검사·공급자'})
+        self.client.force_login(User.objects.create_user('nop', is_staff=True))
+        self.assertEqual(self.client.get('/api/core/nc-quick/').status_code, 403)
+        self.assertEqual(self.client.post('/api/core/nc-quick/', {'lot': 'L1'}).status_code, 403)
+
 
 class NcMailTest(TestCase):
     def setUp(self):
@@ -757,7 +785,7 @@ class NavTest(TestCase):
         from .nav import app_href
         for old, new in (('/todo/', '/app/todo'), ('/memo/inbox/', '/app/memos'), ('/trace/?lot=A%2B1', '/app/trace?lot=A%2B1'),
                          ('/admin/qms/inspection/?spec__inspection_type__exact=INCOMING', '/app/inspections?tab=INCOMING'),
-                         ('/kpi/', '/kpi/')):
+                         ('/nc/new/?lot=L1', '/app/nc-new?lot=L1'), ('/inspect/?lot=L1', '/app/inspect?lot=L1'), ('/kpi/', '/kpi/')):
             self.assertEqual(app_href(old), new)
 
 

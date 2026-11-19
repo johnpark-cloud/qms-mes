@@ -4,6 +4,7 @@ from django.apps import apps
 from django.urls import reverse
 
 from .modules import active_set
+from .nav import app_href
 from .relations import record_url
 
 KIND_MODULE = {'inspection': 'qms_inspection', 'work': 'mes', 'shipment': 'mes'}  # 나머지 종류는 기본 플랫폼
@@ -54,4 +55,4 @@ def lot_actions(lot, user):
         out.append(('출하 등록', f'{reverse("admin:core_shipment_add")}?lot={lot.pk}'))
     if user.has_perm('core.add_nonconformance'):
         out.append(('부적합 등록', f'{reverse("nc_quick")}?{q}'))
-    return out
+    return [(label, app_href(url)) for label, url in out]  # 옛 서버 화면 주소 → 새 화면

@@ -13,6 +13,7 @@ urlpatterns = [
     path('items/', views.ItemLookupView.as_view()),
     path('core/lots/', views.LotSearchView.as_view()),
     path('core/trace/', views.TraceView.as_view()),
+    path('core/nc-quick/', views.NcQuickView.as_view()),
     path('core/items/', master.ItemListView.as_view()),
     path('core/items/<int:pk>/', master.ItemDetailView.as_view()),
     path('core/numbering/item-options/', master.ItemOptionsView.as_view(), name='numbering-item-options'),
