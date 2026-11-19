@@ -1283,7 +1283,7 @@ class SpecDocumentTest(TestCase):
         self.assertEqual(doc['title'], 'R1 수입검사 Rev.1')
         self.assertFalse(doc['draft'])
         self.assertIn(['품번', 'R1'], doc['head'])
-        self.assertEqual(doc['tables'][0]['columns'], ['항목명', '하한', '상한', '단위', '특별특성', '관리계획서 항목'])
+        self.assertEqual(doc['tables'][0]['columns'], ['항목명', '하한', '상한', '단위', '특별특성', '계측기 종류', '관리계획서 항목'])
         self.assertEqual(doc['tables'][0]['rows'][0][:4], ['두께', '9', '11', 'mm'])
         self.assertEqual(doc['revisions'][0]['changes'], '최초 제정')
         self.assertEqual(doc['signoff']['approved_by'], 'lead')

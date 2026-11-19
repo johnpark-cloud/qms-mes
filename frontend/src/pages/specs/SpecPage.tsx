@@ -15,7 +15,7 @@ import SignModal from '../../components/SignModal'
 import { addRecent } from '../../lib/recent'
 import { SAMPLING } from '../../lib/sampling'
 
-const FIELDS = ['name', 'lsl', 'usl', 'unit', 'special', 'plan_line'] as const
+const FIELDS = ['name', 'lsl', 'usl', 'unit', 'gauge_kind', 'special', 'plan_line'] as const
 const norm = (v: unknown) => String(v ?? '')
 const errText = (e: unknown, fallback: string) => (e instanceof Error ? e.message : fallback)
 
@@ -24,13 +24,14 @@ const makeColumns = (d: SpecDetail): GridColumn[] => [
   { key: 'lsl', label: '하한', kind: 'number', width: 100 },
   { key: 'usl', label: '상한', kind: 'number', width: 100 },
   { key: 'unit', label: '단위', kind: 'text', width: 80 },
+  { key: 'gauge_kind', label: '계측기 종류', kind: 'text', width: 140 },
   { key: 'special', label: '특별특성', kind: 'select', options: d.special_options, width: 130 },
   { key: 'plan_line', label: '관리계획서 항목', kind: 'select', options: d.plan_line_options, width: 200 },
   { key: 'spc_url', label: 'SPC 관리도', kind: 'link', width: 90 },
 ]
 
 const toRows = (d: SpecDetail): GridRow[] =>
-  d.characteristics.map((c) => ({ _key: `c${c.id}`, id: c.id, name: c.name, lsl: c.lsl, usl: c.usl, unit: c.unit, special: c.special, plan_line: c.plan_line, spc_url: c.spc_url }))
+  d.characteristics.map((c) => ({ _key: `c${c.id}`, id: c.id, name: c.name, lsl: c.lsl, usl: c.usl, unit: c.unit, gauge_kind: c.gauge_kind, special: c.special, plan_line: c.plan_line, spc_url: c.spc_url }))
 
 interface LogData {
   results: RevLog[]
@@ -89,7 +90,7 @@ export default function SpecPage() {
       const payload = rows.flatMap((r, i) => {
         if (!touched(r)) return []
         sent.push(i)
-        return [{ id: r.id, delete: r.delete || undefined, name: r.name ?? '', lsl: r.lsl ?? '', usl: r.usl ?? '', unit: r.unit ?? '', special: r.special ?? '', plan_line: r.plan_line ?? null }]
+        return [{ id: r.id, delete: r.delete || undefined, name: r.name ?? '', lsl: r.lsl ?? '', usl: r.usl ?? '', unit: r.unit ?? '', gauge_kind: r.gauge_kind ?? '', special: r.special ?? '', plan_line: r.plan_line ?? null }]
       })
       try {
         return await api<SpecDetail>(`/api/qms/specs/${id}/`, { method: 'PUT', body: JSON.stringify({ sampling, note, characteristics: payload, version: d!.version }) })

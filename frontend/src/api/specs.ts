@@ -19,6 +19,7 @@ export interface CharRow {
   lsl: string
   usl: string
   unit: string
+  gauge_kind: string
   special: string
   plan_line: number | null
   spc_url: string

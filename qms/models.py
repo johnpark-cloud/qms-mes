@@ -70,13 +70,13 @@ class InspectionSpec(Approvable):
         from .rules import spec_logs  # rules가 models를 가져오므로 안에서 불러온다
 
         num = _num_text
-        rows = [[c.name, num(c.lsl), num(c.usl), c.unit, c.special, str(c.plan_line or '')]
+        rows = [[c.name, num(c.lsl), num(c.usl), c.unit, c.special, c.gauge_kind, str(c.plan_line or '')]
                 for c in self.characteristics.select_related('plan_line').order_by('pk')]
         return {
             'title': str(self), 'number': None, 'revision': f'Rev.{self.revision}', 'draft': self.approved_by_id is None,
             'head': [['품번', self.item.code], ['품명', self.item.name], ['검사 구분', self.get_inspection_type_display()],
                      ['개정', f'Rev.{self.revision}'], ['샘플링', self.sampling], ['비고', self.note]],
-            'tables': [{'title': '검사항목', 'columns': ['항목명', '하한', '상한', '단위', '특별특성', '관리계획서 항목'], 'rows': rows}],
+            'tables': [{'title': '검사항목', 'columns': ['항목명', '하한', '상한', '단위', '특별특성', '계측기 종류', '관리계획서 항목'], 'rows': rows}],
             **_doc_tail(self, spec_logs(self, confirmed_only=True)),
         }
 
@@ -100,6 +100,9 @@ class Characteristic(models.Model):
                                help_text='CC·SC는 SPC 경보 시 부적합이 자동 등록된다')
     plan_line = models.ForeignKey('ControlPlanLine', on_delete=models.SET_NULL, null=True, blank=True,
                                   related_name='characteristics', verbose_name='관리계획서 항목')
+    gauge_kind = models.CharField('계측기 종류', max_length=50, blank=True,
+                                  help_text='검사 입력 때 종류·이름에 이 말이 들어간 교정 기한 안의 계측기를 자동으로 고른다. '
+                                            '비우면 관리계획서 측정방법을 쓴다')
     history = HistoricalRecords()
 
     class Meta:

@@ -86,7 +86,7 @@ def new_spec_revision(spec):
                                         revision=top + 1, sampling=spec.sampling, note=spec.note)
     for c in items:
         Characteristic.objects.create(spec=new, name=c.name, lsl=c.lsl, usl=c.usl, unit=c.unit,
-                                      special=c.special, plan_line=c.plan_line)
+                                      special=c.special, plan_line=c.plan_line, gauge_kind=c.gauge_kind)
     return new
 
 
@@ -103,7 +103,7 @@ def spec_version(spec):
     return record_version(spec, [(Characteristic, 'spec')])
 
 
-_ROW_FIELDS = ('name', 'lsl', 'usl', 'unit', 'special')
+_ROW_FIELDS = ('name', 'lsl', 'usl', 'unit', 'special', 'gauge_kind')
 
 
 def _num(v):
@@ -182,7 +182,7 @@ def prev_revision(spec):
             .order_by('-revision').first())
 
 
-_CELLS = ('lsl', 'usl', 'unit', 'special', 'plan_line_id')
+_CELLS = ('lsl', 'usl', 'unit', 'special', 'gauge_kind', 'plan_line_id')
 
 
 def _fmt(v):

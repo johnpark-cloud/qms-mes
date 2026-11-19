@@ -84,7 +84,7 @@ def _detail(spec, user):
         'can_delete_rows': user.has_perm('qms.delete_characteristic'),
         'prev_id': prev.pk if prev else None,
         'characteristics': [{'id': c.pk, 'name': c.name, 'lsl': _num(c.lsl), 'usl': _num(c.usl), 'unit': c.unit,
-                             'special': c.special, 'plan_line': c.plan_line_id, 'spc_url': app_href(reverse('spc', args=[c.pk]))}
+                             'special': c.special, 'gauge_kind': c.gauge_kind, 'plan_line': c.plan_line_id, 'spc_url': app_href(reverse('spc', args=[c.pk]))}
                             for c in spec.characteristics.order_by('pk')],
         'plan_line_options': [{'value': ln.pk, 'label': str(ln)} for ln in lines],
         'special_options': [{'value': v, 'label': '없음' if v == '' else label} for v, label in SPECIAL],

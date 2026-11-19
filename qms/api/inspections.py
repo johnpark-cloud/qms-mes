@@ -141,13 +141,22 @@ class FormView(APIView):
         except ValidationError as e:
             return _bad(e.messages[0])
         today = timezone.localdate()
+        usable = [g for g in Gauge.objects.filter(active=True).order_by('number') if g.usable_on(today)]
+
+        def kind_of(c):  # 검사항목의 계측기 종류, 비면 관리계획서 측정방법
+            return (c.gauge_kind or (c.plan_line.method if c.plan_line else '')).strip()
+
+        def pick(key):  # 종류·이름에 그 말이 들어 있는 첫 계측기(교정 기한 안)
+            return next((g.pk for g in usable if key.lower() in f'{g.kind} {g.name}'.lower()), None) if key else None
+
+        chars = spec.characteristics.select_related('plan_line').order_by('pk')
         return Response({
             'lot': _lot(lot), 'spec': {'id': spec.pk, 'title': str(spec), 'sampling': spec.sampling},
             'characteristics': [{'id': c.pk, 'name': c.name, 'spec_text': c.spec_text(), 'unit': c.unit,
-                                 'is_variable': c.is_variable, 'special': c.special}
-                                for c in spec.characteristics.order_by('pk')],
-            'gauges': [{'value': g.pk, 'label': str(g)} for g in Gauge.objects.filter(active=True).order_by('number')
-                       if g.usable_on(today)],
+                                 'is_variable': c.is_variable, 'special': c.special, 'gauge_kind': kind_of(c),
+                                 'gauge': pick(kind_of(c)) if c.is_variable else None}
+                                for c in chars],
+            'gauges': [{'value': g.pk, 'label': str(g)} for g in usable],
             'defect_types': DEFECT_TYPES,
             'done': Inspection.objects.filter(lot=lot, spec__inspection_type=spec.inspection_type).exists(),  # 재검사 확인용
         })

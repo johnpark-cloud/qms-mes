@@ -443,7 +443,7 @@ class InspectApiTest(TestCase):
         self.assertEqual(d['spec'], {'id': self.spec.pk, 'title': str(self.spec), 'sampling': 'n=5'})
         self.assertEqual(d['lot']['number'], 'Q-1')
         self.assertEqual(d['characteristics'][0], {'id': self.thk.pk, 'name': '두께', 'spec_text': '9.9 ~ 10.1 mm', 'unit': 'mm',
-                                                   'is_variable': True, 'special': ''})
+                                                   'is_variable': True, 'special': '', 'gauge_kind': '', 'gauge': None})
         self.assertEqual(d['characteristics'][1]['spec_text'], 'OK/NG')
         self.assertIn('치수', d['defect_types'])
         self.assertFalse(d['done'])

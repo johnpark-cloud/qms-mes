@@ -5,7 +5,7 @@ import { useQuery } from '@tanstack/react-query'
 import { ApiError } from '../../api/client'
 import { checkValues, fetchForm, submitInspection, type SubmitResult } from '../../api/inspect'
 
-type Row = { id: number; name: string; spec_text: string; unit: string; is_variable: boolean; special: string }
+type Row = { id: number; name: string; spec_text: string; unit: string; is_variable: boolean; special: string; gauge_kind: string; gauge: number | null }
 
 function Verdict({ r }: { r: boolean | null | undefined }) {
   if (r === true) return <span style={{ color: 'var(--sapPositiveColor, #107e3e)' }}>합격</span>
@@ -36,6 +36,12 @@ export default function MeasurePage() {
   const last = useRef<Record<string, number>>({}) // 칸별로 가장 최근에 보낸 요청 번호
   const judge = useRef<HTMLButtonElement>(null)
   const inputs = useRef<Record<number, HTMLElement | null>>({})
+
+  // 서버가 검사항목의 계측기 종류에 맞춰 고른 계측기(교정 기한 안)를 미리 채운다. 바꿀 수 있다.
+  useEffect(() => {
+    const cs = form.data?.characteristics
+    if (cs) setGauges(Object.fromEntries(cs.filter((c) => c.gauge != null).map((c) => [String(c.id), c.gauge as number])))
+  }, [form.data])
 
   // 입력이 300ms 멈추면 바뀐 칸만 모아 한 번 확인한다. 판정은 서버 응답만 쓴다.
   useEffect(() => {
@@ -206,7 +212,7 @@ export default function MeasurePage() {
                 <Select
                   style={{ width: 200 }}
                   allowClear
-                  placeholder="기본 계측기"
+                  placeholder={c.gauge_kind && c.gauge == null ? `${c.gauge_kind} 없음(교정 기한 확인)` : '기본 계측기'}
                   value={gauges[c.id] ?? gauge ?? undefined}
                   onChange={(v) =>
                     setGauges((p) => {
