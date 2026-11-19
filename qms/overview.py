@@ -59,7 +59,7 @@ def sections(user):
         production.append({
             'title': '계획 대비 실적', 'value': _pct(done, planned),
             'sub': f"{month:%Y-%m} 납기 작업지시 {len(wos)}건 · 계획 {_num(planned)} / 양품 {_num(done)}",
-            'href': _admin_list(WorkOrder, f'due_date__gte={month}&due_date__lt={next_month}'), 'more': _admin_list(WorkOrder),
+            'href': _admin_list(WorkOrder, f'due_date__gte={month}&due_date__lte={next_month - datetime.timedelta(days=1)}'), 'more': _admin_list(WorkOrder),
             'rows': [{'label': f'{w} · 납기 {w.due_date:%m-%d}', 'href': record_url(w),
                       'meta': _pct(good.get((w.pk, last.get(w.item_id)), 0), w.planned_qty)}
                      for w in sorted(wos, key=lambda w: w.due_date)[:5]]})

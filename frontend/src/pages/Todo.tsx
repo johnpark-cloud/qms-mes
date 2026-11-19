@@ -171,7 +171,7 @@ export default function TodoPage() {
           </>
         )}
         <Button type={editing ? 'primary' : 'default'} onClick={() => setEditing(!editing)}>{editing ? '편집 끝내기' : '화면 편집'}</Button>
-        <Button href="/overview/">공장 종합현황</Button>
+        <Button href="/app/overview">공장 종합현황</Button>
       </div>
       {editing && <Alert type="info" showIcon title="타일을 끌어서 순서를 바꿉니다. 바꾼 내용은 바로 저장됩니다." />}
       {q.isError && <Alert type="error" title={q.error.message} showIcon />}

@@ -20,6 +20,7 @@ export interface Edit {
   key: string; label: string; type: 'str' | 'text' | 'int' | 'date' | 'datetime' | 'bool' | 'choice' | 'rows' | 'tags'; value: Value; required: boolean
   choices: { value: string; label: string }[] | null
   columns?: { key: string; label: string }[]  // type 'rows': 한 줄에 들어갈 칸
+  hidden?: boolean  // 새로 만들기: 화면에 안 보이고 주소로 채운 값만 보낸다(CAPA 출처 기록)
 }
 /** 한 칸에 체크 상자로 모아 보일 예/아니오 칸들 (core/recordspec.py groups_of) */
 export interface Group { label: string; keys: string[] }

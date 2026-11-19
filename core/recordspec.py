@@ -34,6 +34,7 @@ class Spec(NamedTuple):
     close: bool = False  # 「종결」 버튼(POST …/close/): 서버가 종결일을 넣고 모델 clean 규칙이 막는다(REC-09)
     lock_parent: str = ''  # 이 부모가 승인되면 잠긴다(예: PPAP 요소). 기록 화면에서는 시스템 관리자도 못 고친다(REC-10)
     create: tuple = ()  # 기록 화면 「새로 만들기」 칸(외래키 가능). 비면 관리 화면 추가 폼. 규칙은 모델 clean/save가 막는다
+    hidden: tuple = ()  # create 중 화면에 안 보이고 주소(?키=값)로만 채우는 칸(예: CAPA 출처 기록)
     groups: tuple = ()  # (이름, 예/아니오 칸들): 한 줄에 체크 상자로 모아 보인다
 
 
@@ -74,7 +75,8 @@ SPECS = {
         search=('number', 'title', 'doc_type'),
         children=(Child('revisions', '개정 이력', ('revision', 'change_note', 'approved_at', 'file'), ('-created_at', '-pk')),),
         order=('number',),
-        edit=('number', 'title', 'doc_type')),
+        edit=('number', 'title', 'doc_type'),
+        create=('number', 'title', 'doc_type')),
     'qms.documentrevision': Spec(
         fields=('document', 'revision', 'file', 'change_note', 'created_at', 'approved_by', 'approved_at'),
         columns=('document', 'revision', 'created_at', 'approved_at'),
@@ -92,7 +94,8 @@ SPECS = {
               ('inactive', '사용 중지', lambda qs: qs.filter(active=False))),
         side=('relations', 'files', 'history'),
         order=('number',),
-        edit=('number', 'name', 'interval_days', 'last_calibrated', 'active')),
+        edit=('number', 'name', 'interval_days', 'last_calibrated', 'active'),
+        create=('number', 'name', 'interval_days', 'last_calibrated', 'active')),
     'qms.qualification': Spec(
         fields=('user', 'inspection_type', 'valid_until', 'basis', 'record'),
         columns=('user', 'inspection_type', 'valid_until', 'basis'),
@@ -101,7 +104,8 @@ SPECS = {
               ('expired', '만료', lambda qs: qs.filter(valid_until__lt=_today()))),
         side=('relations', 'files', 'history'),
         order=('-valid_until', '-pk'),
-        edit=('inspection_type', 'valid_until', 'basis', 'user')),
+        edit=('inspection_type', 'valid_until', 'basis', 'user'),
+        create=('user', 'inspection_type', 'valid_until', 'basis')),
     'core.lot': Spec(
         fields=('number', 'item', 'work_order', 'is_serial', 'qty', 'supplier', 'partner', 'created_at'),
         columns=('number', 'item', 'qty', 'supplier', 'created_at'),
@@ -110,7 +114,8 @@ SPECS = {
         children=(Child('nonconformances', '부적합', ('number', 'defect_type', 'disposition', 'closed_at'), ('-detected_at', '-pk')),
                   Child('holds', '보류', ('nonconformance', 'created_at', 'released_at'), ('-created_at', '-pk'))),
         order=('-created_at', '-pk'),
-        edit=('number', 'is_serial', 'qty', 'supplier', 'work_order', 'partner')),
+        edit=('number', 'is_serial', 'qty', 'supplier', 'work_order', 'partner'),
+        create=('number', 'item', 'qty', 'supplier', 'partner', 'work_order', 'is_serial')),
     'core.nonconformance': Spec(
         fields=('number', 'origin', 'lot', 'process', 'detected_by', 'detected_at', 'defect_type', 'defect_qty', 'inspected_qty',
                 'description', 'measured_value', 'special_char', 'contained_qty', 'sorting_result', 'customer_notify',
@@ -144,7 +149,9 @@ SPECS = {
         tabs=(('open', '진행', lambda qs: qs.filter(closed_at__isnull=True)), ALL,
               ('closed', '종결', lambda qs: qs.filter(closed_at__isnull=False))),
         edit=('title', 'source', 'root_cause', 'action', 'due_date', 'done_at', 'verified_at', 'verification_note', 'owner', 'effective', 'verified_by'),
-        close=True),
+        close=True,
+        create=('title', 'source', 'owner', 'due_date', 'action', 'root_cause', 'source_type', 'source_id'),
+        hidden=('source_type', 'source_id')),
     'qms.customerclaim': Spec(
         fields=('number', 'customer', 'partner', 'lot', 'description', 'defect_qty', 'received_at', 'nonconformance',
                 'current_step', 'containment_due', 'corrective_due', 'd1_team', 'd2_problem', 'd3_containment', 'd4_root_cause',
@@ -156,14 +163,16 @@ SPECS = {
         order=('-received_at', '-pk'),
         edit=('customer', 'description', 'defect_qty', 'd1_team', 'd2_problem', 'd3_containment', 'd4_root_cause',
               'd5_corrective', 'd6_verification', 'd7_prevention', 'd8_closure', 'partner', 'lot', 'received_at'),
-        close=True),
+        close=True,
+        create=('number', 'customer', 'partner', 'lot', 'description', 'defect_qty', 'received_at')),
     'qms.customerrule': Spec(
         fields=('customer', 'partner', 'containment_hours', 'corrective_days'),
         columns=('customer', 'containment_hours', 'corrective_days'),
         search=('customer',),
         side=('relations', 'history'),
         order=('customer',),
-        edit=('customer', 'containment_hours', 'corrective_days', 'partner')),
+        edit=('customer', 'containment_hours', 'corrective_days', 'partner'),
+        create=('customer', 'partner', 'containment_hours', 'corrective_days')),
     'qms.scar': Spec(
         fields=('number', 'supplier', 'partner', 'lot', 'nonconformance', 'request', 'issued_at', 'response_due', 'response',
                 'responded_at', 'closed_at'),
@@ -173,7 +182,8 @@ SPECS = {
               ('closed', '종결', lambda qs: qs.filter(closed_at__isnull=False))),
         order=('-issued_at', '-pk'),
         edit=('supplier', 'request', 'issued_at', 'response_due', 'response', 'responded_at', 'partner', 'lot', 'nonconformance'),
-        close=True),
+        close=True,
+        create=('number', 'supplier', 'partner', 'lot', 'nonconformance', 'request', 'issued_at', 'response_due')),
     'qms.changerequest': Spec(  # 출하 차단(초품 합격 전)은 Shipment.clean 그대로
         fields=('number', 'item', 'category', 'description', 'customer_notice', 'customer_approval_ref', 'effective_at',
                 'approved_by', 'approved_at', 'first_article_state'),
@@ -182,7 +192,8 @@ SPECS = {
         tabs=(ALL, ('draft', '초안', lambda qs: qs.filter(approved_at__isnull=True)),
               ('approved', '승인됨', lambda qs: qs.filter(approved_at__isnull=False))),
         order=('-effective_at', '-pk'),
-        edit=('category', 'description', 'customer_notice', 'customer_approval_ref', 'item', 'effective_at')),
+        edit=('category', 'description', 'customer_notice', 'customer_approval_ref', 'item', 'effective_at'),
+        create=('number', 'item', 'category', 'description', 'customer_notice', 'customer_approval_ref', 'effective_at')),
     'qms.internalaudit': Spec(  # 종결 규칙(실시일, CAPA 없는 중·경부적합)은 InternalAudit.clean 그대로
         fields=('name', 'kind', 'scope', 'checklist', 'planned_date', 'auditor', 'auditee', 'auditor_user', 'auditee_dept',
                 'performed_at', 'closed_at'),
@@ -193,12 +204,14 @@ SPECS = {
         children=(Child('findings', '발견사항', ('clause', 'grade', 'description', 'capa'), ('pk',)),),
         order=('-planned_date', '-pk'),
         edit=('name', 'kind', 'scope', 'planned_date', 'auditor', 'auditee', 'performed_at', 'checklist', 'auditor_user', 'auditee_dept'),
-        close=True),
+        close=True,
+        create=('name', 'kind', 'scope', 'checklist', 'planned_date', 'auditor', 'auditee', 'auditor_user', 'auditee_dept')),
     'qms.auditfinding': Spec(  # CAPA 연결은 「CAPA 만들기」 → Capa.save가 지적에 건다
         fields=('audit', 'clause', 'grade', 'description', 'capa'),
         columns=('audit', 'clause', 'grade', 'capa'),
         search=('clause', 'description', 'audit__name'),
-        edit=('clause', 'grade', 'description', 'capa')),
+        edit=('clause', 'grade', 'description', 'capa'),
+        create=('audit', 'clause', 'grade', 'description')),
     'qms.auditchecklist': Spec(
         fields=('name', 'standard'),
         columns=('name', 'standard'),
@@ -206,7 +219,8 @@ SPECS = {
         children=(Child('items', '심사 항목', ('clause', 'requirement'), ('clause', 'pk')),),
         side=('relations', 'files', 'history'),
         order=('name',),
-        edit=('name', 'standard')),
+        edit=('name', 'standard'),
+        create=('name', 'standard')),
     'qms.audititem': Spec(
         fields=('checklist', 'clause', 'requirement'),
         columns=('checklist', 'clause', 'requirement'),
@@ -214,7 +228,8 @@ SPECS = {
         children=(Child('evidences', '증적', ('document', 'record', 'note'), ('pk',)),),
         side=('relations', 'files', 'history'),
         order=('checklist', 'clause'),
-        edit=('clause', 'requirement')),
+        edit=('clause', 'requirement'),
+        create=('checklist', 'clause', 'requirement')),
     # 제출일·고객 승인일(PSW 승인 후 기록 칸)은 승인 후 잠금 때문에 승인 뒤에는 관리 화면에서
     'qms.ppapsubmission': Spec(
         fields=('item', 'customer', 'partner', 'level', 'reason', 'due_date', 'submitted_at', 'customer_approved_at',
@@ -224,7 +239,8 @@ SPECS = {
         tabs=(ALL, ('draft', '초안', lambda qs: qs.filter(approved_at__isnull=True)),
               ('approved', '승인됨', lambda qs: qs.filter(approved_at__isnull=False))),
         children=(Child('elements', 'PPAP 요소', ('number', 'name', 'requirement', 'document', 'record', 'note'), ('number',)),),
-        edit=('customer', 'reason', 'due_date', 'submitted_at', 'customer_approved_at', 'item', 'partner', 'level')),
+        edit=('customer', 'reason', 'due_date', 'submitted_at', 'customer_approved_at', 'item', 'partner', 'level'),
+        create=('item', 'customer', 'partner', 'level', 'reason', 'due_date')),
     'qms.ppapelement': Spec(  # 문서·증적 기록 연결(외래키)은 관리 화면
         fields=('submission', 'number', 'name', 'requirement', 'document', 'record', 'note'),
         columns=('submission', 'number', 'name', 'requirement'),

@@ -67,7 +67,6 @@ export default function AppLayout() {
           검색 (Ctrl+K)
         </Button>
         <span className="hide-sm">{user.name}</span>
-        <a href="/todo/" className="hide-sm">기존 화면</a>
         <Button
           onClick={async () => {
             try {

@@ -97,6 +97,9 @@ def record_url(obj):
         return url
     if label == 'core.lot':
         return trace_url(obj.number)
+    lists = {'core.process': '/app/processes', 'qms.memo': '/app/memos', 'core.revisionlog': '/app/audit'}  # 상세 없이 목록 화면만
+    if label in lists:
+        return lists[label]
     try:
         return reverse(f'admin:{obj._meta.app_label}_{obj._meta.model_name}_change', args=[obj.pk])
     except NoReverseMatch:  # 관리 화면이 없는 표(측정값 등)는 링크 없이 글자만

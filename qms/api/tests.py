@@ -701,7 +701,7 @@ class InspectionApiTest(TestCase):
         self.assertEqual((m['value'], m['gauge'], m['spec_text'], m['passed']), ('11', 'G-01', '9.9 ~ 10.1 mm', False))
         self.assertEqual((m['lsl'], m['usl'], m['unit'], m['is_variable'], m['special'], m['decimals'], m['gauge_name']),
                          ('9.9', '10.1', 'mm', True, '', 1, '마이크로미터'))
-        self.assertEqual(d['capa'], [{'id': capa.pk, 'number': capa.number, 'url': f'/admin/qms/capa/{capa.pk}/change/'}])
+        self.assertEqual(d['capa'], [{'id': capa.pk, 'number': capa.number, 'url': f'/app/r/qms/capa/{capa.pk}'}])
         ok = self.make(self.lots[0], 'INCOMING', '10.0')
         self.assertEqual(self.c().get(f'/api/qms/inspections/{ok.pk}/').json()['capa'], [])
 
@@ -820,3 +820,46 @@ class MemoApiTest(TestCase):
         plain = User.objects.create_user('plain', password='x', is_staff=True)
         self.assertEqual(self.c(plain).get(self.URL).status_code, 403)
         self.assertEqual(self.c(plain).post(self.URL, {'body': 'a', 'speaker_kind': 'AUDITOR'}).status_code, 403)
+
+
+OLD = ('/admin/', '/approve/', '/memo/', '/me/', '/nc/', '/todo/', '/overview/', '/trace/', '/inspect/')
+
+
+def old_links(data):
+    """응답 안의 주소 중 옛 서버 화면(관리 화면·승인·메모함 등)으로 가는 것."""
+    if isinstance(data, dict):
+        return [u for v in data.values() for u in old_links(v)]
+    if isinstance(data, list):
+        return [u for v in data for u in old_links(v)]
+    return [data] if isinstance(data, str) and data.startswith(OLD) else []
+
+
+class NewScreenLinksTest(TestCase):
+    """종합현황·내 할 일 카드와 줄은 새 화면(/app/...)으로 연다."""
+
+    def setUp(self):
+        self.client = APIClient()
+        self.boss = User.objects.create_superuser('boss', password='x')
+        today = timezone.localdate()
+        item = Item.objects.create(code='P1', name='부품', item_type=Item.RAW)
+        lot = Lot.objects.create(number='L-1', item=item, supplier='가협력')
+        WorkOrder.objects.create(number='WO-1', item=item, planned_qty=10, status=WorkOrder.RUNNING, due_date=today)
+        Nonconformance.objects.create(lot=lot, description='찍힘')
+        Capa.objects.create(title='재발 방지', source='OTHER', action='x', owner=self.boss, due_date=today)
+        Gauge.objects.create(number='G-1', name='마이크로미터', last_calibrated=today - datetime.timedelta(days=400))
+        InspectionSpec.objects.create(item=item, inspection_type=InspectionSpec.INCOMING, revision=1)
+        ChangeRequest.objects.create(number='CR-1', item=item, category='MAN', description='교대')
+        self.client.force_login(self.boss)
+
+    def test_overview_links_open_new_screens(self):
+        data = self.client.get('/api/qms/overview/').json()
+        self.assertEqual(old_links(data), [])
+        cards = {c['title']: c for s in data['sections'] for c in s['cards']}
+        self.assertEqual(cards['열린 부적합']['href'], '/app/r/core/nonconformance?tab=open')
+
+    def test_todo_links_open_new_screens(self):
+        keys = [w['key'] for w in self.client.get('/api/qms/todo/').json()['available']]
+        self.client.post('/api/qms/dashboard/', [{'key': k, 'size': 'normal'} for k in keys], format='json')
+        data = self.client.get('/api/qms/todo/').json()
+        self.assertEqual(len(data['widgets']), len(keys))
+        self.assertEqual(old_links(data), [])

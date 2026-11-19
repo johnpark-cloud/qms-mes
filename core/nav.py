@@ -26,14 +26,35 @@ def nav_url(name):
 def app_href(href):
     """메뉴 주소를 화면에 내보낼 주소로(REC-11). NAV는 관리 주소를 그대로 둔다: 전체 메뉴 묶음(core/admin.py)·모듈 판정·현재 메뉴 표시가 쓴다."""
     path, _, query = href.partition('?')
-    if path in APP_PAGES:
-        if 'spec__inspection_type__exact=' in query:  # 검사 목록 조건 → 탭
-            query = 'tab=' + query.rpartition('spec__inspection_type__exact=')[2]
-        return APP_PAGES[path] + (f'?{query}' if query else '')
     parts = path.strip('/').split('/')
+    # 관리 상세(/admin/a/m/7/change/)·옛 승인(/approve/a/m/7/) → 새 화면 상세
+    if (len(parts) == 5 and parts[0] == 'admin' and parts[4] == 'change' or len(parts) == 4 and parts[0] == 'approve') and parts[3].isdigit():
+        base = app_href(f'/admin/{parts[1]}/{parts[2]}/')
+        return f'{base}/{parts[3]}' if base.startswith('/app/') else href
+    if path in APP_PAGES:
+        return APP_PAGES[path] + (_app_query(query) if path.startswith('/admin/') else f'?{query}' if query else '')
     if len(parts) == 3 and parts[0] == 'admin' and f'{parts[1]}.{parts[2]}' in SPECS:
-        return f'/app/r/{parts[1]}/{parts[2]}'
+        return f'/app/r/{parts[1]}/{parts[2]}' + _app_query(query)
     return href
+
+
+TABS = {'spec__inspection_type__exact': 'tab', 'closed_at__isnull': ('tab', 'open'), 'released_at__isnull': ('tab', 'active')}
+
+
+def _app_query(query):
+    """관리 목록 조건 → 새 화면 탭·필터(f_칸, f_칸_from/_to)."""
+    out = []
+    for pair in filter(None, query.split('&')):
+        k, _, v = pair.partition('=')
+        if k in TABS:
+            t = TABS[k]
+            out.append(f'tab={v}' if t == 'tab' else f'{t[0]}={t[1]}')
+        elif k.endswith(('__gte', '__lte', '__lt')):
+            f, _, op = k.rpartition('__')
+            out.append(f'f_{f}_{"from" if op == "gte" else "to"}={v}')
+        else:
+            out.append(f'f_{k.removesuffix("__exact")}={v}' if '__' not in k.removesuffix('__exact') else pair)
+    return '?' + '&'.join(out) if out else ''
 
 
 def visible_nav(user):

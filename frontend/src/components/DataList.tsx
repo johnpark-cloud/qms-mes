@@ -1,5 +1,6 @@
 import { Button, DatePicker, Drawer, Input, Select, Space, Table, Tabs, Typography } from 'antd'
 import type { ColumnsType } from 'antd/es/table'
+import dayjs from 'dayjs'
 import { useCallback, useEffect, useMemo, useRef, useState, type Key, type ReactNode } from 'react'
 
 // core/api/listing.py 필터 정의. 선택지는 ?f_열=값, 날짜는 ?f_열_from=·?f_열_to=
@@ -35,7 +36,9 @@ export default function DataList<T extends object>({ columns, tabs, fetchPage, e
   const [picked, setPicked] = useState<T | null>(null)
   const seq = useRef(0) // 늦게 온 이전 응답이 새 결과를 덮지 않게 한다
   const [sort, setSort] = useState('')
-  const [fv, setFv] = useState<Record<string, string | undefined>>({})
+  // 처음 필터는 주소 ?f_…= 에서(현황 카드·옛 관리 목록 조건 → 새 화면)
+  const [fv, setFv] = useState<Record<string, string | undefined>>(() =>
+    Object.fromEntries([...new URLSearchParams(window.location.search)].filter(([k]) => k.startsWith('f_'))))
   const extra = useMemo(() => {
     const p = new URLSearchParams()
     if (sort) p.set('sort', sort)
@@ -106,6 +109,7 @@ export default function DataList<T extends object>({ columns, tabs, fetchPage, e
             <DatePicker.RangePicker
               key={f.key}
               allowEmpty={[true, true]}
+              defaultValue={[fv[`f_${f.key}_from`], fv[`f_${f.key}_to`]].map((v) => (v ? dayjs(v) : null)) as [null, null]}
               placeholder={[`${f.label} 부터`, '까지']}
               onChange={(d) =>
                 setFv((p) => ({ ...p, [`f_${f.key}_from`]: d?.[0]?.format('YYYY-MM-DD'), [`f_${f.key}_to`]: d?.[1]?.format('YYYY-MM-DD') }))

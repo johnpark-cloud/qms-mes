@@ -108,8 +108,16 @@ class RecordListView(APIView):
         return Response({'id': obj.pk, 'url': record_url(obj)}, status=201)
 
 
+NO_ADD = {'core.hold', 'qms.ppapelement'}  # 보류는 부적합 등록으로, PPAP 요소는 제출마다 저절로 생긴다
+
+
 def _new_url(model, spec):
     meta = model._meta
+    if meta.label_lower == 'core.nonconformance':
+        return '/app/nc-new'  # 보류 인터록이 걸리는 현장 간편 등록
+    if meta.label_lower in NO_ADD:
+        return None
+    # 파일·JSON 칸이 필수인 양식(엑셀 양식·가져오기 설정 등)만 관리 화면 추가 폼
     return f'/app/r/{meta.app_label}/{meta.model_name}/new' if spec.create else f'/admin/{meta.app_label}/{meta.model_name}/add/'
 
 
@@ -127,8 +135,19 @@ class RecordNewView(APIView):
     def get(self, request, label):
         model, spec = _create_spec(request.user, label)
         form = modelform_factory(model, fields=spec.create)()
+        # 처음 값: 담당자는 나, 그 밖은 주소 ?칸=값(예: CAPA 만들기 → 출처·제목). create에 없는 칸은 버린다
+        init = {'owner': str(request.user.pk)} if 'owner' in spec.create else {}
+        init.update({k: v for k, v in request.query_params.items() if k in spec.create})
+        fields = []
+        for n in spec.create:
+            d = recordspec.creator(model, n, form)
+            if n in init:
+                d['value'] = init[n] in ('1', 'true', 'True') if d['type'] == 'bool' else init[n]
+            if n in spec.hidden:
+                d['hidden'] = True
+            fields.append(d)
         return Response({'title': str(model._meta.verbose_name), 'list_url': f'/app/r/{model._meta.app_label}/{model._meta.model_name}',
-                         'fields': [recordspec.creator(model, n, form) for n in spec.create],
+                         'fields': fields,
                          'groups': recordspec.groups_of(spec)})
 
 
@@ -148,7 +167,7 @@ CAPA_SOURCE = {'qms.customerclaim': '8D', 'qms.scar': 'SCAR', 'core.nonconforman
 
 
 def _links(obj, user):
-    """「⋯」 메뉴 바로가기: LOT 이력 추적, CAPA 만들기(관리 화면 추가 폼, 출처 채움 — CAPA 모듈이 켜져 있을 때만)."""
+    """「⋯」 메뉴 바로가기: LOT 이력 추적, CAPA 만들기(새로 만들기 화면, 출처 채움 — CAPA 모듈이 켜져 있을 때만)."""
     label = obj._meta.label_lower
     links = []
     lot = obj if isinstance(obj, Lot) else obj.lot if label == 'qms.customerclaim' else None
@@ -157,7 +176,7 @@ def _links(obj, user):
     if label in CAPA_SOURCE and modules.active('qms_capa') and user.has_perm('qms.add_capa'):
         query = {'source': CAPA_SOURCE[label], 'source_type': ContentType.objects.get_for_model(obj).pk, 'source_id': obj.pk,
                  'title': str(obj)[:200]}
-        links.append({'label': 'CAPA 만들기', 'url': reverse('admin:qms_capa_add') + '?' + urlencode(query)})
+        links.append({'label': 'CAPA 만들기', 'url': '/app/r/qms/capa/new?' + urlencode(query)})
     return links
 
 

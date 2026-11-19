@@ -785,7 +785,16 @@ class NavTest(TestCase):
         from .nav import app_href
         for old, new in (('/todo/', '/app/todo'), ('/memo/inbox/', '/app/memos'), ('/trace/?lot=A%2B1', '/app/trace?lot=A%2B1'),
                          ('/admin/qms/inspection/?spec__inspection_type__exact=INCOMING', '/app/inspections?tab=INCOMING'),
-                         ('/nc/new/?lot=L1', '/app/nc-new?lot=L1'), ('/inspect/?lot=L1', '/app/inspect?lot=L1'), ('/kpi/', '/kpi/')):
+                         ('/nc/new/?lot=L1', '/app/nc-new?lot=L1'), ('/inspect/?lot=L1', '/app/inspect?lot=L1'), ('/kpi/', '/kpi/'),
+                         ('/admin/core/nonconformance/?closed_at__isnull=True', '/app/r/core/nonconformance?tab=open'),
+                         ('/admin/core/hold/?released_at__isnull=True', '/app/r/core/hold?tab=active'),
+                         ('/admin/core/workorder/?status__exact=RUNNING', '/app/r/core/workorder?f_status=RUNNING'),
+                         ('/admin/core/workorder/?due_date__gte=2026-11-01&due_date__lte=2026-11-30',
+                          '/app/r/core/workorder?f_due_date_from=2026-11-01&f_due_date_to=2026-11-30'),
+                         ('/admin/qms/inspection/?result__exact=FAIL', '/app/inspections?f_result=FAIL'),
+                         ('/admin/qms/capa/7/change/', '/app/r/qms/capa/7'), ('/admin/qms/inspectionspec/3/change/', '/app/specs/3'),
+                         ('/approve/qms/controlplan/4/', '/app/plans/4'), ('/approve/qms/changerequest/5/', '/app/r/qms/changerequest/5'),
+                         ('/admin/auth/user/', '/admin/auth/user/')):
             self.assertEqual(app_href(old), new)
 
 

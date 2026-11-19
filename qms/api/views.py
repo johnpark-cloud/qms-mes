@@ -4,16 +4,26 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from core.api.master import TableView
+from core.nav import app_href
 from qms.models import CustomerRule
 from qms.overview import sections
 from qms.widgets import WIDGETS, layout_for, save_layout, todo_items, valid_layout, widget_data
+
+
+def _app_links(v):
+    """응답 안 주소를 새 화면 주소로(옛 관리·서버 화면 링크가 React 화면에 새지 않게). 모르는 주소는 그대로."""
+    if isinstance(v, dict):
+        return {k: _app_links(x) for k, x in v.items()}
+    if isinstance(v, list):
+        return [_app_links(x) for x in v]
+    return app_href(v) if isinstance(v, str) and v.startswith('/') else v
 
 
 class OverviewView(APIView):
     schema = None  # 직렬화기 없이 dict를 그대로 돌려주므로 OpenAPI 문서에는 넣지 않는다
 
     def get(self, request):
-        return Response({'sections': [{'name': name, 'cards': cards} for name, cards in sections(request.user)]})
+        return Response({'sections': _app_links([{'name': name, 'cards': cards} for name, cards in sections(request.user)])})
 
 
 class TodoView(APIView):
@@ -30,7 +40,7 @@ class TodoView(APIView):
             except Exception:  # 위젯 하나가 깨져도 화면은 떠야 한다
                 logging.getLogger('qms').exception('위젯 불러오기 실패: %s', widget.key)
                 data, error = None, True
-            widgets.append({**w, 'title': widget.title, 'data': data, 'error': error})
+            widgets.append({**w, 'title': widget.title, 'data': _app_links(data), 'error': error})
         return Response({'widgets': widgets,
                          'available': [{'key': k, 'title': w.title} for k, w in WIDGETS.items() if w.allowed(request.user)]})
 

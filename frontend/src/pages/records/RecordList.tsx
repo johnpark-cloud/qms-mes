@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
 import { Spin } from 'antd'
 import { useCallback } from 'react'
-import { Link, useNavigate, useParams } from 'react-router-dom'
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { api } from '../../api/client'
 import DataList, { type ListFilter } from '../../components/DataList'
 
@@ -9,7 +9,7 @@ import DataList, { type ListFilter } from '../../components/DataList'
 interface Row { id: number; url: string | null; status: string | null; cells: Record<string, string> }
 interface ListPage {
   title: string; tabs: { key: string; label: string }[]; columns: { key: string; label: string; sortable: boolean }[]; filters: ListFilter[]
-  count: number; page: number; has_more: boolean; results: Row[]; can_add: boolean; new_url: string
+  count: number; page: number; has_more: boolean; results: Row[]; can_add: boolean; new_url: string | null
 }
 
 export default function RecordList() {
@@ -17,6 +17,7 @@ export default function RecordList() {
   const label = `${app}.${model}`
   const base = `/api/records/${label}/`
   const nav = useNavigate()
+  const [sp, setSp] = useSearchParams()
   // 탭·열 모양은 첫 쪽 응답에서 얻는다
   const head = useQuery({ queryKey: ['record-list-head', label], queryFn: () => api<ListPage>(base) })
   // DataList는 fetchPage가 바뀌면 다시 불러온다 → 주소가 같으면 같은 함수
@@ -34,11 +35,13 @@ export default function RecordList() {
         columns={h.columns.map((c) => ({ title: c.label, key: c.key, sorter: c.sortable, render: (_: unknown, r: Row) => r.cells[c.key] }))}
         filters={h.filters}
         tabs={h.tabs}
+        tab={h.tabs.some((x) => x.key === sp.get('tab')) ? (sp.get('tab') as string) : h.tabs[0].key}
+        onTab={(k) => setSp({ tab: k }, { replace: true })}
         fetchPage={fetchPage}
         exportHref={(tab, q, extra) => `${base}?tab=${tab}&q=${encodeURIComponent(q)}${extra}&export=xlsx`}
         onOpen={(r) => nav(`/r/${app}/${model}/${r.id}`)}
         rowKey={(r) => r.id}
-        toolbar={h.can_add ? (h.new_url.startsWith('/app/') ? <Link to={h.new_url.slice(4)}>새로 만들기</Link> : <a href={h.new_url}>새로 만들기</a>) : undefined}
+        toolbar={h.can_add && h.new_url ? (h.new_url.startsWith('/app/') ? <Link to={h.new_url.slice(4)}>새로 만들기</Link> : <a href={h.new_url}>새로 만들기</a>) : undefined}
       />
     </div>
   )

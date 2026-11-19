@@ -12,7 +12,7 @@ from core.api import listing
 from core.api.permissions import require_perm
 from core.export import document_xlsx, table_xlsx, xlsx_response
 from core.models import Hold, Item, Lot, Nonconformance
-from core.relations import trace_url
+from core.relations import record_url, trace_url
 from qms.models import Capa, ExcelTemplate, Gauge, Inspection, InspectionSpec
 from qms.rules import RECEIVE_MSG, measurement, receive_lot, submit_inspection
 
@@ -313,9 +313,9 @@ class InspectionDetailView(APIView):
                      'approved_at': timezone.localtime(x.spec.approved_at).isoformat() if x.spec.approved_at else None},
             'inspector': _who(x.inspector), 'inspected_at': timezone.localtime(x.inspected_at).isoformat(),
             'nonconformance': {'id': nc.pk, 'number': nc.number,
-                               'url': reverse('admin:core_nonconformance_change', args=[nc.pk])} if nc else None,
+                               'url': record_url(nc)} if nc else None,
             'measurements': [_measurement(m) for m in x.measurements.select_related('characteristic', 'gauge').order_by('pk')],
-            'capa': [{'id': c.pk, 'number': c.number, 'url': reverse('admin:qms_capa_change', args=[c.pk])}
+            'capa': [{'id': c.pk, 'number': c.number, 'url': record_url(c)}
                      for c in capas],
             'templates': [{'id': t.pk, 'name': t.name, 'url': reverse('excel_report', args=[t.pk, x.pk])}
                           for t in ExcelTemplate.objects.filter(target=ct)],

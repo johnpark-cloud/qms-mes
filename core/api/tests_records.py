@@ -522,7 +522,7 @@ class RecordsCapaClaimApiTest(TestCase):
         src = next(f for f in d['fields'] if f['key'] == 'source_record')
         self.assertEqual((src['label'], src['url']), ('출처 기록', record_url(self.claim)))
         links = {x['label']: x['url'] for x in self.detail('qms.customerclaim', self.claim.pk)['links']}
-        self.assertIn('/admin/qms/capa/add/?source=8D', links['CAPA 만들기'])
+        self.assertIn('/app/r/qms/capa/new?source=8D', links['CAPA 만들기'])
         self.assertEqual(links['LOT 이력 (추적)'], '/app/trace?lot=FG-1')
 
     def test_claim_8d_steps_and_close(self):
@@ -630,7 +630,7 @@ class RecordsAuditPpapApiTest(TestCase):
         rows = next(c for c in d['children'] if c['key'] == 'findings')['rows']
         self.assertEqual(rows[0]['url'], record_url(self.finding))
         links = {x['label']: x['url'] for x in self.detail('qms.auditfinding', self.finding.pk)['links']}
-        self.assertIn('/admin/qms/capa/add/?source=AUDIT', links['CAPA 만들기'])
+        self.assertIn('/app/r/qms/capa/new?source=AUDIT', links['CAPA 만들기'])
         from django.contrib.contenttypes.models import ContentType
         from qms.models import AuditFinding, Capa
         capa = Capa.objects.create(title='표준 게시', source='AUDIT', action='게시', owner=self.root, due_date=self.today,
@@ -885,3 +885,53 @@ class RecordsCreateApiTest(TestCase):
         self.assertEqual(self.client.get('/api/records/core.workorder/new/').status_code, 403)
         r = self.post('core.workorder', {'number': 'WO-3', 'item': str(self.wo.item_id), 'planned_qty': '1'})
         self.assertEqual(r.status_code, 403)
+
+
+class NewScreenCreateTest(TestCase):
+    """옛 관리 화면 추가 폼 대신 새 화면 「새로 만들기」. 파일·JSON 칸이 필수인 양식만 관리 화면에 남는다."""
+
+    def setUp(self):
+        self.root = User.objects.create_superuser('root', password='pw')
+        self.wo = mes_fixture()
+        self.client.force_login(self.root)
+
+    def test_new_url_opens_new_screen(self):
+        for label in ('core.lot', 'qms.capa', 'qms.changerequest', 'qms.customerclaim', 'qms.document', 'qms.gauge',
+                      'qms.internalaudit', 'qms.auditchecklist', 'qms.audititem', 'qms.auditfinding', 'qms.ppapsubmission',
+                      'qms.qualification', 'qms.scar', 'qms.customerrule'):
+            app, model = label.split('.')
+            self.assertEqual(self.client.get(f'/api/records/{label}/').json()['new_url'], f'/app/r/{app}/{model}/new', label)
+            self.assertEqual(self.client.get(f'/api/records/{label}/new/').status_code, 200, label)
+        self.assertEqual(self.client.get('/api/records/core.nonconformance/').json()['new_url'], '/app/nc-new')
+        self.assertIsNone(self.client.get('/api/records/core.hold/').json()['new_url'])  # 부적합 등록으로만 생긴다
+        self.assertIsNone(self.client.get('/api/records/qms.ppapelement/').json()['new_url'])  # 제출마다 자동으로 생긴다
+
+    def test_capa_new_prefills_from_query_and_links_source(self):
+        from django.contrib.contenttypes.models import ContentType
+        from core.models import Lot, Nonconformance
+        from qms.models import Capa
+        nc = Nonconformance.objects.create(lot=Lot.objects.get(number='FL-1'), description='찍힘')
+        ct = ContentType.objects.get_for_model(Nonconformance)
+        d = self.client.get(f'/api/records/qms.capa/new/?source=NC&title=찍힘&source_type={ct.pk}&source_id={nc.pk}&bogus=1').json()
+        f = {e['key']: e for e in d['fields']}
+        self.assertEqual((f['source']['value'], f['title']['value'], f['owner']['value']), ('NC', '찍힘', str(self.root.pk)))
+        self.assertTrue(f['source_type']['hidden'])
+        self.assertEqual(f['source_id']['value'], str(nc.pk))
+        self.assertNotIn('bogus', f)
+        r = self.client.post('/api/records/qms.capa/', {'values': {
+            'title': '찍힘', 'source': 'NC', 'owner': str(self.root.pk), 'due_date': '2026-12-31', 'action': '지그 교체',
+            'source_type': str(ct.pk), 'source_id': str(nc.pk)}}, content_type='application/json')
+        self.assertEqual(r.status_code, 201, r.content)
+        self.assertEqual(Capa.objects.get(pk=r.json()['id']).source_record, nc)
+
+    def test_create_lot_and_gauge(self):
+        from core.models import Lot
+        from qms.models import Gauge
+        r = self.client.post('/api/records/core.lot/', {'values': {'number': 'R-9', 'item': str(self.wo.item_id), 'qty': '5'}},
+                             content_type='application/json')
+        self.assertEqual(r.status_code, 201, r.content)
+        self.assertEqual(Lot.objects.get(number='R-9').qty, 5)
+        r = self.client.post('/api/records/qms.gauge/', {'values': {'number': 'G-9', 'name': '캘리퍼스', 'last_calibrated': '2026-11-01'}},
+                             content_type='application/json')
+        self.assertEqual(r.status_code, 201, r.content)
+        self.assertTrue(Gauge.objects.filter(number='G-9').exists())
