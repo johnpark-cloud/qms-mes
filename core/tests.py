@@ -785,7 +785,7 @@ class NavTest(TestCase):
         from .nav import app_href
         for old, new in (('/todo/', '/app/todo'), ('/memo/inbox/', '/app/memos'), ('/trace/?lot=A%2B1', '/app/trace?lot=A%2B1'),
                          ('/admin/qms/inspection/?spec__inspection_type__exact=INCOMING', '/app/inspections?tab=INCOMING'),
-                         ('/nc/new/?lot=L1', '/app/nc-new?lot=L1'), ('/inspect/?lot=L1', '/app/inspect?lot=L1'), ('/kpi/', '/kpi/'),
+                         ('/nc/new/?lot=L1', '/app/nc-new?lot=L1'), ('/inspect/?lot=L1', '/app/inspect?lot=L1'), ('/kpi/', '/app/kpi'),
                          ('/admin/core/nonconformance/?closed_at__isnull=True', '/app/r/core/nonconformance?tab=open'),
                          ('/admin/core/hold/?released_at__isnull=True', '/app/r/core/hold?tab=active'),
                          ('/admin/core/workorder/?status__exact=RUNNING', '/app/r/core/workorder?f_status=RUNNING'),

@@ -10,6 +10,7 @@ import './app.css'
 import type { GridColumn } from './components/EditGrid'
 import AppLayout from './layout/AppLayout'
 import AuditLog from './pages/AuditLog'
+import { Kpi, Spc, Suppliers } from './pages/Analysis'
 import InspectPage from './pages/inspect/InspectPage'
 import MeasurePage from './pages/inspect/MeasurePage'
 import Login from './pages/Login'
@@ -85,6 +86,9 @@ function App() {
               <Route path="nc-new" element={<NcNew />} />
               <Route path="hub/:group" element={<Hub />} />
               <Route path="audit" element={<AuditLog />} />
+              <Route path="kpi" element={<Kpi />} />
+              <Route path="suppliers" element={<Suppliers />} />
+              <Route path="spc/:id" element={<Spc />} />
               <Route path="me" element={<MyLeavePay />} />
               <Route path="r/:app/:model" element={<RecordList />} />
               <Route path="r/:app/:model/new" element={<RecordNew />} />

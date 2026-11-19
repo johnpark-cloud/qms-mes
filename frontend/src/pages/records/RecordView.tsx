@@ -2,7 +2,8 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Alert, Button, Checkbox, Empty, Form, Input, InputNumber, Modal, Select, Spin, Table, Typography, message } from 'antd'
 import { useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
-import { Link, useParams } from 'react-router-dom'
+import { Link, useNavigate, useParams } from 'react-router-dom'
+import { fetchMe } from '../../api/auth'
 import { ApiError, api } from '../../api/client'
 import AttachmentPanel from '../../components/AttachmentPanel'
 import MemoPanel from '../../components/MemoPanel'
@@ -14,7 +15,7 @@ import { addRecent } from '../../lib/recent'
 // core/api/records.py RecordDetailView 응답
 interface Field { key: string; label: string; value: string; url: string | null }
 interface Row { id: number; url: string | null; status: string | null; cells: Record<string, string> }
-interface Child { key: string; label: string; columns: { key: string; label: string }[]; rows: Row[] }
+interface Child { key: string; label: string; columns: { key: string; label: string }[]; rows: Row[]; add_url: string | null }
 type Value = string | number | boolean | null | Record<string, string>[] | string[]
 export interface Edit {
   key: string; label: string; type: 'str' | 'text' | 'int' | 'date' | 'datetime' | 'bool' | 'choice' | 'rows' | 'tags'; value: Value; required: boolean
@@ -123,9 +124,9 @@ export function Editor({ e, ...rest }: { e: Edit; [k: string]: any }) {
   return <Input {...rest} />
 }
 
-// 수정 요청: 사유와 본인 비밀번호 (core.rules.submit_edit_request). 삭제(요청)는 RecordPage 「⋯」 메뉴의 서버 화면으로 간다.
-function EditRequestModal({ open, onClose, onSubmit }: {
-  open: boolean; onClose: () => void; onSubmit: (v: { reason: string; password: string }) => Promise<void>
+// 수정·삭제 요청: 사유와 본인 비밀번호 (core.rules.submit_edit_request). 시스템 관리자는 요청과 동시에 실행된다.
+function EditRequestModal({ open, title, onClose, onSubmit }: {
+  open: boolean; title: string; onClose: () => void; onSubmit: (v: { reason: string; password: string }) => Promise<void>
 }) {
   const [err, setErr] = useState('')
   const [busy, setBusy] = useState(false)
@@ -142,7 +143,7 @@ function EditRequestModal({ open, onClose, onSubmit }: {
     }
   }
   return (
-    <Modal open={open} onCancel={onClose} title="수정 요청" footer={null} destroyOnHidden>
+    <Modal open={open} onCancel={onClose} title={title} footer={null} destroyOnHidden>
       <Form layout="vertical" onFinish={submit}>
         <Form.Item label="사유" name="reason" rules={[{ required: true, whitespace: true, message: '사유를 입력하세요.' }]}>
           <Input.TextArea autoSize={{ minRows: 2, maxRows: 6 }} autoFocus />
@@ -151,7 +152,7 @@ function EditRequestModal({ open, onClose, onSubmit }: {
           <Input.Password autoComplete="current-password" />
         </Form.Item>
         {err && <Alert style={{ marginBottom: 12 }} type="error" message={err} />}
-        <Button type="primary" htmlType="submit" loading={busy}>요청</Button>
+        <Button type="primary" htmlType="submit" loading={busy} danger={title.startsWith('삭제')}>{title.startsWith('삭제') && !title.endsWith('요청') ? '삭제' : '요청'}</Button>
       </Form>
     </Modal>
   )
@@ -205,6 +206,9 @@ export default function RecordView() {
   const [err, setErr] = useState('')
   const [signing, setSigning] = useState(false)
   const [asking, setAsking] = useState(false)
+  const [deleting, setDeleting] = useState(false)
+  const navigate = useNavigate()
+  const me = useQuery({ queryKey: ['me'], queryFn: fetchMe, staleTime: Infinity }).data
   const [disposing, setDisposing] = useState(false)
   const q = useQuery({ queryKey: ['record', label, id], queryFn: () => api<Detail>(base) })
   const d = q.data
@@ -275,6 +279,20 @@ export default function RecordView() {
     await q.refetch()
     message.success('요청했습니다. 시스템 관리자가 승인하면 수정할 수 있습니다.')
   }
+  const requestDelete = async (v: { reason: string; password: string }) => {
+    const r = await api<{ deleted: boolean; decide_url: string | null }>(base + 'request/',
+      { method: 'POST', body: JSON.stringify({ kind: 'DELETE', ...v }) })
+    if (r.decide_url) {
+      location.href = r.decide_url // 막는 기록 안내는 요청 처리 화면에서
+      return
+    }
+    if (r.deleted) {
+      message.success(`${d.title} 삭제 완료`)
+      navigate(`/r/${app}/${model}`)
+      return
+    }
+    message.success('삭제를 요청했습니다. 시스템 관리자가 승인하면 삭제됩니다.')
+  }
 
   const editable = new Map(d.edit.map((e) => [e.key, e]))
   const SIDE: Record<string, { label: string; node: ReactNode }> = {
@@ -286,13 +304,15 @@ export default function RecordView() {
   return (
     <Form form={form} component={false}>
       <SignModal open={signing} onClose={() => setSigning(false)} title="승인 서명" onSubmit={approve} />
-      <EditRequestModal open={asking} onClose={() => setAsking(false)} onSubmit={requestEdit} />
+      <EditRequestModal open={asking} title="수정 요청" onClose={() => setAsking(false)} onSubmit={requestEdit} />
+      <EditRequestModal open={deleting} title={me?.is_superuser ? '삭제' : '삭제 요청'} onClose={() => setDeleting(false)} onSubmit={requestDelete} />
       {d.dispose && <DisposeModal open={disposing} fields={d.dispose} onClose={() => setDisposing(false)} onSubmit={dispose} />}
       {err && <Alert style={{ marginBottom: 12 }} type="error" message={err} />}
       <RecordPage
         title={d.title}
         status={d.status ?? undefined}
         record={{ ct: d.ct, id: d.id }}
+        onDelete={() => setDeleting(true)}
         actions={
           editing ? (
             <>
@@ -335,7 +355,14 @@ export default function RecordView() {
       >
         {d.children.map((c) => (
           <section key={c.key} style={{ marginBottom: 24 }}>
-            <h3>{c.label}</h3>
+            <h3>
+              {c.label}
+              {c.add_url && (
+                <Link to={c.add_url.slice(4)} style={{ marginLeft: 12, fontSize: 14, fontWeight: 'normal' }}>
+                  추가
+                </Link>
+              )}
+            </h3>
             <Table<Row>
               size="small"
               pagination={false}

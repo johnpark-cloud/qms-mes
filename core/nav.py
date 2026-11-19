@@ -14,7 +14,8 @@ APP_PAGES = {'/admin/core/item/': '/app/items', '/admin/core/process/': '/app/pr
              '/admin/qms/inspection/': '/app/inspections', '/me/': '/app/me',
              # 옛 서버 화면 → 같은 일을 하는 새 화면 (옛 주소도 계속 열린다)
              '/todo/': '/app/todo', '/overview/': '/app/overview', '/inspect/': '/app/inspect', '/import/': '/app/import',
-             '/trace/': '/app/trace', '/memo/inbox/': '/app/memos', '/nc/new/': '/app/nc-new'}
+             '/trace/': '/app/trace', '/memo/inbox/': '/app/memos', '/nc/new/': '/app/nc-new',
+             '/kpi/': '/app/kpi', '/suppliers/': '/app/suppliers'}
 
 
 def nav_url(name):
@@ -31,6 +32,8 @@ def app_href(href):
     if (len(parts) == 5 and parts[0] == 'admin' and parts[4] == 'change' or len(parts) == 4 and parts[0] == 'approve') and parts[3].isdigit():
         base = app_href(f'/admin/{parts[1]}/{parts[2]}/')
         return f'{base}/{parts[3]}' if base.startswith('/app/') else href
+    if len(parts) == 2 and parts[0] == 'spc' and parts[1].isdigit():  # SPC 관리도
+        return f'/app/spc/{parts[1]}'
     if path in APP_PAGES:
         return APP_PAGES[path] + (_app_query(query) if path.startswith('/admin/') else f'?{query}' if query else '')
     if len(parts) == 3 and parts[0] == 'admin' and f'{parts[1]}.{parts[2]}' in SPECS:

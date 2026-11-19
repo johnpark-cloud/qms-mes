@@ -24,20 +24,20 @@ MODULES = {
     'mes': Module('생산관리 (작업지시·실적·출하)', ('core.workorder', 'core.workresult', 'core.shipment')),
     'qms_inspection': Module(
         '검사 (검사기준·관리계획서·검사·계측기·검사원 자격)',
-        ('qms.inspectionspec', 'qms.characteristic', 'qms.inspection', 'qms.measurement', 'qms.gauge',
+        ('qms.inspectionspec', 'qms.characteristic', 'qms.inspection', 'qms.measurement', 'qms.gauge', 'qms.gaugecalibration',
          'qms.qualification', 'qms.controlplan', 'qms.controlplanline'),
-        ('inspect/', 'spc/', 'api/qms/specs/', 'api/qms/plans/', 'api/qms/inspections/', 'api/qms/inspect/')),
+        ('inspect/', 'spc/', 'api/qms/spc/', 'api/qms/specs/', 'api/qms/plans/', 'api/qms/inspections/', 'api/qms/inspect/')),
     # 4M 초품 해제는 검사 판정으로만 된다
     'qms_change': Module('4M 변경', ('qms.changerequest',), requires=('qms_inspection',)),
     'qms_capa': Module('시정조치(CAPA)', ('qms.capa',)),
     'qms_claim': Module('고객 클레임 (8D)', ('qms.customerclaim', 'qms.customerrule'), ('api/qms/customer-rules/',)),
-    'qms_supplier': Module('공급자 시정조치 요구(SCAR)·평가', ('qms.scar',), ('suppliers/',)),
+    'qms_supplier': Module('공급자 시정조치 요구(SCAR)·평가', ('qms.scar',), ('suppliers/', 'api/qms/suppliers/')),
     'qms_ppap': Module('PPAP', ('qms.ppapsubmission', 'qms.ppapelement')),
     # 심사 발견사항이 CAPA를 외래키로 가리킨다
     'qms_audit': Module('심사', ('qms.internalaudit', 'qms.auditfinding', 'qms.auditchecklist', 'qms.audititem', 'qms.evidence'),
                         ('audit-pack/',), requires=('qms_capa',)),
     'qms_document': Module('문서 관리', ('qms.document', 'qms.documentrevision')),
-    'qms_kpi': Module('품질 KPI', (), ('kpi/',)),
+    'qms_kpi': Module('품질 KPI', (), ('kpi/', 'api/qms/kpi/')),
 }
 
 BASE_MODELS = (

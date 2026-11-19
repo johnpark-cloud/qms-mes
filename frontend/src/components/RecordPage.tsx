@@ -17,6 +17,8 @@ interface Props {
   side: { key: string; label: string; node: ReactNode }[]
   /** 기록 종류(app.model)와 번호. 있으면 「이력」 버튼과 「⋯」 맨 아래 삭제(요청)를 붙인다. */
   record?: { ct: string; id: number }
+  /** 있으면 삭제(요청)를 서버 화면 대신 이 함수로(사유·비밀번호 창) 한다 */
+  onDelete?: () => void
   /** 「⋯」 메뉴 항목(엑셀 받기·양식 등) */
   menu?: MenuProps['items']
   /** 제목 옆 큰 글자(검사 판정 띠) */
@@ -25,12 +27,12 @@ interface Props {
 
 const COLOR = { 초안: 'orange', 승인됨: 'green', 잠김: 'default', 합격: 'green', 불합격: 'red', 미판정: 'orange' } as const
 
-export default function RecordPage({ title, status, actions, props, children, side, record, menu = [], lead }: Props) {
+export default function RecordPage({ title, status, actions, props, children, side, record, menu = [], lead, onDelete }: Props) {
   const me = useQuery({ queryKey: ['me'], queryFn: fetchMe, staleTime: Infinity }).data
   const [app, model] = record?.ct.split('.') ?? []
   // 삭제는 서버 요청 화면(사유·비밀번호)으로만 간다. 시스템 관리자는 거기서 바로 삭제, 그 밖은 삭제 요청이다.
   const items: MenuProps['items'] = record
-    ? [...menu, ...(menu.length ? [{ type: 'divider' as const }] : []), { key: 'delete', danger: true, label: <a href={`/request/DELETE/${app}/${model}/${record.id}/`}>{me?.is_superuser ? '삭제' : '삭제 요청'}</a> }]
+    ? [...menu, ...(menu.length ? [{ type: 'divider' as const }] : []), { key: 'delete', danger: true, label: onDelete ? <span onClick={onDelete}>{me?.is_superuser ? '삭제' : '삭제 요청'}</span> : <a href={`/request/DELETE/${app}/${model}/${record.id}/`}>{me?.is_superuser ? '삭제' : '삭제 요청'}</a> }]
     : menu
   return (
     <div className="record">
