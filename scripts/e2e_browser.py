@@ -135,8 +135,8 @@ try:
         page.get_by_placeholder('LOT·품번·번호 또는 동작').fill('2611')
         page.locator('[data-palette-item]').first.wait_for()
         page.keyboard.press('Enter')
-        page.wait_for_url('**/trace/?lot=RAW-2611-001')
-        check('명령창: LOT 일부 + Enter → 그 기록', '/trace/?lot=RAW-2611-001' in page.url, page.url)
+        page.wait_for_url('**/app/trace?lot=RAW-2611-001')
+        check('명령창: LOT 일부 + Enter → 그 기록', '/app/trace?lot=RAW-2611-001' in page.url, page.url)
 
         page.goto('/app/todo')
         page.get_by_role('button', name='명령창 열기').wait_for()  # 화면이 뜬 뒤에 단축키를 누른다
@@ -186,7 +186,7 @@ try:
         check('검사기준 목록 줄 수가 API와 같음', want > 0 and page.locator('[data-row]').count() == want, f'API {want}')
         try:
             with page.expect_download(timeout=5000) as dl:
-                page.get_by_role('link', name='엑셀로').click()
+                page.get_by_role('link', name='엑셀 받기').click()
             check('목록 엑셀로 받기', open(dl.value.path(), 'rb').read(2) == b'PK', dl.value.suggested_filename)
         except Exception as e:
             check('목록 엑셀로 받기', False, str(e)[:80])

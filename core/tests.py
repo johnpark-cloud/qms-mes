@@ -701,11 +701,11 @@ class SearchTest(TestCase):
         self.client.force_login(self.su)
 
     def test_exact_lot_first(self):
-        self.assertEqual(self.search(self.su, ' a-2310 ')[0]['url'], '/trace/?lot=A-2310')
+        self.assertEqual(self.search(self.su, ' a-2310 ')[0]['url'], '/app/trace?lot=A-2310')
 
     def test_go_redirect(self):
         r = self.client.get('/search/?q=A-2310%0A&go=1')
-        self.assertRedirects(r, '/trace/?lot=A-2310', fetch_redirect_response=False)
+        self.assertRedirects(r, '/app/trace?lot=A-2310', fetch_redirect_response=False)
 
     def test_go_without_exact_lot_does_not_jump(self):
         r = self.client.get('/search/?q=A-231&go=1')
@@ -732,12 +732,33 @@ class SearchTest(TestCase):
         from django.utils.http import urlencode
         r = self.client.get('/search/?' + urlencode({'q': 'A+1&2#3', 'go': 1}))
         self.assertEqual(r['Location'], url)
-        self.assertContains(self.client.get(r['Location']), 'A+1&amp;2#3')
+        self.assertContains(self.client.get('/trace/?' + urlparse(url).query), 'A+1&amp;2#3')  # 옛 LOT 이력 화면도 같은 주소 조건을 읽는다
+
+    def test_partner_and_new_screen_actions(self):
+        from .models import Partner
+        p = Partner.objects.create(name='가나모터스', is_customer=True)
+        hit = next(r for r in self.search(self.su, '가나') if r['sub'] == '거래처')
+        self.assertEqual((hit['label'], hit['url']), (f'{p.code} 가나모터스', '/app/r/core/partner/' + str(p.pk)))
+        self.assertFalse(any(r['sub'] == '거래처' for r in self.search(User.objects.create_user('x', is_staff=True), '가나')))
+        self.assertEqual(next(r['url'] for r in self.search(self.su, 'LOT 이력') if r['sub'] == '동작'), '/app/trace')
 
     def test_go_no_result_renders_page(self):
         r = self.client.get('/search/?q=ZZZZ&go=1')
         self.assertContains(r, '검색 결과가 없습니다')
         self.assertContains(r, 'qms-sidebar')
+
+
+class NavTest(TestCase):
+    def test_root_opens_new_todo(self):
+        self.client.force_login(User.objects.create_superuser('root'))
+        self.assertRedirects(self.client.get('/'), '/app/todo', fetch_redirect_response=False)
+
+    def test_app_href(self):
+        from .nav import app_href
+        for old, new in (('/todo/', '/app/todo'), ('/memo/inbox/', '/app/memos'), ('/trace/?lot=A%2B1', '/app/trace?lot=A%2B1'),
+                         ('/admin/qms/inspection/?spec__inspection_type__exact=INCOMING', '/app/inspections?tab=INCOMING'),
+                         ('/kpi/', '/kpi/')):
+            self.assertEqual(app_href(old), new)
 
 
 class AuditFixTest(TestCase):

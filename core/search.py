@@ -1,6 +1,6 @@
 from django.apps import apps
+from django.db.models import Q
 from django.urls import reverse
-from django.utils.http import urlencode
 
 from .modules import active_set, module_of_model, module_of_path
 
@@ -27,20 +27,20 @@ def search(user, q):
         out.append({'label': label, 'sub': sub, 'url': url, 'exact': exact})
 
     lots = apps.get_model('core', 'lot').objects if can('core', 'lot') else None
-    trace = lambda lot: f"{reverse('trace')}?{urlencode({'lot': lot.number})}"
+    from .nav import app_href
+    from .relations import trace_url
     if lots is not None and q:
         for lot in lots.filter(number__iexact=q).select_related('item')[:1]:
-            add(lot.number, f'LOT · {lot.item.code}', trace(lot), exact=True)
+            add(lot.number, f'LOT · {lot.item.code}', trace_url(lot.number), exact=True)
     for name, url in ACTIONS:
         if q and q.lower() in name.lower() and module_of_path(reverse(url).lstrip('/')) in on:
-            add(name, '동작', reverse(url))
+            add(name, '동작', app_href(reverse(url)))
     if len(q) >= 2:
         if lots is not None:
             for lot in lots.filter(number__icontains=q).exclude(number__iexact=q).select_related('item')[:LIMIT]:
-                add(lot.number, f'LOT · {lot.item.code}', trace(lot))
+                add(lot.number, f'LOT · {lot.item.code}', trace_url(lot.number))
         if can('core', 'item'):
             Item = apps.get_model('core', 'item')
-            from django.db.models import Q
             for it in Item.objects.filter(Q(code__icontains=q) | Q(name__icontains=q))[:LIMIT]:
                 add(it.code, f'품번 · {it.name}', _admin('core', 'item', it))
         for app, model, kind in NUMBERED:
@@ -52,6 +52,9 @@ def search(user, q):
                 continue
             for o in found[:LIMIT]:
                 add(o.number, kind, _admin(app, model, o))
+        if can('core', 'partner'):
+            for p in apps.get_model('core', 'partner').objects.filter(Q(code__icontains=q) | Q(name__icontains=q))[:LIMIT]:
+                add(f'{p.code} {p.name}', '거래처', _admin('core', 'partner', p))
         if lots is not None:
             # 공급자는 LOT의 자유 입력 칸이라 별도 모델이 없다
             sup = lots.filter(supplier__icontains=q).values_list('supplier', flat=True).distinct()[:LIMIT]

@@ -7,17 +7,6 @@ import { ApiError } from '../api/client'
 import CommandPalette from '../components/CommandPalette'
 import { getRecent } from '../lib/recent'
 
-// 서버가 못 바꾸는 옛 화면 주소(관리 화면 주소는 서버 app_href 가 이미 새 주소로 내려 준다)만 새 주소로 보여 준다.
-const MOVED: Record<string, string> = {
-  '/todo/': '/app/todo',
-  '/overview/': '/app/overview',
-  '/inspect/': '/app/inspect',
-  '/import/': '/app/import',
-  '/trace/': '/app/trace',
-  '/memo/inbox/': '/app/memos',
-}
-const to = (href: string) => MOVED[href] ?? href
-
 // React 경로의 첫 단계 → 모듈 키(core/modules.py). 없는 경로는 기본 플랫폼이라 끌 수 없다.
 const ROUTE_MODULE: Record<string, string> = {
   specs: 'qms_inspection',
@@ -59,12 +48,12 @@ export default function AppLayout() {
     ...user.nav.map((g) => ({
       key: g.group,
       label: g.group,
-      children: g.items.map((i) => ({ key: to(i.href), label: i.label })),
+      children: g.items.map((i) => ({ key: i.href, label: i.label })),
     })),
   ]
   // 검사 목록은 탭마다 메뉴가 따로 있다. ?tab 이 없으면 화면처럼 수입검사로 본다.
   const selected = '/app' + pathname + (pathname === '/inspections' ? `?tab=${new URLSearchParams(search).get('tab') || 'INCOMING'}` : '')
-  const open = user.nav.filter((g) => g.items.some((i) => to(i.href) === selected)).map((g) => g.group)
+  const open = user.nav.filter((g) => g.items.some((i) => i.href === selected)).map((g) => g.group)
 
   return (
     <Layout style={{ minHeight: '100vh' }}>
@@ -95,13 +84,13 @@ export default function AppLayout() {
         </Button>
       </Layout.Header>
       <Layout>
-        <Layout.Sider width={248} breakpoint="md" collapsedWidth={0} theme="light">
+        <Layout.Sider width={280} breakpoint="md" collapsedWidth={0} theme="light">
           <Menu mode="inline" items={items} selectedKeys={[selected]}
             // 항목 전체가 눌리도록 링크 대신 클릭으로 이동한다. 가운데 클릭·새 탭 열기는 포기한다(사내 업무 화면이라 필요 없다).
             onClick={({ key }) => (key.startsWith('/app/') ? navigate(key.slice(4)) : (location.href = key))}
             defaultOpenKeys={['recent', ...(open.length ? open : [user.nav[0]?.group])]} />
         </Layout.Sider>
-        <Layout.Content style={{ padding: 24, minWidth: 0 }}>
+        <Layout.Content className="shell-content">
           {off ? (
             <Alert type="info" showIcon title="비활성 모듈" description="이 화면이 속한 모듈이 꺼져 있습니다. 시스템 관리자에게 문의하세요." />
           ) : (

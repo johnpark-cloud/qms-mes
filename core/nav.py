@@ -11,7 +11,10 @@ from core.recordspec import SPECS
 # 새 화면이 있는 관리 목록 → React 화면 (설명서가 있는 목록은 /app/r/<app>/<model>)
 APP_PAGES = {'/admin/core/item/': '/app/items', '/admin/core/process/': '/app/processes', '/admin/qms/inspectionspec/': '/app/specs',
              '/admin/qms/controlplan/': '/app/plans', '/admin/qms/customerrule/': '/app/customer-rules',
-             '/admin/qms/inspection/': '/app/inspections', '/me/': '/app/me'}
+             '/admin/qms/inspection/': '/app/inspections', '/me/': '/app/me',
+             # 옛 서버 화면 → 같은 일을 하는 새 화면 (옛 주소도 계속 열린다)
+             '/todo/': '/app/todo', '/overview/': '/app/overview', '/inspect/': '/app/inspect', '/import/': '/app/import',
+             '/trace/': '/app/trace', '/memo/inbox/': '/app/memos'}
 
 
 def nav_url(name):
@@ -24,8 +27,9 @@ def app_href(href):
     """메뉴 주소를 화면에 내보낼 주소로(REC-11). NAV는 관리 주소를 그대로 둔다: 전체 메뉴 묶음(core/admin.py)·모듈 판정·현재 메뉴 표시가 쓴다."""
     path, _, query = href.partition('?')
     if path in APP_PAGES:
-        kind = query.rpartition('spec__inspection_type__exact=')[2]  # 검사 목록 조건 → 탭
-        return APP_PAGES[path] + (f'?tab={kind}' if query else '')
+        if 'spec__inspection_type__exact=' in query:  # 검사 목록 조건 → 탭
+            query = 'tab=' + query.rpartition('spec__inspection_type__exact=')[2]
+        return APP_PAGES[path] + (f'?{query}' if query else '')
     parts = path.strip('/').split('/')
     if len(parts) == 3 and parts[0] == 'admin' and f'{parts[1]}.{parts[2]}' in SPECS:
         return f'/app/r/{parts[1]}/{parts[2]}'

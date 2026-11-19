@@ -1238,11 +1238,11 @@ class OverviewTest(TestCase):
         lot_url = f'/admin/core/lot/{self.lot.pk}/change/'
         self.client.force_login(self.admin)
         panel = self.related(lot_url)
-        self.assertIn('/trace/?lot=L-1', panel)
+        self.assertIn('/app/trace?lot=L-1', panel)
         self.assertIn(f'/admin/core/nonconformance/{nc.pk}/change/', panel)
         self.assertIn('/admin/core/hold/', panel)
         panel = self.related(f'/admin/core/nonconformance/{nc.pk}/change/')
-        self.assertIn('/trace/?lot=L-1', panel)
+        self.assertIn('/app/trace?lot=L-1', panel)
         self.assertIn('/admin/core/hold/', panel)
         self.client.force_login(self.inspector)
         panel = self.related(lot_url)

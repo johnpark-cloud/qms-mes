@@ -46,7 +46,7 @@ class AuthApiTest(TestCase):
         self.assertIn('core.view_lot', body['perms'])
         self.assertEqual(body['perms'], sorted(body['perms']))
         self.assertEqual(body['nav'][0]['group'], '통합 업무 홈')
-        self.assertIn({'label': '내 할 일', 'href': '/todo/'}, body['nav'][0]['items'])
+        self.assertIn({'label': '내 할 일', 'href': '/app/todo'}, body['nav'][0]['items'])
 
     def test_nav_filtered_by_permission(self):
         plain = User.objects.create_user('plain', password='pw-plain-123', is_staff=True)
@@ -190,7 +190,7 @@ class CommonApiTest(TestCase):
 
     def test_search_partial_lot(self):
         r = self.c(self.eng).get('/api/search/?q=2611')
-        self.assertTrue(any(x['label'] == 'RAW-2611-001' and '/trace/?lot=' in x['url'] for x in r.json()['results']))
+        self.assertTrue(any(x['label'] == 'RAW-2611-001' and '/app/trace?lot=' in x['url'] for x in r.json()['results']))
 
     def test_items_lookup(self):
         self.assertEqual(self.c(self.eng).get('/api/items/?q=양극').json()[0]['code'], 'R1')

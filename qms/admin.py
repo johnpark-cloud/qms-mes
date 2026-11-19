@@ -15,6 +15,7 @@ from core.admin import ApprovalAdminMixin, BaseAdmin, ReportLinksMixin
 from core import numbering
 from core.models import CodeValue, Nonconformance, NumberRule
 from core.records import can_edit_locked
+from core.relations import trace_url
 from core.rules import child_editable
 
 from .models import (AuditChecklist, AuditFinding, AuditItem, Capa, ChangeRequest, Characteristic, ControlPlan,
@@ -392,7 +393,7 @@ class CustomerClaimAdmin(ReportLinksMixin, BaseAdmin):
     def trace_link(self, obj):
         if not obj.lot_id:
             return '-'
-        return format_html('<a href="{}?lot={}" target="_blank">LOT 추적 열기</a>', reverse('trace'), obj.lot.number)
+        return format_html('<a href="{}" target="_blank">LOT 추적 열기</a>', trace_url(obj.lot.number))
 
     def related(self, obj):
         return obj.lot, [('부적합', Nonconformance.objects.filter(pk=obj.nonconformance_id), '')]

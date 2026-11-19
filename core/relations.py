@@ -81,6 +81,11 @@ def relations_for(model):
     return rels
 
 
+def trace_url(number):
+    """LOT 이력(추적) 새 화면 주소. 옛 /trace/ 도 같은 조건으로 열린다."""
+    return '/app/trace?' + urlencode({'lot': number})
+
+
 def record_url(obj):
     """기록 상세 주소의 유일한 기준(REC-04): 전용 React 화면 → 기록 설명서 화면 → LOT 이력 → 관리 화면."""
     pages = {'core.item': 'items', 'qms.inspectionspec': 'specs', 'qms.controlplan': 'plans', 'qms.inspection': 'inspections'}
@@ -91,7 +96,7 @@ def record_url(obj):
     if url:
         return url
     if label == 'core.lot':
-        return f"{reverse('trace')}?{urlencode({'lot': obj.number})}"
+        return trace_url(obj.number)
     try:
         return reverse(f'admin:{obj._meta.app_label}_{obj._meta.model_name}_change', args=[obj.pk])
     except NoReverseMatch:  # 관리 화면이 없는 표(측정값 등)는 링크 없이 글자만

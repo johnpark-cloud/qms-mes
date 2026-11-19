@@ -7,7 +7,7 @@ from django.utils import timezone
 
 from core.models import Hold, is_approver
 from core.modules import active
-from core.relations import record_url
+from core.relations import record_url, trace_url
 from personal.leave import balance
 from personal.models import LeaveUse
 
@@ -66,7 +66,7 @@ def held_rows(request, d):
     for h in holds[:50]:  # 같은 LOT의 보류가 여러 건이면 최신 한 줄만
         if h.lot_id not in seen:
             seen.add(h.lot_id)
-            out.append(row(str(h.lot), f"{reverse('trace')}?lot={h.lot.number}", str(h.nonconformance)))
+            out.append(row(str(h.lot), trace_url(h.lot.number), str(h.nonconformance)))
     return out
 
 

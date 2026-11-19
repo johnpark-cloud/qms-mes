@@ -665,7 +665,7 @@ class InspectionApiTest(TestCase):
         ok = self.make(self.lots[0], 'INCOMING', '10.0')
         bad = self.make(self.lots[1], 'INCOMING', '11.0')
         d = self.c().get(f'/api/qms/inspections/{ok.pk}/').json()
-        self.assertEqual((d['status'], d['nonconformance'], d['lot']['trace_url']), ('합격', None, '/trace/?lot=L-1'))
+        self.assertEqual((d['status'], d['nonconformance'], d['lot']['trace_url']), ('합격', None, '/app/trace?lot=L-1'))
         d = self.c().get(f'/api/qms/inspections/{bad.pk}/').json()
         self.assertEqual(d['status'], '불합격')
         self.assertEqual(d['nonconformance']['number'], bad.nonconformance.number)

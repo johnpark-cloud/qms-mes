@@ -94,7 +94,7 @@ export default function TablePage({ title, endpoint, columns, exportName }: Prop
       <h1 className="page-title">{title}</h1>
       <p>
         <a href={`${endpoint}?export=xlsx`} download={`${exportName}.xlsx`}>
-          엑셀로
+          엑셀 받기
         </a>
       </p>
       {(saveErr || otherErrors.length > 0) && (

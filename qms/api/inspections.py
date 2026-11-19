@@ -12,6 +12,7 @@ from core.api import listing
 from core.api.permissions import require_perm
 from core.export import document_xlsx, table_xlsx, xlsx_response
 from core.models import Hold, Item, Lot, Nonconformance
+from core.relations import trace_url
 from qms.models import Capa, ExcelTemplate, Gauge, Inspection, InspectionSpec
 from qms.rules import RECEIVE_MSG, measurement, receive_lot, submit_inspection
 
@@ -304,7 +305,7 @@ class InspectionDetailView(APIView):
         capas = Capa.objects.filter(source_type=ContentType.objects.get_for_model(Nonconformance), source_id=nc.pk).order_by('pk') if nc else []
         return Response({
             'id': x.pk, 'title': str(x), 'status': x.get_result_display() or '미판정',
-            'lot': {'id': x.lot.pk, 'number': x.lot.number, 'trace_url': reverse('trace') + '?lot=' + x.lot.number,
+            'lot': {'id': x.lot.pk, 'number': x.lot.number, 'trace_url': trace_url(x.lot.number),
                     'supplier': x.lot.supplier, 'qty': _qty(x.lot.qty)},
             'item': {'code': x.lot.item.code, 'name': x.lot.item.name},
             'spec': {'id': x.spec.pk, 'title': str(x.spec), 'sampling': x.spec.sampling, 'revision': x.spec.revision,

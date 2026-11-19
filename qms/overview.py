@@ -6,7 +6,7 @@ from django.utils import timezone
 
 from core.models import Hold, Nonconformance, RoutingStep, WorkOrder, WorkResult
 from core.modules import active_set, module_of_model
-from core.relations import record_url
+from core.relations import record_url, trace_url
 
 from . import kpi
 from .due import recent_spc_alarms
@@ -89,7 +89,7 @@ def sections(user):
         n = holds.values('lot').distinct().count()
         quality.append({'title': '보류 LOT', 'value': n, 'tone': 'negative' if n else '', 'sub': '투입·출하 차단 중',
                         'href': _admin_list(Hold, 'released_at__isnull=True'),
-                        'rows': [{'label': str(h.lot), 'href': reverse('trace') + f'?lot={h.lot.number}', 'meta': h.nonconformance.number,
+                        'rows': [{'label': str(h.lot), 'href': trace_url(h.lot.number), 'meta': h.nonconformance.number,
                                   'tone': 'negative'} for h in holds.select_related('lot', 'nonconformance').order_by('-created_at')[:5]]})
     if can('core.view_nonconformance'):
         ncs = list(Nonconformance.objects.filter(closed_at__isnull=True).select_related('lot').order_by('-detected_at'))

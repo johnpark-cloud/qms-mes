@@ -523,7 +523,7 @@ class RecordsCapaClaimApiTest(TestCase):
         self.assertEqual((src['label'], src['url']), ('출처 기록', record_url(self.claim)))
         links = {x['label']: x['url'] for x in self.detail('qms.customerclaim', self.claim.pk)['links']}
         self.assertIn('/admin/qms/capa/add/?source=8D', links['CAPA 만들기'])
-        self.assertEqual(links['LOT 이력 (추적)'], '/trace/?lot=FG-1')
+        self.assertEqual(links['LOT 이력 (추적)'], '/app/trace?lot=FG-1')
 
     def test_claim_8d_steps_and_close(self):
         d = self.detail('qms.customerclaim', self.claim.pk)

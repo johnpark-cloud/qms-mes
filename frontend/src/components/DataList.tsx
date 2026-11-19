@@ -114,7 +114,7 @@ export default function DataList<T extends object>({ columns, tabs, fetchPage, e
           ),
         )}
         <a href={exportHref(tab, q, extra)} download>
-          엑셀로
+          엑셀 받기
         </a>
         {toolbar}
         <span>총 {count}건</span>

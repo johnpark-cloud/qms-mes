@@ -104,7 +104,7 @@ React 19·TypeScript·Vite·Ant Design 새 화면. 개발 PC에서 `npm run buil
 
 - 모든 화면이 `templates/admin/base_site.html`(회색 상단 바 + `qms_sidebar.html` 사이드바)을 상속한다. 예외는 인쇄용 화면(`print.html`, `nc_print.html`, `audit_pack.html`)과 htmx 조각 템플릿이다.
 - 새 React 화면은 `/app/`, JSON API는 `/api/`(`core/api`·`qms/api`)에 있다. 기존 화면과 같은 로그인 세션·권한을 쓴다.
-- URL은 `config/urls.py` 한 곳에 있다. `/admin/`은 기준정보·전체 기록이고, `/todo/`·`/overview/`·`/inspect/`·`/trace/`·`/nc/new/`·`/kpi/`·`/suppliers/`·`/audit-pack/`·`/memo/*`·`/me/`·`/search/`가 전용 화면이다.
+- URL은 `config/urls.py` 한 곳에 있다. `/admin/`은 기준정보·전체 기록이고, `/todo/`·`/overview/`·`/inspect/`·`/trace/`·`/nc/new/`·`/kpi/`·`/suppliers/`·`/audit-pack/`·`/memo/*`·`/me/`·`/search/`가 전용 화면이다. `/`는 `/app/todo`로 보내고, 옛 화면 주소 → 새 화면 주소 짝은 `core/nav.py` `APP_PAGES` 한 곳에 둔다(사이드바·me API·검색이 `app_href`로 바꾼다). LOT 이력 링크는 `core/relations.py` `trace_url`이 만든다.
 - 첨부 파일(`/media/`)은 `staff_member_required`로 로그인한 스태프만 받을 수 있다.
 
 ## 데이터와 설정

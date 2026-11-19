@@ -23,7 +23,7 @@ from core.export import table_xlsx, xlsx_response
 from core.grid import record_version
 from core.models import Approvable, EditRequest, Lot, Nonconformance, is_approver
 from core.records import can_edit_locked, is_locked
-from core.relations import record_url, status_of
+from core.relations import record_url, status_of, trace_url
 
 from . import listing
 from .permissions import require_perm
@@ -153,7 +153,7 @@ def _links(obj, user):
     links = []
     lot = obj if isinstance(obj, Lot) else obj.lot if label == 'qms.customerclaim' else None
     if lot:
-        links.append({'label': 'LOT 이력 (추적)', 'url': '/trace/?' + urlencode({'lot': lot.number})})
+        links.append({'label': 'LOT 이력 (추적)', 'url': trace_url(lot.number)})
     if label in CAPA_SOURCE and modules.active('qms_capa') and user.has_perm('qms.add_capa'):
         query = {'source': CAPA_SOURCE[label], 'source_type': ContentType.objects.get_for_model(obj).pk, 'source_id': obj.pk,
                  'title': str(obj)[:200]}
