@@ -1,3 +1,4 @@
+import calendar
 import datetime
 
 from django.conf import settings
@@ -52,7 +53,7 @@ class InspectionSpec(Approvable):
     history = HistoricalRecords()
 
     class Meta:
-        verbose_name = verbose_name_plural = '검사기준'
+        verbose_name = verbose_name_plural = '검사기준서'
         constraints = [models.UniqueConstraint(fields=['item', 'inspection_type', 'revision'], name='uniq_spec_rev')]
 
     def __str__(self):
@@ -300,11 +301,25 @@ class Measurement(models.Model):
 CAL_TYPES = [('EXTERNAL', '사외 교정'), ('INTERNAL', '사내 교정')]
 
 
+def add_months(day, months):
+    """달을 더한다. 없는 날(1/31 + 1개월)은 그 달 말일로."""
+    y, m = divmod(day.month - 1 + months, 12)
+    y, m = day.year + y, m + 1
+    return day.replace(year=y, month=m, day=min(day.day, calendar.monthrange(y, m)[1]))
+
+
+def days_to_months(days):
+    """옛 교정 주기(일) → 개월 (qms 0016 마이그레이션). 365 → 12, 180 → 6, 30 → 1."""
+    return max(1, round(days * 12 / 365))
+
+
 class Gauge(models.Model):
     """계측기 대장 (IATF 7.1.5). 측정값에 계측기를 적으면 교정 기한을 검사한다."""
     number = models.CharField('관리번호', max_length=50, unique=True)
     name = models.CharField('계측기명', max_length=100, help_text='예: 마이크로미터 0-25mm')
-    interval_days = models.PositiveIntegerField('교정 주기(일)', default=365)
+    interval_months = models.PositiveIntegerField('교정 주기(개월)', default=12)
+    # shortcut: 옛 교정 주기(일) 칸은 쓰지 않지만 지우지 않았다(칸 삭제는 사용자 승인 대상). 승인 후 RemoveField.
+    interval_days = models.PositiveIntegerField('옛 교정 주기(일)', default=365, editable=False)
     last_calibrated = models.DateField('최근 교정일')
     certificate = models.FileField('교정 성적서', upload_to='gauges/%Y/', blank=True)
     active = models.BooleanField('사용', default=True)
@@ -332,7 +347,7 @@ class Gauge(models.Model):
 
     @property
     def next_due(self):
-        return self.last_calibrated + datetime.timedelta(days=self.interval_days)
+        return add_months(self.last_calibrated, self.interval_months)
 
     def usable_on(self, day):
         return self.active and day <= self.next_due
@@ -492,7 +507,7 @@ class ChangeRequest(Approvable):
     history = HistoricalRecords()
 
     class Meta:
-        verbose_name = verbose_name_plural = '4M 변경'
+        verbose_name = verbose_name_plural = '변경점(4M)'
 
     def __str__(self):
         return f'{self.number} {self.item.code} {self.get_category_display()}'

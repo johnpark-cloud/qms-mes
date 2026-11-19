@@ -168,7 +168,7 @@ class GaugeAdmin(BaseAdmin):
     search_fields = ['number', 'name']
     fieldsets = [
         (None, {'fields': ['number', 'name', 'last_calibrated']}),
-        ('추가 정보', {'classes': ['collapse'], 'fields': ['interval_days', 'certificate', 'active']}),
+        ('추가 정보', {'classes': ['collapse'], 'fields': ['interval_months', 'certificate', 'active']}),
         ('상세 정보', {'classes': ['collapse'], 'fields': ['kind', 'maker', 'model_no', 'serial_no', 'measuring_range', 'resolution',
                                                        'department', 'location', 'owner', 'cal_type', 'cal_agency']}),
     ]

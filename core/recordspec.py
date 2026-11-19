@@ -88,7 +88,7 @@ SPECS = {
         edit=('revision', 'change_note')),
     'qms.gauge': Spec(
         fields=('number', 'name', 'kind', 'maker', 'model_no', 'serial_no', 'measuring_range', 'resolution',
-                'department', 'location', 'owner', 'cal_type', 'cal_agency', 'interval_days', 'last_calibrated', 'next_due',
+                'department', 'location', 'owner', 'cal_type', 'cal_agency', 'interval_months', 'last_calibrated', 'next_due',
                 'certificate', 'active'),
         columns=('number', 'name', 'kind', 'location', 'last_calibrated', 'next_due', 'active'),
         search=('number', 'name', 'kind', 'maker', 'model_no', 'serial_no', 'location'),
@@ -100,9 +100,9 @@ SPECS = {
         order=('number',),
         # 최근 교정일은 교정 이력(합격)으로 바뀌는 것이 원칙이나, 이력 없이 쓰던 대장을 위해 직접 고치는 칸도 둔다
         edit=('number', 'name', 'kind', 'maker', 'model_no', 'serial_no', 'measuring_range', 'resolution', 'department', 'location',
-              'owner', 'cal_type', 'cal_agency', 'interval_days', 'last_calibrated', 'active'),
+              'owner', 'cal_type', 'cal_agency', 'interval_months', 'last_calibrated', 'active'),
         create=('number', 'name', 'kind', 'maker', 'model_no', 'serial_no', 'measuring_range', 'resolution', 'department',
-                'location', 'owner', 'cal_type', 'cal_agency', 'interval_days', 'last_calibrated', 'active')),
+                'location', 'owner', 'cal_type', 'cal_agency', 'interval_months', 'last_calibrated', 'active')),
     'qms.gaugecalibration': Spec(
         fields=('gauge', 'calibrated_on', 'cal_type', 'agency', 'result', 'cert_no', 'certificate', 'note'),
         columns=('gauge', 'calibrated_on', 'cal_type', 'agency', 'result', 'cert_no'),

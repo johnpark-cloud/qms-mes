@@ -116,8 +116,8 @@ class ShellTest(TestCase):
         lead.groups.add(Group.objects.get(name='품질팀장'))
         eng.groups.add(Group.objects.get(name='품질엔지니어'))
         labels = lambda u: [l for _, items in visible_nav(u) for l, _ in items]
-        self.assertIn('변경 이력 조회', labels(lead))
-        self.assertNotIn('변경 이력 조회', labels(eng))
+        self.assertIn('감사 추적', labels(lead))
+        self.assertNotIn('감사 추적', labels(eng))
 
     def test_logo_served_from_data_dir(self):
         import tempfile
@@ -149,7 +149,7 @@ class ShellTest(TestCase):
         self.client.force_login(insp)
         html = side(self.client.get('/todo/').content.decode())
         self.assertIn('검사 입력', html)
-        self.assertNotIn('전체 메뉴', html)  # 관리 화면 첫 화면은 시스템 관리자 메뉴(REC-11)
+        self.assertNotIn('관리자 화면', html)  # 관리 화면 첫 화면은 시스템 관리자 메뉴(REC-11)
         self.assertIn('aria-current="page"', html)  # /todo/ = 내 할 일
         self.assertNotIn('품질 KPI', html)  # 검사원은 KPI·공급자 화면 권한이 없다 (누르면 403)
         self.assertNotIn('공급자', html)
@@ -163,8 +163,7 @@ class ShellTest(TestCase):
         self.assertIn('검사 입력', side(self.client.get('/todo/').content.decode()))
         # 걸러 연 관리 목록도 현재 메뉴로 표시된다
         html = side(self.client.get('/admin/qms/inspection/?spec__inspection_type__exact=INCOMING').content.decode())
-        self.assertIn('aria-current="page">수입검사', html)
-        self.assertNotIn('aria-current="page">공정검사', html)
+        self.assertIn('aria-current="page">검사 실적', html)  # 수입·공정·출하는 검사 실적 한 메뉴(구분 필터)
 
     def test_sidebar_groups_collapse(self):
         # 홈과 지금 화면이 속한 묶음만 펼쳐서 시작한다 (변경 화면도 그 목록의 묶음)

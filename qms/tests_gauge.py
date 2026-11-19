@@ -9,10 +9,25 @@ from django.utils import timezone
 from qms.models import Gauge, GaugeCalibration
 
 
+class GaugeIntervalMonthsTest(TestCase):
+    def test_next_due_adds_months_clamped_to_month_end(self):
+        g = Gauge(number='G-M', name='x', last_calibrated=datetime.date(2026, 1, 31), interval_months=1)
+        self.assertEqual(g.next_due, datetime.date(2026, 2, 28))
+        g.interval_months = 12
+        self.assertEqual(g.next_due, datetime.date(2027, 1, 31))
+        g.interval_months = 13
+        self.assertEqual(g.next_due, datetime.date(2027, 2, 28))
+        self.assertEqual(Gauge._meta.get_field('interval_months').default, 12)
+
+    def test_days_to_months(self):
+        from qms.models import days_to_months
+        self.assertEqual([days_to_months(d) for d in (365, 180, 90, 30, 1, 730)], [12, 6, 3, 1, 1, 24])
+
+
 class GaugeCalibrationTest(TestCase):
     def setUp(self):
         self.today = timezone.localdate()
-        self.g = Gauge.objects.create(number='G-1', name='마이크로미터', interval_days=365,
+        self.g = Gauge.objects.create(number='G-1', name='마이크로미터', interval_months=12,
                                       last_calibrated=self.today - datetime.timedelta(days=400))
 
     def test_pass_moves_last_calibrated_forward(self):

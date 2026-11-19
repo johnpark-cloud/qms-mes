@@ -28,7 +28,7 @@ MODULES = {
          'qms.qualification', 'qms.controlplan', 'qms.controlplanline'),
         ('inspect/', 'spc/', 'api/qms/spc/', 'api/qms/specs/', 'api/qms/plans/', 'api/qms/inspections/', 'api/qms/inspect/')),
     # 4M 초품 해제는 검사 판정으로만 된다
-    'qms_change': Module('4M 변경', ('qms.changerequest',), requires=('qms_inspection',)),
+    'qms_change': Module('변경점 관리(4M)', ('qms.changerequest',), requires=('qms_inspection',)),
     'qms_capa': Module('시정조치(CAPA)', ('qms.capa',)),
     'qms_claim': Module('고객 클레임 (8D)', ('qms.customerclaim', 'qms.customerrule'), ('api/qms/customer-rules/',)),
     'qms_supplier': Module('공급자 시정조치 요구(SCAR)·평가', ('qms.scar',), ('suppliers/', 'api/qms/suppliers/')),

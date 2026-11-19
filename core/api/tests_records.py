@@ -215,25 +215,26 @@ class RecordsWriteApiTest(TestCase):
         self.assertFalse(d['locked'])
         self.assertFalse(d['can_approve'])  # 계측기는 승인 대상이 아니다
         edit = {e['key']: e for e in d['edit']}
-        self.assertEqual(edit['interval_days']['type'], 'int')
+        self.assertEqual(edit['interval_months']['type'], 'int')
+        self.assertNotIn('interval_days', edit)
         self.assertEqual((edit['active']['type'], edit['active']['value']), ('bool', True))
         self.assertEqual(edit['last_calibrated']['type'], 'date')
         self.assertEqual(d['requests'], {'edit': False, 'delete': True})
 
     def test_patch_saves_with_history(self):
-        r = self.patch('qms.gauge', self.g.pk, {'name': '캘리퍼스', 'interval_days': 180, 'active': False})
+        r = self.patch('qms.gauge', self.g.pk, {'name': '캘리퍼스', 'interval_months': 6, 'active': False})
         self.assertEqual(r.status_code, 200, r.content)
         self.g.refresh_from_db()
-        self.assertEqual((self.g.name, self.g.interval_days, self.g.active), ('캘리퍼스', 180, False))
+        self.assertEqual((self.g.name, self.g.interval_months, self.g.active), ('캘리퍼스', 6, False))
         self.assertEqual(self.g.history.first().history_user, self.user)
         self.assertEqual(r.json()['fields'][1]['value'], '캘리퍼스')
 
     def test_patch_field_errors(self):
         from qms.models import Gauge
         Gauge.objects.create(number='G-2', name='x', last_calibrated=timezone.localdate())
-        r = self.patch('qms.gauge', self.g.pk, {'number': 'G-2', 'interval_days': 'abc', 'name': ''})
+        r = self.patch('qms.gauge', self.g.pk, {'number': 'G-2', 'interval_months': 'abc', 'name': ''})
         self.assertEqual(r.status_code, 400)
-        self.assertEqual(set(r.json()['fields']), {'number', 'interval_days', 'name'})
+        self.assertEqual(set(r.json()['fields']), {'number', 'interval_months', 'name'})
         self.g.refresh_from_db()
         self.assertEqual(self.g.number, 'G-1')
 
@@ -739,15 +740,15 @@ class RecordsMesMasterApiTest(TestCase):
         root = hrefs()
         self.assertEqual(root['작업지시'], '/app/r/core/workorder')
         self.assertEqual(root['출하'], '/app/r/core/shipment')
-        self.assertEqual(root['수입검사'], '/app/inspections?tab=INCOMING')
+        self.assertEqual(root['검사 실적'], '/app/inspections')
         self.assertEqual(root['품목·BOM·라우팅'], '/app/items')
         self.assertEqual(root['고객사별 8D 기한'], '/app/customer-rules')
-        self.assertEqual({k for k, v in root.items() if v.startswith('/admin/')}, {'사용자', '모듈 켜기/끄기', '전체 메뉴'})
+        self.assertEqual({k for k, v in root.items() if v.startswith('/admin/')}, {'사용자', '모듈 설정', '관리자 화면'})
         lead = User.objects.create_user('lead', password='pw', is_staff=True)
         lead.groups.add(Group.objects.get(name='품질팀장'))
         self.client.force_login(lead)
         links = hrefs()
-        self.assertIn('부적합', links)
+        self.assertIn('부적합(NCR)', links)
         self.assertEqual([k for k, v in links.items() if v.startswith('/admin/')], [])
         side = self.client.get('/todo/').content.decode().partition('id="qms-sidebar"')[2].partition('</nav>')[0]
         self.assertIn('href="/app/r/core/nonconformance"', side)

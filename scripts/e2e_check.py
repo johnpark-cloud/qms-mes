@@ -160,7 +160,7 @@ try:
     # 검사원 입력 화면 + 계측기 교정 인터록
     check('검사 입력 화면이 동봉된 htmx를 불러옴', 'htmx.min.js' in get('/inspect/') and 'htmx' in get('/static/htmx.min.js'))
     check('LOT 스캔 → 수입검사 선택지 표시', '수입검사' in get('/inspect/lot/?lot=RAW-1'))
-    gauge = {'name': '마이크로미터', 'interval_days': 365, 'active': 'on'}
+    gauge = {'name': '마이크로미터', 'interval_months': 12, 'active': 'on'}
     s, html = post('/admin/qms/gauge/add/', {**gauge, 'number': 'MC-OLD', 'last_calibrated': '2024-01-01'})
     check('계측기 등록 (교정 만료)', s == 302, errors(html))
     s, html = post('/admin/qms/gauge/add/', {**gauge, 'number': 'MC-NEW', 'last_calibrated': '2026-10-01'})

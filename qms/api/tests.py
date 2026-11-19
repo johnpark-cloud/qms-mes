@@ -508,7 +508,7 @@ class InspectApiTest(TestCase):
         self.assertEqual(r.status_code, 400)
         self.assertIn('최신 승인본이 아닙니다', r.json()['detail'])
         self.assertEqual(self.counts(), before)
-        self.gauge.last_calibrated = timezone.localdate() - datetime.timedelta(days=self.gauge.interval_days + 1)
+        self.gauge.last_calibrated = timezone.localdate() - datetime.timedelta(days=400)  # 기본 주기 12개월 지남
         self.gauge.save()
         chars = {c.name: c.pk for c in r2.characteristics.all()}
         r = self.submit(spec=r2.pk, values={str(chars['두께']): '10.0', str(chars['외관']): 'OK'})
@@ -526,7 +526,7 @@ class InspectApiTest(TestCase):
             self.assertEqual(self.submit(gauges=bad).status_code, 400, bad)
         r = self.submit(gauges={str(self.thk.pk): 10**9})
         self.assertEqual((r.status_code, r.json()['detail']), (400, '계측기를 찾을 수 없습니다.'))
-        g2.last_calibrated = timezone.localdate() - datetime.timedelta(days=g2.interval_days + 1)
+        g2.last_calibrated = timezone.localdate() - datetime.timedelta(days=400)
         g2.save()
         r = self.submit(gauges={str(self.thk.pk): g2.pk})  # 항목별 계측기도 교정 기한을 본다
         self.assertEqual(r.status_code, 400)

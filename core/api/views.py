@@ -16,7 +16,7 @@ from core import audit, relations
 from core.api.permissions import require_perm
 from core.models import Hold, Item, Lot, Nonconformance, RevisionLog, is_approver
 from core.modules import MODULES, active_set
-from core.nav import app_href, visible_nav
+from core.nav import NO_HUB, SUB, app_href, visible_nav
 from core.rules import confirm_revision_log
 from core.search import search
 from core.timeline import lot_actions, lot_timeline
@@ -24,8 +24,12 @@ from core.timeline import lot_actions, lot_timeline
 
 def me_payload(user):
     on = active_set()
-    nav = [{'group': name, 'items': [{'label': label, 'href': app_href(href)} for label, href in items]}
-           for name, items in visible_nav(user)]  # 사이드바(core/context_processors.py)와 같은 필터
+    nav = []
+    for name, items in visible_nav(user):  # 사이드바(core/context_processors.py)와 같은 필터
+        shown = {label for label, _ in items}
+        nav.append({'group': name, 'hub': name not in NO_HUB, 'items': [
+            {'label': label, 'href': app_href(href), **({'parent': SUB[label]} if SUB.get(label) in shown else {})}
+            for label, href in items]})
     return {'username': user.get_username(), 'name': user.get_full_name() or user.get_username(),
             'is_superuser': user.is_superuser, 'is_approver': is_approver(user),
             'groups': sorted(user.groups.values_list('name', flat=True)),

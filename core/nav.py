@@ -72,11 +72,17 @@ def visible_nav(user):
     return groups
 
 
-def _inspections(kind):
-    return f'admin:qms_inspection_changelist?spec__inspection_type__exact={kind}'
-
-
 HOME = '통합 업무 홈'  # 늘 펼쳐 두는 묶음
+NO_HUB = (HOME, '분석 및 보고서')  # 묶음 제목을 눌러도 한눈에 보기를 열지 않는 묶음
+
+# 하위 메뉴 → 상위 메뉴(같은 묶음, 바로 위에 둔다). 새 화면 사이드바엔 상위만 보이고 하위는 그 화면 위 탭으로 연다.
+# 상위 메뉴를 볼 권한이 없으면 하위 메뉴가 사이드바에 그대로 보인다(core/api/views.py me_payload).
+SUB = {'생산실적': '작업지시', 'LOT 추적': 'LOT',
+       '검사 실적': '검사 입력', '교정 이력': '계측기 관리',
+       '부적합 등록': '부적합(NCR)', '보류': '부적합(NCR)',
+       '체크리스트·증적': '심사 관리', '심사 자료 출력': '심사 관리',
+       '고객사별 8D 기한': '고객 클레임(8D)', '공급자 시정조치(SCAR)': '공급자 평가',
+       '채번 코드값': '채번 규칙'}
 
 NAV = [
     ('통합 업무 홈', [('내 할 일', 'todo', None),
@@ -84,44 +90,43 @@ NAV = [
                 ('미분류 메모', 'memo_inbox', 'qms.view_memo'),
                 ('연차·급여', 'me', None)]),
     ('생산관리 (MES)', [('작업지시', 'admin:core_workorder_changelist', 'core.view_workorder'),
-                   ('작업 실적', 'admin:core_workresult_changelist', 'core.view_workresult'),
+                   ('생산실적', 'admin:core_workresult_changelist', 'core.view_workresult'),
                    ('LOT', 'admin:core_lot_changelist', 'core.view_lot'),
-                   ('추적성 조회(LOT 이력)', 'trace', 'core.view_lot'),
+                   ('LOT 추적', 'trace', 'core.view_lot'),
                    ('출하', 'admin:core_shipment_changelist', 'core.view_shipment')]),
     ('품질관리 (QMS)', [('검사 입력', 'inspect', 'qms.add_inspection'),
-                   ('수입검사', _inspections('INCOMING'), 'qms.view_inspection'),
-                   ('공정검사', _inspections('PROCESS'), 'qms.view_inspection'),
-                   ('출하검사', _inspections('OUTGOING'), 'qms.view_inspection'),
-                   ('계측기·교정', 'admin:qms_gauge_changelist', 'qms.view_gauge'),
+                   ('검사 실적', 'admin:qms_inspection_changelist', 'qms.view_inspection'),
+                   ('계측기 관리', 'admin:qms_gauge_changelist', 'qms.view_gauge'),
+                   ('교정 이력', 'admin:qms_gaugecalibration_changelist', 'qms.view_gaugecalibration'),
                    ('검사원 자격', 'admin:qms_qualification_changelist', 'qms.view_qualification')]),
-    ('품질보증 및 개선', [('부적합 등록', 'nc_quick', 'core.add_nonconformance'),
-                    ('부적합', 'admin:core_nonconformance_changelist', 'core.view_nonconformance'),
+    ('품질보증 및 개선', [('부적합(NCR)', 'admin:core_nonconformance_changelist', 'core.view_nonconformance'),
+                    ('부적합 등록', 'nc_quick', 'core.add_nonconformance'),
                     ('보류', 'admin:core_hold_changelist', 'core.view_hold'),
                     ('시정조치(CAPA)', 'admin:qms_capa_changelist', 'qms.view_capa'),
-                    ('4M 변경', 'admin:qms_changerequest_changelist', 'qms.view_changerequest'),
-                    ('문서', 'admin:qms_document_changelist', 'qms.view_document'),
-                    ('심사', 'admin:qms_internalaudit_changelist', 'qms.view_internalaudit'),
-                    ('심사 체크리스트·증적', 'admin:qms_auditchecklist_changelist', 'qms.view_auditchecklist'),
+                    ('변경점 관리(4M)', 'admin:qms_changerequest_changelist', 'qms.view_changerequest'),
+                    ('문서 관리', 'admin:qms_document_changelist', 'qms.view_document'),
+                    ('심사 관리', 'admin:qms_internalaudit_changelist', 'qms.view_internalaudit'),
+                    ('체크리스트·증적', 'admin:qms_auditchecklist_changelist', 'qms.view_auditchecklist'),
                     ('심사 자료 출력', 'audit_pack', 'core.view_nonconformance')]),
     ('고객 및 공급자', [('거래처', 'admin:core_partner_changelist', 'core.view_partner'),
                   ('고객 클레임(8D)', 'admin:qms_customerclaim_changelist', 'qms.view_customerclaim'),
-                  ('고객사별 8D 기한', 'admin:qms_customerrule_changelist', 'qms.view_customerrule'),  # 고객사별 8D 기한
-                  ('공급자 시정조치 요구(SCAR)', 'admin:qms_scar_changelist', 'qms.view_scar'),
-                  ('PPAP', 'admin:qms_ppapsubmission_changelist', 'qms.view_ppapsubmission'),
-                  ('공급자 평가', 'suppliers', 'qms.view_scar')]),
+                  ('고객사별 8D 기한', 'admin:qms_customerrule_changelist', 'qms.view_customerrule'),
+                  ('공급자 평가', 'suppliers', 'qms.view_scar'),
+                  ('공급자 시정조치(SCAR)', 'admin:qms_scar_changelist', 'qms.view_scar'),
+                  ('PPAP', 'admin:qms_ppapsubmission_changelist', 'qms.view_ppapsubmission')]),
     ('분석 및 보고서', [('품질 KPI', 'kpi', 'qms.view_customerclaim'),
                   ('엑셀 보고서 양식', 'admin:qms_exceltemplate_changelist', 'qms.view_exceltemplate')]),
     ('기준정보 및 시스템 관리', [('품목·BOM·라우팅', 'admin:core_item_changelist', 'core.view_item'),
                        ('공정', 'admin:core_process_changelist', 'core.view_process'),
-                       ('번호 코드값', 'admin:core_codevalue_changelist', 'core.view_codevalue'),
-                       ('번호 규칙', 'admin:core_numberrule_changelist', 'core.view_numberrule'),
-                       ('검사기준', 'admin:qms_inspectionspec_changelist', 'qms.view_inspectionspec'),
+                       ('검사기준서', 'admin:qms_inspectionspec_changelist', 'qms.view_inspectionspec'),
                        ('관리계획서', 'admin:qms_controlplan_changelist', 'qms.view_controlplan'),
+                       ('채번 규칙', 'admin:core_numberrule_changelist', 'core.view_numberrule'),
+                       ('채번 코드값', 'admin:core_codevalue_changelist', 'core.view_codevalue'),
                        ('엑셀 일괄 등록', 'import', 'core.view_importprofile'),
                        ('부서', 'admin:core_department_changelist', 'core.view_department'),
-                       ('사용자 정의 칸', 'admin:core_fielddef_changelist', 'core.view_fielddef'),
+                       ('사용자 정의 필드', 'admin:core_fielddef_changelist', 'core.view_fielddef'),
                        ('사용자', 'admin:auth_user_changelist', lambda u: u.is_superuser),  # 관리 화면은 시스템 관리자 메뉴
-                       ('변경 이력 조회', 'app_audit', is_approver),
-                       ('모듈 켜기/끄기', 'admin:core_moduleswitch_changelist', lambda u: u.is_superuser),
-                       ('전체 메뉴', 'admin:index', lambda u: u.is_superuser)]),
+                       ('감사 추적', 'app_audit', is_approver),  # 변경 이력(audit trail) 조회
+                       ('모듈 설정', 'admin:core_moduleswitch_changelist', lambda u: u.is_superuser),
+                       ('관리자 화면', 'admin:index', lambda u: u.is_superuser)]),
 ]

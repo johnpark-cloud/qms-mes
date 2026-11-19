@@ -33,7 +33,7 @@ docs/        구조·업무 규칙·테스트 문서, superpowers/ 설계·계�
 
 | 파일 | 역할 |
 | --- | --- |
-| `models.py` | `Approvable`(승인 필드·잠금 기반 클래스), 품번 `Item`·공정 `Process`·BOM `BomLine`·라우팅 `RoutingStep`, 작업지시 `WorkOrder`·실적 `WorkResult`, LOT `Lot`·계보 `LotLink`, 부적합 `Nonconformance`·사진 `NonconformancePhoto`, 보류 `Hold`, 출하 `Shipment`, 삭제·수정 요청 `EditRequest`, 엑셀 가져오기 설정 `ImportProfile`, 개정 이력 `RevisionLog`(신청 → 승인자 확정, 확정 후 수정·삭제 불가), 기준정보 `MasterModel` 기반의 부서 `Department`(조직도: 상위 부서·부서장)·거래처 `Partner`(코드 자동 부여 `next_code`, 구분, 담당자 여러 명 `contacts` JSON, 인증서 `PartnerCertificate`; 옛 `qc_*` 칸은 남아 있으나 쓰지 않음), 사용자 정의 칸 `FieldDef`(값은 각 기준정보의 `extra` JSON), 기록 첨부 `Attachment`(ContentType + id, 파일은 `data/attachments/`). `Lot`·`Shipment`의 `partner`가 거래처를 가리킨다 |
+| `models.py` | `Approvable`(승인 필드·잠금 기반 클래스), 품번 `Item`·공정 `Process`·BOM `BomLine`·라우팅 `RoutingStep`, 작업지시 `WorkOrder`·실적 `WorkResult`, LOT `Lot`·계보 `LotLink`, 부적합 `Nonconformance`·사진 `NonconformancePhoto`, 보류 `Hold`, 출하 `Shipment`, 삭제·수정 요청 `EditRequest`, 엑셀 가져오기 설정 `ImportProfile`, 개정 이력 `RevisionLog`(신청 → 승인자 확정, 확정 후 수정·삭제 불가), 기준정보 `MasterModel` 기반의 부서 `Department`(조직도: 상위 부서·부서장)·거래처 `Partner`(코드 자동 부여 `next_code`, 구분, 담당자 여러 명 `contacts` JSON, 인증서 `PartnerCertificate`; 옛 `qc_*` 칸은 남아 있으나 쓰지 않음), 사용자 정의 필드 `FieldDef`(값은 각 기준정보의 `extra` JSON), 기록 첨부 `Attachment`(ContentType + id, 파일은 `data/attachments/`). `Lot`·`Shipment`의 `partner`가 거래처를 가리킨다 |
 | `admin.py` | `BaseAdmin`(삭제는 시스템 관리자만, 승인 잠금, 요청 링크, 상세 화면 관련 기록 `related_panel`), 부적합 폼(MRB 처분 시 비밀번호·보완 필수 칸 검사) |
 | `records.py` | 삭제(`delete_record`), 잠금(`is_locked`), 잠금 해제 확인(`can_edit_locked`) 규칙 |
 | `views.py` | LOT 추적, 통합 검색, 부적합 간편 등록, 승인 서명, 삭제·수정 요청, 출력, 부적합 메일·사진 ZIP, 엑셀 가져오기 |
@@ -41,11 +41,11 @@ docs/        구조·업무 규칙·테스트 문서, superpowers/ 설계·계�
 | `middleware.py` | 로그인 사용자 HTML 화면에 `no-store` 헤더(뒤로가기 때 최신 내용) |
 | `importer.py` | 엑셀/CSV 일괄 등록 |
 | `export.py` | 문서 구조(dict)·표를 A4 `.xlsx`로 내보낸다(`document_xlsx`, `table_xlsx`, `xlsx_response`). React 인쇄 화면도 같은 문서 구조를 쓴다 |
-| `audit.py` | simple-history 이력을 변경 이력 조회 화면용으로 읽는다(`audited_models`는 `PRIVATE_APPS` 제외, `row_payload`는 `password` 변경 제외) |
+| `audit.py` | simple-history 이력을 감사 추적 화면용으로 읽는다(`audited_models`는 `PRIVATE_APPS` 제외, `row_payload`는 `password` 변경 제외) |
 | `rules.py` | admin·기존 뷰·API가 함께 쓰는 업무 규칙(잠금·삭제·승인 등). 규칙 본문은 한 곳에만 둔다 |
 | `relations.py` | 관계 레지스트리: 모델 `_meta`와 일반 연결(첨부·메모·증적·PPAP 요소·CAPA 출처)에서 어느 기록이든 그 기록을 가리키는 묶음(incoming)과 그 기록이 가리키는 묶음(outgoing)을 만든다. 새 표·외래키는 따로 등록하지 않는다. API `/api/relations/<app.model>/<id>/`(`core/api/views.py` `RelationsView`), 첨부 API `/api/attachments/`(`core/api/attachments.py`), 첨부 받기 `/attachments/<id>/`(`core/views.py` `attachment_download`) |
 | `recordspec.py` | 기록 설명서: 모델별 칸·목록 열·검색·탭·하위 표·오른쪽 열(`SPECS`). 등록하면 records API(`core/api/records.py`, `/api/records/<app.model>/`·`<id>/`·`<id>/history/`)와 새 기록 화면(`/app/r/:app/:model/:id`, `frontend/src/pages/records/`)이 따라오고, `core/relations.py` `record_url`이 링크 주소의 유일한 기준이다 |
-| `numbering.py` | 번호 규칙(`NumberRule` 틀 문자열) 해석: 틀 검사(`check_rule`), 다음 번호 계산(`next_number`), 긴 번호 풀이(`describe`), 개정 자동 채움(`next_revision`). 코드값은 `CodeValue` |
+| `numbering.py` | 채번 규칙(`NumberRule` 틀 문자열) 해석: 틀 검사(`check_rule`), 다음 번호 계산(`next_number`), 긴 번호 풀이(`describe`), 개정 자동 채움(`next_revision`). 코드값은 `CodeValue` |
 | `api/` | DRF 기반 JSON API: 로그인·`/api/auth/me/`, 오류 응답 형식(`exceptions.py`), 모델 권한(`permissions.py`). 업무 규칙은 `core/rules.py`·모델 `save()`를 그대로 쓴다 |
 | `api/master.py` | 품번·BOM·라우팅 `/api/core/items/`(목록·`?export=xlsx`·생성·`<id>/` 조회·저장), 공정 `/api/core/processes/` 표 조회·저장, 번호 자동 부여 `/api/core/numbering/item-options/`(규칙·토큰별 선택지)·`/api/core/numbering/item-preview/`(다음 번호 미리보기), 엑셀 일괄 등록 `/api/core/import/profiles/`·`/api/core/import/`(`commit=0` 미리보기, `1` 확정). 저장 규칙은 `core/rules.py`(`save_item`·`save_table`)를 쓴다 |
 | `management/commands/` | `backup`, `restore`, `link_masters`(기존 글자 칸 → 거래처·부서·사용자 연결, 기본은 미리보기) |
@@ -72,7 +72,7 @@ docs/        구조·업무 규칙·테스트 문서, superpowers/ 설계·계�
 
 ### frontend (`frontend/`)
 
-React 19·TypeScript·Vite·Ant Design 새 화면. 개발 PC에서 `npm run build`로 `frontend/dist/`를 만들고 그 결과를 저장소에 함께 넣는다. Django는 `/app/` 아래 모든 주소에 `dist/index.html`을 내려 주고(`core/views.py` `spa`), JS·CSS는 whitenoise가 `/static/app/`에서 제공하므로 운영 PC에는 Node가 필요 없다. 지금은 `/app/overview`·`/app/todo`·`/app/specs`(목록·`:id` 기록 페이지·`:id/print` 인쇄)·`/app/inspect`(스캔·`:lot/:spec` 측정)·`/app/inspections`(목록·`:id` 기록 페이지·`:id/print` 성적서 인쇄)·`/app/items`(목록·`:id` 속성·BOM·라우팅)·`/app/processes`·`/app/customer-rules`(표 편집)·`/app/plans`(목록·`:id` 기록 페이지·`:id/print` 가로 인쇄)·`/app/import`(엑셀 일괄 등록 미리보기·확정)·`/app/trace`(LOT 계보 그림·이력)·`/app/memos`(미분류 메모)·`/app/audit`가 있고 데이터는 API로만 받는다. `core/api/views.py`에는 LOT 찾기(`/api/core/lots/?q=`, 번호·품번·품명·공급자 일부)·LOT 계보와 이력(`/api/core/trace/?lot=`)·통합 검색(`/api/search/`)·품번 조회(`/api/items/`)·변경 이력 조회(`/api/audit-log/`, 승인자만)·개정 이력 확정(`/api/revision-log/<id>/approve/`)이 있다.
+React 19·TypeScript·Vite·Ant Design 새 화면. 개발 PC에서 `npm run build`로 `frontend/dist/`를 만들고 그 결과를 저장소에 함께 넣는다. Django는 `/app/` 아래 모든 주소에 `dist/index.html`을 내려 주고(`core/views.py` `spa`), JS·CSS는 whitenoise가 `/static/app/`에서 제공하므로 운영 PC에는 Node가 필요 없다. 지금은 `/app/overview`·`/app/todo`·`/app/specs`(목록·`:id` 기록 페이지·`:id/print` 인쇄)·`/app/inspect`(스캔·`:lot/:spec` 측정)·`/app/inspections`(목록·`:id` 기록 페이지·`:id/print` 성적서 인쇄)·`/app/items`(목록·`:id` 속성·BOM·라우팅)·`/app/processes`·`/app/customer-rules`(표 편집)·`/app/plans`(목록·`:id` 기록 페이지·`:id/print` 가로 인쇄)·`/app/import`(엑셀 일괄 등록 미리보기·확정)·`/app/trace`(LOT 계보 그림·이력)·`/app/memos`(미분류 메모)·`/app/audit`가 있고 데이터는 API로만 받는다. `core/api/views.py`에는 LOT 찾기(`/api/core/lots/?q=`, 번호·품번·품명·공급자 일부)·LOT 계보와 이력(`/api/core/trace/?lot=`)·통합 검색(`/api/search/`)·품번 조회(`/api/items/`)·감사 추적(`/api/audit-log/`, 승인자만)·개정 이력 확정(`/api/revision-log/<id>/approve/`)이 있다.
 
 | 위치 | 역할 |
 | --- | --- |
@@ -94,7 +94,7 @@ React 19·TypeScript·Vite·Ant Design 새 화면. 개발 PC에서 `npm run buil
 - `core` → `qms`: 모듈 수준에서 import하지 않는다. 필요한 곳에서만 `apps.get_model('qms', ...)`(`Shipment.clean`의 4M 확인)이나 함수 안 지연 import(`core/admin.py`의 CAPA 링크·유사 사례·관련 기록)로 참조한다.
 - `personal`: core·qms 모델을 import하지 않는다. 권한 부여만 `qms/apps.py`의 `ensure_roles`가 한다.
 
-## 모듈 켜기/끄기
+## 모듈 설정
 
 - 어느 모델·주소가 어느 모듈인지는 `core/modules.py`의 `MODULES`·`BASE_MODELS`·`BASE_PATHS` 한 곳에서 정한다. 새 모델·새 주소를 만들면 여기에 등록해야 `core/tests_modules.py`의 전수 테스트가 통과한다.
 - 켜짐 상태는 `core.ModuleSwitch`(행이 없으면 켜짐). 요청마다 한 번 조회하고 캐시하지 않는다.

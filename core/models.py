@@ -83,7 +83,7 @@ class CodeValue(models.Model):
     history = HistoricalRecords()
 
     class Meta:
-        verbose_name = verbose_name_plural = '번호 코드값'
+        verbose_name = verbose_name_plural = '채번 코드값'
         ordering = ['group', 'parent_id', 'sort', 'code']
         constraints = [
             models.UniqueConstraint(fields=['group', 'code'], condition=models.Q(parent__isnull=True),
@@ -127,7 +127,7 @@ class NumberRule(models.Model):
     history = HistoricalRecords()
 
     class Meta:
-        verbose_name = verbose_name_plural = '번호 규칙'
+        verbose_name = verbose_name_plural = '채번 규칙'
         ordering = ['sort', 'id']
 
     def __str__(self):
@@ -234,7 +234,7 @@ class WorkResult(models.Model):
     history = HistoricalRecords()
 
     class Meta:
-        verbose_name = verbose_name_plural = '작업 실적'
+        verbose_name = verbose_name_plural = '생산실적'
 
     def __str__(self):
         return f'{self.work_order} {self.step}'
@@ -709,7 +709,7 @@ class MasterModel(models.Model):
     updated_at = models.DateTimeField('수정 일시', auto_now=True)
     active = models.BooleanField('사용', default=True)
     note = models.TextField('비고', blank=True)
-    extra = models.JSONField('사용자 정의 칸', default=dict, blank=True)
+    extra = models.JSONField('사용자 정의 필드', default=dict, blank=True)
     history = HistoricalRecords(inherit=True)
 
     class Meta:
@@ -906,7 +906,7 @@ class FieldDef(models.Model):
     history = HistoricalRecords()
 
     class Meta:
-        verbose_name = verbose_name_plural = '사용자 정의 칸'
+        verbose_name = verbose_name_plural = '사용자 정의 필드'
         ordering = ['target', 'sort', 'key']
         constraints = [models.UniqueConstraint(fields=['target', 'key'], name='uniq_fielddef_key')]
 
@@ -987,7 +987,7 @@ class ModuleSwitch(models.Model):
     history = HistoricalRecords()
 
     class Meta:
-        verbose_name = verbose_name_plural = '모듈 켜기/끄기'
+        verbose_name = verbose_name_plural = '모듈 설정'
         ordering = ['key']
 
     def __str__(self):

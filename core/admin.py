@@ -336,7 +336,7 @@ class MasterAdmin(BaseAdmin):
         main = [f for f in fields if f not in tail and f not in extra]
         sets = [(None, {'classes': ['grid'], 'fields': main})]
         if extra:
-            sets.append(('사용자 정의 칸', {'classes': ['grid'], 'fields': extra}))
+            sets.append(('사용자 정의 필드', {'classes': ['grid'], 'fields': extra}))
         return sets + [('관리', {'classes': ['grid'], 'fields': tail})]
 
     def save_model(self, request, obj, form, change):

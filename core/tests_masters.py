@@ -178,7 +178,7 @@ class FieldDefTest(TestCase):
         # 기준정보 칸 → 사용자 정의 칸 → 관리(사용·비고) 순서, 모두 여러 열 카드
         self.client.force_login(staff('lead', '품질팀장'))
         sets = self.client.get('/admin/core/partner/add/').context['adminform'].fieldsets
-        self.assertEqual([name for name, _ in sets], [None, '사용자 정의 칸', '관리'])
+        self.assertEqual([name for name, _ in sets], [None, '사용자 정의 필드', '관리'])
         self.assertTrue(all('grid' in opts['classes'] for _, opts in sets))
         self.assertEqual(sets[0][1]['fields'][:2], ['code', 'name'])
         self.assertEqual(sets[1][1]['fields'], ['extra__bank'])

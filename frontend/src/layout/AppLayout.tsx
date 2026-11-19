@@ -1,5 +1,5 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { Alert, Button, Layout, Menu, Spin } from 'antd'
+import { Alert, Button, Layout, Menu, Spin, Tabs } from 'antd'
 import { useEffect, useState } from 'react'
 import { Link, Navigate, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { fetchMe, logout } from '../api/auth'
@@ -42,22 +42,30 @@ export default function AppLayout() {
   const user = me.data
   // 서버가 API를 막으므로(404 module_inactive) 화면은 안내만 한다.
   const off = user.modules?.[ROUTE_MODULE[pathname.split('/')[1]]] === false
+  const go = (href: string) => (href.startsWith('/app/') ? navigate(href.slice(4)) : (location.href = href))
+  const flat = user.nav.flatMap((g) => g.items)
+  const pathOf = (href: string) => href.split('?')[0]
+  const here = '/app' + pathname
+  // 지금 화면의 메뉴: 목록 주소가 같거나(조건 무시) 그 아래 상세 화면
+  const cur = flat.find((i) => pathOf(i.href) === here)
+    ?? flat.filter((i) => here.startsWith(pathOf(i.href) + '/')).sort((a, b) => b.href.length - a.href.length)[0]
+  const root = cur?.parent ?? cur?.label
+  // 묶인 메뉴(상위 + 하위)는 목록 화면 위에 탭으로 (core/nav.py SUB)
+  const family = cur && pathOf(cur.href) === here ? flat.filter((i) => i.label === root || i.parent === root) : []
   const recent = getRecent()
   const items = [
     ...(recent.length ? [{ key: 'recent', label: '최근 연 기록', children: recent.map((r) => ({ key: r.href, label: r.label })) }] : []),
     ...user.nav.map((g) => ({
       key: g.group,
       label: g.group,
-      // 묶음마다 맨 위 「한눈에 보기」: 묶음 안 목록을 위젯으로 모아 보고 바로 추가한다(pages/Hub.tsx)
-      children: [
-        ...(g.items.length > 1 ? [{ key: '/app/hub/' + encodeURIComponent(g.group), label: '한눈에 보기' }] : []),
-        ...g.items.map((i) => ({ key: i.href, label: i.label })),
-      ],
+      // 묶음 제목을 누르면 묶음 안 목록을 위젯으로 모아 본다(pages/Hub.tsx). 홈·분석 묶음은 제외(서버 NO_HUB)
+      ...(g.hub ? { onTitleClick: () => navigate('/hub/' + encodeURIComponent(g.group)) } : {}),
+      children: g.items.filter((i) => !i.parent).map((i) => ({ key: i.href, label: i.label })),
     })),
   ]
-  // 검사 목록은 탭마다 메뉴가 따로 있다. ?tab 이 없으면 화면처럼 수입검사로 본다.
-  const selected = '/app' + (pathname.startsWith('/hub/') ? '/hub/' + encodeURIComponent(decodeURIComponent(pathname.slice(5))) : pathname) + (pathname === '/inspections' ? `?tab=${new URLSearchParams(search).get('tab') || 'INCOMING'}` : '')
-  const open = user.nav.filter((g) => selected === '/app/hub/' + encodeURIComponent(g.group) || g.items.some((i) => i.href === selected)).map((g) => g.group)
+  const selected = cur ? (flat.find((i) => i.label === cur.parent)?.href ?? cur.href) : here
+  const hubOf = pathname.startsWith('/hub/') ? decodeURIComponent(pathname.slice(5)) : ''
+  const open = user.nav.filter((g) => g.group === hubOf || g.items.some((i) => i.href === selected)).map((g) => g.group)
 
   return (
     <Layout style={{ minHeight: '100vh' }}>
@@ -90,14 +98,20 @@ export default function AppLayout() {
         <Layout.Sider width={280} breakpoint="md" collapsedWidth={0} theme="light">
           <Menu mode="inline" items={items} selectedKeys={[selected]}
             // 항목 전체가 눌리도록 링크 대신 클릭으로 이동한다. 가운데 클릭·새 탭 열기는 포기한다(사내 업무 화면이라 필요 없다).
-            onClick={({ key }) => (key.startsWith('/app/') ? navigate(key.slice(4)) : (location.href = key))}
+            onClick={({ key }) => go(key)}
             defaultOpenKeys={['recent', ...(open.length ? open : [user.nav[0]?.group])]} />
         </Layout.Sider>
         <Layout.Content className="shell-content">
           {off ? (
             <Alert type="info" showIcon title="비활성 모듈" description="이 화면이 속한 모듈이 꺼져 있습니다. 시스템 관리자에게 문의하세요." />
           ) : (
-            <Outlet />
+            <>
+              {family.length > 1 && (
+                <Tabs className="menu-tabs" activeKey={cur!.href} onChange={go}
+                  items={family.map((i) => ({ key: i.href, label: i.label }))} />
+              )}
+              <Outlet />
+            </>
           )}
         </Layout.Content>
       </Layout>

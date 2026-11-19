@@ -49,7 +49,7 @@ export default function CommandPalette({ open, onClose }: { open: boolean; onClo
   return (
     <Modal open={open} onCancel={onClose} footer={null} closable={false} destroyOnHidden width={mode === 'tree' ? 960 : 560}>
       <Segmented block style={{ marginBottom: 8 }} value={mode} onChange={(v) => setMode(v as 'find' | 'tree')}
-        options={[{ value: 'find', label: '기록 찾기' }, { value: 'tree', label: '메뉴 트리' }]} />
+        options={[{ value: 'find', label: '기록 찾기' }, { value: 'tree', label: '전체 메뉴' }]} />
       <Input
         autoFocus
         placeholder={mode === 'tree' ? '메뉴 이름 거르기' : 'LOT·품번·번호 또는 동작'}
@@ -78,7 +78,7 @@ export default function CommandPalette({ open, onClose }: { open: boolean; onClo
   )
 }
 
-/** 메뉴 트리(밀러 열): 묶음 → 메뉴 → 그 목록의 최근 기록. 입력하면 메뉴 이름으로 거른다 */
+/** 전체 메뉴(밀러 열): 묶음 → 메뉴(하위 메뉴는 들여 씀) → 그 목록의 최근 기록. 입력하면 메뉴 이름으로 거른다 */
 function MenuTree({ filter, go }: { filter: string; go: (h: Hit) => void }) {
   const me = useQuery({ queryKey: ['me'], queryFn: fetchMe, staleTime: Infinity }).data
   const f = filter.toLowerCase()
@@ -106,8 +106,7 @@ function MenuTree({ filter, go }: { filter: string; go: (h: Hit) => void }) {
         {groups.map((x) => col(x.group, x.group, x === g, () => { setG(x.group); setI('') }, () => { setG(x.group); setI('') }))}
       </div>
       <div className="miller-col">
-        {g && col('hub', '한눈에 보기', false, () => {}, () => go({ label: g.group, url: '/app/hub/' + encodeURIComponent(g.group) }))}
-        {g?.items.map((i) => col(i.href, i.label, i === item, () => setI(i.href), () => go({ label: i.label, url: i.href })))}
+        {g?.items.map((i) => col(i.href, (i.parent ? '└ ' : '') + i.label, i === item, () => setI(i.href), () => go({ label: i.label, url: i.href })))}
       </div>
       <div className="miller-col">
         {!isList && item && col('open', `${item.label} 열기`, false, () => {}, () => go({ label: item.label, url: item.href }))}

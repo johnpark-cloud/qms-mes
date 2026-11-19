@@ -10,11 +10,11 @@
 | --- | --- |
 | 부적합이 새로 등록되면 그 LOT과 모든 하위 계보 LOT(`Lot.descendants()`)에 보류(`Hold`)를 만든다. | `core/models.py` `Nonconformance.save` |
 | 보류 중인 LOT은 다른 LOT에 투입(`LotLink`)할 수 없다. | `LotLink.clean` → `Lot.assert_usable('투입')` |
-| 보류 중인 LOT으로 작업 실적을 등록할 수 없다. | `WorkResult.clean` → `assert_usable('실적 등록')` |
+| 보류 중인 LOT으로 생산실적을 등록할 수 없다. | `WorkResult.clean` → `assert_usable('실적 등록')` |
 | 보류 중인 LOT은 출하할 수 없다. | `Shipment.clean` → `assert_usable('출하')` |
 | 위 세 검사(와 4M 초품 출하 차단)는 새로 만들 때뿐 아니라 기존 기록의 LOT을 바꿔 저장할 때도 한다. LOT을 바꾸지 않는 정정(수량·메모)은 LOT이 보류여도 허용한다. | `core/models.py` `lot_changed` |
 | 계보는 자기 자신 투입과 순환을 허용하지 않는다. | `LotLink.clean` |
-| 작업 실적: 라우팅에 있는 공정만, 양품+불량 ≤ 투입, 이전 공정 양품 실적이 있어야 다음 공정 등록, LOT 품번 = 작업지시 품번. | `WorkResult.clean` |
+| 생산실적: 라우팅에 있는 공정만, 양품+불량 ≤ 투입, 이전 공정 양품 실적이 있어야 다음 공정 등록, LOT 품번 = 작업지시 품번. | `WorkResult.clean` |
 | 고객 클레임 접수는 부적합을 자동 생성한다(→ 보류). | `qms/models.py` `CustomerClaim.save` |
 | 원자재가 아닌 LOT에 투입 LOT이 없으면 "계보 미등록"으로 표시한다. | `Lot.lineage_gap` |
 
@@ -78,7 +78,7 @@
 
 | 규칙 | 위치 |
 | --- | --- |
-| 다음 교정일 = 최근 교정일 + 교정 주기(일). | `Gauge.next_due` |
+| 다음 교정일 = 최근 교정일 + 교정 주기(개월). 달 끝을 넘으면 그달 마지막 날(1/31 + 1개월 = 2/28). 옛 교정 주기(일) 칸은 남아 있으나 쓰지 않는다(마이그레이션 qms 0016이 일 → 개월로 채움). | `Gauge.next_due`, `add_months` |
 | 측정값에 계측기를 적으면, 검사일이 다음 교정일을 지났거나 사용 중지된 계측기는 거부한다. | `Gauge.usable_on`, `Measurement.clean` |
 | 계측기를 하나라도 등록한 뒤부터, 검사 입력 화면(기존·React)의 판정은 계량형 항목마다 계측기가 정해져야 한다(React 화면은 항목별 `gauges`, 없으면 기본 `gauge`). 항목별 계측기도 교정 기한을 검사한다. 설비 수집(`collect`)과 관리 화면 입력은 제외. | `qms/rules.py` `submit_inspection` |
 | 교정 14일 전부터 내 할 일·알림에 표시한다. | `qms/due.py` |
@@ -119,14 +119,14 @@
 | 추적성 조회(LOT 이력)(`/trace/`)는 `core.view_lot` 권한이 있어야 본다. | `core/views.py` `trace`, `core/nav.py` |
 | `/media/` 아래 파일(부적합 사진·메모 사진·거래처 인증서 등)은 로그인한 스태프만 받을 수 있다. | `config/urls.py` `/media/` |
 | 기록 첨부(`Attachment`)는 `/media/` 밖(`data/attachments/`)에 두고 `/attachments/<id>/`로만 받는다. 받으려면 `core.view_attachment` 권한과 첨부가 붙은 기록의 보기 권한이 모두 있어야 하고, 그 기록이 있어야 한다. 개인 앱(`PRIVATE_APPS`) 기록에는 붙일 수도 받을 수도 없다. 올리기(`/api/attachments/`)는 `core.add_attachment`와 대상 기록 보기 권한이 필요하다. 관리 화면에서는 첨부를 추가하지 않고, 관리 화면 삭제는 시스템 관리자만 한다. 기록 화면의 지우기(`DELETE /api/attachments/<id>/`)는 올린 사람(올리기 권한이 있을 때)과 시스템 관리자만 하고, 붙은 기록이 승인돼 잠겼으면(설명서 `lock_parent` 포함) 시스템 관리자도 400이다(2026-11-16 사용자 결정). 첨부 행을 지우면 파일도 지우고, 행은 simple-history에 파일 이름·지운 사람·시각으로 남는다. 기록 화면 변경 이력 탭은 그 기록의 첨부·메모 이력도 보기 권한(`core.view_attachment`·`qms.view_memo`)이 있으면 함께 보인다. | `core/views.py` `can_view_target`·`attachment_download`, `core/api/attachments.py` `AttachmentDetailView`, `core/api/records.py` `RecordHistoryView`, `core/models.py` `attachment_storage` |
-| 부서·거래처·사용자 정의 칸의 추가·수정은 품질팀장(과 시스템 관리자)만 한다. 품질엔지니어·검사원은 보기만 한다. | `qms/apps.py` `TEAM_LEAD_ONLY`, `ensure_roles` |
-| 새 기록 화면(`/app/r/<app>/<model>/<id>`)과 records API는 설명서(`core/recordspec.py` `SPECS`)에 등록된 모델만 연다(그 밖은 404). 목록·상세·변경 이력 탭은 그 모델의 `view_` 권한으로 서버가 검사한다(변경 이력 탭은 `view_` 권한자에게 보인다, 2026-11-13 사용자 결정). 전체 변경 이력 조회 화면(`/app/audit`)은 그대로 품질팀장 전용이다. | `core/api/records.py`, `core/recordspec.py` |
+| 부서·거래처·사용자 정의 필드의 추가·수정은 품질팀장(과 시스템 관리자)만 한다. 품질엔지니어·검사원은 보기만 한다. | `qms/apps.py` `TEAM_LEAD_ONLY`, `ensure_roles` |
+| 새 기록 화면(`/app/r/<app>/<model>/<id>`)과 records API는 설명서(`core/recordspec.py` `SPECS`)에 등록된 모델만 연다(그 밖은 404). 목록·상세·변경 이력 탭은 그 모델의 `view_` 권한으로 서버가 검사한다(변경 이력 탭은 `view_` 권한자에게 보인다, 2026-11-13 사용자 결정). 전체 감사 추적 화면(`/app/audit`)은 그대로 품질팀장 전용이다. | `core/api/records.py`, `core/recordspec.py` |
 | 기록 화면의 범용 저장(`PATCH /api/records/<label>/<id>/`)은 `change_` 권한, 설명서 `Spec.edit` 칸만 받는다. 서명 칸(`SIGN_FIELDS`: 승인자·승인 일시·판정 등)은 설명서에 넣을 수 없고(테스트가 검사) 보내면 400이다. 저장은 ModelForm 검증 + `validate_constraints` → `rules.save_with_lock`(승인 잠금·수정 승인 1회 소모)이고, 이력 번호(`version`)가 다르면 409다. 승인은 `rules.approve`(품질팀장·비밀번호)로만 한다. | `core/api/records.py`, `core/recordspec.py` `SIGN_FIELDS`, `core/rules.py` |
 | 기록 화면의 부적합 처분은 `POST /api/records/core.nonconformance/<id>/dispose/`(`change_nonconformance` 권한)로만 하고, 관리 화면과 같은 `rules.dispose_nc`(MRB 비밀번호·필수칸·모델 `clean` 처분 규칙·보류 해제)를 거친다. 처분·특채 승인번호·보류 해제 일시는 `SIGN_FIELDS`라 범용 저장으로 보낼 수 없다(400). 보류는 설명서 `edit`가 비어 있어 범용 저장이 403이고, 수정·삭제 요청은 404다. 처분·특채 승인번호는 부적합 설명서 `sign`에 있다(4M 변경의 고객 승인 문서번호는 승인 전 입력 칸). | `core/api/records.py` `RecordDisposeView`, `core/rules.py` `dispose_nc`, `core/recordspec.py` |
 | CAPA·클레임·SCAR 종결은 `POST /api/records/<label>/<id>/close/`(설명서 `close=True`, `change_` 권한)로 하고, 종결일은 서버가 넣는다. 모델 `clean`(8D 전 단계·SCAR 회신·CAPA 유효)이 같은 문구로 막고(400), 이미 종결된 기록은 400이다. `closed_at`은 `SIGN_FIELDS`라 범용 저장으로 바꿀 수 없다. 내부심사도 같은 「종결」로 닫고 `InternalAudit.clean`(실시일, CAPA 없는 중·경부적합 발견사항)이 막는다. | `core/api/records.py` `RecordCloseView`, `core/rules.py` `close_record` |
 | PPAP 요소는 PSW 승인 후 기록 화면에서 고칠 수 없다: 설명서 `lock_parent='submission'`이라 `locked`로 보이고 범용 저장은 409다(시스템 관리자 포함). 모델 `PpapElement.save`도 그대로 막는다. | `core/recordspec.py`, `core/api/records.py` `_parent_locked` |
-| 기록 화면은 설명서 `Spec.edit` 칸만 고친다(외래키·일시 포함). 서명·처분 칸, 부적합의 LOT·발견 일시, 실적·출하의 LOT, 자동 번호, 붙어 있는 부모(문서·심사·PPAP·작업지시·실적의 공정 단계), 품번·코드는 넣지 않으며 관리 화면 링크는 시스템 관리자에게만 준다(`_detail` `admin_url`). 보류 LOT 실적·출하 차단과 양품+불량 ≤ 투입은 모델 `clean`/`save`가 그대로 막는다. 일반 메뉴는 `app_href`로 새 화면 주소를 내보내고, 사용자·모듈 켜기/끄기·전체 메뉴(`/admin/`)는 시스템 관리자에게만 보인다. | `core/recordspec.py`, `core/nav.py` `app_href`, `core/models.py` |
-| 기록 화면 「새로 만들기」(`POST /api/records/<label>/`)는 설명서 `Spec.create`가 있는 모델(작업지시·작업 실적·출하·거래처·부서·번호 코드값·번호 규칙)만 열고 `add_` 권한을 서버에서 검사한다. `Spec.create` 밖의 칸은 거부하고, 모델 폼 `full_clean` → `rules.save_with_lock`으로 저장하므로 보류 LOT 실적·출하 차단 등 모델 규칙이 그대로 적용된다. `created_by`·`operator`가 비어 있으면 요청 사용자로 넣는다. | `core/api/records.py` `RecordListView.post`, `core/recordspec.py` `creator` |
+| 기록 화면은 설명서 `Spec.edit` 칸만 고친다(외래키·일시 포함). 서명·처분 칸, 부적합의 LOT·발견 일시, 실적·출하의 LOT, 자동 번호, 붙어 있는 부모(문서·심사·PPAP·작업지시·실적의 공정 단계), 품번·코드는 넣지 않으며 관리 화면 링크는 시스템 관리자에게만 준다(`_detail` `admin_url`). 보류 LOT 실적·출하 차단과 양품+불량 ≤ 투입은 모델 `clean`/`save`가 그대로 막는다. 일반 메뉴는 `app_href`로 새 화면 주소를 내보내고, 사용자·모듈 설정·관리자 화면(`/admin/`)는 시스템 관리자에게만 보인다. | `core/recordspec.py`, `core/nav.py` `app_href`, `core/models.py` |
+| 기록 화면 「새로 만들기」(`POST /api/records/<label>/`)는 설명서 `Spec.create`가 있는 모델(작업지시·생산실적·출하·거래처·부서·채번 코드값·채번 규칙)만 열고 `add_` 권한을 서버에서 검사한다. `Spec.create` 밖의 칸은 거부하고, 모델 폼 `full_clean` → `rules.save_with_lock`으로 저장하므로 보류 LOT 실적·출하 차단 등 모델 규칙이 그대로 적용된다. `created_by`·`operator`가 비어 있으면 요청 사용자로 넣는다. | `core/api/records.py` `RecordListView.post`, `core/recordspec.py` `creator` |
 | 연결 패널(`/api/relations/<app.model>/<id>/`)은 그 기록 보기 권한이 있어야 열리고, 사용자가 볼 권한이 없는 표의 묶음은 개수도 알리지 않는다. 개인 앱·이력 표·사용자 계정은 연결 대상이 아니다. | `core/api/views.py` `RelationsView`, `core/relations.py` |
 | 엑셀 일괄 등록은 대상(품번·작업지시)의 추가·변경 권한이 모두 있어야 올릴 수 있다(기존 행을 덮어쓰므로). 각 행은 모델 검증(`full_clean`)을 거치고, 한 행이라도 틀리면 전체를 되돌린다. | `core/views.py` `import_view`, `core/importer.py` |
 | 인쇄·승인·삭제 요청 경로는 개인 자료와 계정·세션 등 시스템 기록(`personal`, `auth`, `admin`, `sessions`, `contenttypes`)을 열지 않는다. | `core/views.py` `_get_record` |
@@ -134,7 +134,7 @@
 | 품질 KPI(실패비용 포함)는 `qms.view_customerclaim`, 공급자 성적표는 `qms.view_scar`, SPC 관리도는 `qms.view_measurement`, 내 할 일 목록 위젯은 `core.view_nonconformance` 권한이 있어야 본다. 검사원은 KPI·공급자 화면을 볼 수 없다. | `qms/views.py`, `qms/widgets.py`, `core/nav.py` |
 | KPI는 소속 부서 것만 본다(`/kpi/` 화면과 내 할 일 KPI 위젯 모두). 부서는 역할 그룹 묶음이고 지금은 `품질`(품질엔지니어·품질팀장·검사원)뿐이다. PPM·직행률·8D·실패비용·부적합 유형 파레토는 품질, 공정 수율은 품질·생산 부서 KPI다. 품질팀장·시스템 관리자는 모든 부서 KPI를 본다. KPI 위젯은 `/kpi/`와 같은 `qms.view_customerclaim` 권한도 있어야 보인다. 부서를 늘리려면 `DEPARTMENTS`에 그룹을 더한다. | `qms/kpi.py` `DEPARTMENTS`·`KPI_DEPARTMENTS`·`can_see`, `qms/views.py` `kpi_view`, `qms/widgets.py` `kpi_allowed` |
 
-### 모듈 켜기/끄기
+### 모듈 설정
 
 | 규칙 | 위치 |
 | --- | --- |
@@ -149,11 +149,11 @@
 
 ## 11. 이력
 
-변경 이력 조회 화면(`/app/audit`, API `GET /api/audit-log/`)은 승인자(`is_approver`: 품질팀장·시스템 관리자)만 본다. 개인정보 앱(`PRIVATE_APPS`, `personal` 등)의 이력은 보여 주지 않고, `password` 필드 변경은 가린다(`core/api/views.py` `AuditLogView`, `core/audit.py` `audited_models`·`SECRET_FIELDS`). 사이드바의 "변경 이력 조회" 메뉴도 승인자에게만 나온다(`core/nav.py`).
+감사 추적 화면(`/app/audit`, API `GET /api/audit-log/`)은 승인자(`is_approver`: 품질팀장·시스템 관리자)만 본다. 개인정보 앱(`PRIVATE_APPS`, `personal` 등)의 이력은 보여 주지 않고, `password` 필드 변경은 가린다(`core/api/views.py` `AuditLogView`, `core/audit.py` `audited_models`·`SECRET_FIELDS`). 사이드바의 "감사 추적" 메뉴도 승인자에게만 나온다(`core/nav.py`).
 
 업무 모델은 `history = HistoricalRecords()`로 모든 변경을 남긴다. 새 업무 모델에도 붙이고, 기존 모델에서 제거하지 않는다. 여러 행을 한꺼번에 저장할 때는 `bulk_create`·`update()` 대신 이력을 남기는 `simple_history.utils.bulk_create_with_history`·`bulk_update_with_history`를 쓴다(보류 생성·해제, 부적합 메일 발송 표시가 이 방식이다: `core/models.py` `Nonconformance.save`, `core/views.py` `_mark_mailed`).
 
-기준정보(부서·거래처)는 지우지 않고 "사용"을 끈다. 사용자 정의 칸(`FieldDef`)은 저장 뒤 키와 대상을 바꿀 수 없다(`FieldDef.LOCKED_MSG`). 사용을 끈 칸의 값은 `extra`에 그대로 남는다(`core/models.py` `validate_extra`).
+기준정보(부서·거래처)는 지우지 않고 "사용"을 끈다. 사용자 정의 필드(`FieldDef`)은 저장 뒤 키와 대상을 바꿀 수 없다(`FieldDef.LOCKED_MSG`). 사용을 끈 칸의 값은 `extra`에 그대로 남는다(`core/models.py` `validate_extra`).
 
 `link_masters --apply`는 기존 기록의 비어 있는 연결 칸만 채우고 글자 칸은 바꾸지 않는다. 실행 전에 `backup`을 먼저 실행하며 백업 폴더가 없으면 멈춘다. 모델 `save()`·`clean()`을 거치지 않으므로 잠금·인터록 검사는 적용되지 않지만, `bulk_update_with_history`로 변경 이력(사유 "기준정보 연결(link_masters)")은 남는다(`core/management/commands/link_masters.py`).
 
@@ -204,7 +204,7 @@
 - **저장 순간 번호 겹침:** 관리 화면에서 자동 번호로 문서를 저장할 때 같은 순간 다른 사용자가 같은 번호를 먼저 저장했으면, 그다음 빈 번호로 다시 저장한다(최대 20번, `qms/admin.py` `DocumentAdmin.save_model`). 번호 겹침이 아닌 다른 저장 오류는 그대로 낸다.
 - **사용 중지:** 사용 중지된 규칙이나 코드값으로는 새 번호를 받을 수 없다(서버 `next_number`가 거부). 풀이(`describe`)에는 계속 쓰인다.
 - **직접 입력:** 번호를 직접 적는 것은 허용하고 모양 검사는 하지 않는다(기존 번호가 규칙과 다르기 때문).
-- **문서 참조 규칙의 권한:** `qms.view_document` 권한이 없는 사용자에게는 `{문서:…}` 토큰이 있는 품번 규칙을 숨긴다. 규칙 목록(`/api/core/numbering/item-options/`)에서 빠지고, 미리보기(`item-preview/`)와 자동 번호 저장(`POST /api/core/items/`의 `auto`)은 "번호 규칙을 찾을 수 없습니다."(400)로 거부한다. 문서번호·제목과 문서 존재 여부 노출을 막기 위해서다(`core/api/master.py` `_hides_docs`).
+- **문서 참조 규칙의 권한:** `qms.view_document` 권한이 없는 사용자에게는 `{문서:…}` 토큰이 있는 품번 규칙을 숨긴다. 규칙 목록(`/api/core/numbering/item-options/`)에서 빠지고, 미리보기(`item-preview/`)와 자동 번호 저장(`POST /api/core/items/`의 `auto`)은 "채번 규칙을 찾을 수 없습니다."(400)로 거부한다. 문서번호·제목과 문서 존재 여부 노출을 막기 위해서다(`core/api/master.py` `_hides_docs`).
 - **개정 자동 채움:** 문서 개정의 `개정`을 비우면 그 문서의 기존 개정값 중 숫자만인 값(앞의 `Rev.`, `Rev`는 떼고 비교)의 최댓값 + 1로 채운다. `A` 같은 문자 개정은 무시하고, 숫자 개정이 없으면 0이다(`core/numbering.py` `next_revision`).
 
 코드 위치: `core/numbering.py`, `core/models.py`(`CodeValue`·`NumberRule`), `core/api/master.py`(`ItemOptionsView`·`ItemPreviewView`), `qms/admin.py`(`DocumentAdmin.get_form`), `qms/models.py`(`DocumentRevision`).

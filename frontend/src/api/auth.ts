@@ -2,7 +2,8 @@ import { api } from './client'
 
 export interface NavGroup {
   group: string
-  items: { label: string; href: string }[]
+  hub: boolean // 묶음 제목을 누르면 한눈에 보기(/app/hub/<묶음>)
+  items: { label: string; href: string; parent?: string }[] // parent: 상위 메뉴(사이드바엔 안 보이고 그 화면 위 탭)
 }
 
 export interface Me {

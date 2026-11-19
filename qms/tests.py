@@ -225,7 +225,7 @@ class QmsTest(TestCase):
 
     # 계측기 · 자격
     def test_expired_gauge_rejected(self):
-        g = Gauge.objects.create(number='MC-01', name='마이크로미터', interval_days=365,
+        g = Gauge.objects.create(number='MC-01', name='마이크로미터', interval_months=12,
                                  last_calibrated=timezone.localdate() - datetime.timedelta(days=400))
         insp = Inspection.objects.create(lot=self.raw, spec=self.spec)
         with self.assertRaises(ValidationError):
@@ -1417,12 +1417,13 @@ class InspectionDocumentTest(TestCase):
 
 class GaugeAdminDaysLeftTest(TestCase):
     def test_days_left_column(self):
-        today = timezone.localdate()
-        Gauge.objects.create(number='G-A', name='여유', last_calibrated=today, interval_days=30)
-        Gauge.objects.create(number='G-B', name='당일', last_calibrated=today - datetime.timedelta(days=30), interval_days=30)
-        Gauge.objects.create(number='G-C', name='지남', last_calibrated=today - datetime.timedelta(days=33), interval_days=30)
+        today = datetime.date(2026, 6, 15)  # 달마다 일수가 달라 날짜를 고정한다
+        Gauge.objects.create(number='G-A', name='여유', last_calibrated=today, interval_months=1)
+        Gauge.objects.create(number='G-B', name='당일', last_calibrated=datetime.date(2026, 5, 15), interval_months=1)
+        Gauge.objects.create(number='G-C', name='지남', last_calibrated=datetime.date(2026, 5, 12), interval_months=1)
         self.client.force_login(User.objects.create_superuser('gauge-su', password='x'))
-        body = self.client.get('/admin/qms/gauge/').content.decode()
+        with mock.patch('django.utils.timezone.localdate', return_value=today):
+            body = self.client.get('/admin/qms/gauge/').content.decode()
         for text in ('남은 일수', 'D-30', '오늘까지', '기한 지남 3일'):
             self.assertIn(text, body)
 
