@@ -180,6 +180,19 @@ def _links(obj, user):
     return links
 
 
+def _child_add_url(rel, parent, user):
+    """하위 표의 「추가」: 하위 기록에 새로 만들기 칸이 있고 부모 외래키가 그 칸이면 부모를 채운 새로 만들기 화면."""
+    model = rel.model
+    child = recordspec.SPECS.get(model._meta.label_lower)
+    fk = getattr(rel, 'field', None)
+    if not child or not fk or fk.name not in child.create or not _perm(user, model, 'add'):
+        return None
+    key = modules.module_of_model(model._meta.label_lower)
+    if key and not modules.active(key):
+        return None
+    return f'/app/r/{model._meta.app_label}/{model._meta.model_name}/new?{urlencode({fk.name: parent.pk})}'
+
+
 def _parent_locked(obj, spec):
     return bool(spec.lock_parent) and is_locked(getattr(obj, spec.lock_parent))
 
@@ -190,14 +203,15 @@ def _detail(obj, spec, user):
     for n in spec.fields:
         text, url = recordspec.value_of(obj, n)
         fields.append({'key': n, 'label': recordspec.label_of(model, n), 'value': text, 'url': url})
+    meta = model._meta
+    by_parent = _parent_locked(obj, spec)
+    locked = by_parent or is_locked(obj)
     children = []
     for c in spec.children:
         rel = getattr(obj, c.accessor)
         children.append({'key': c.accessor, 'label': c.label, 'columns': _columns(rel.model, c.fields),
-                         'rows': [_row(o, c.fields) for o in rel.all().order_by(*c.order)]})
-    meta = model._meta
-    by_parent = _parent_locked(obj, spec)
-    locked = by_parent or is_locked(obj)
+                         'rows': [_row(o, c.fields) for o in rel.all().order_by(*c.order)],
+                         'add_url': None if locked else _child_add_url(rel, obj, user)})
     return {'ct': meta.label_lower, 'id': obj.pk, 'title': str(obj), 'kind': str(meta.verbose_name),
             'status': status_of(obj), 'fields': fields, 'children': children, 'side': list(spec.side),
             'groups': recordspec.groups_of(spec),

@@ -297,6 +297,9 @@ class Measurement(models.Model):
         super().save(*args, **kwargs)
 
 
+CAL_TYPES = [('EXTERNAL', '사외 교정'), ('INTERNAL', '사내 교정')]
+
+
 class Gauge(models.Model):
     """계측기 대장 (IATF 7.1.5). 측정값에 계측기를 적으면 교정 기한을 검사한다."""
     number = models.CharField('관리번호', max_length=50, unique=True)
@@ -305,6 +308,20 @@ class Gauge(models.Model):
     last_calibrated = models.DateField('최근 교정일')
     certificate = models.FileField('교정 성적서', upload_to='gauges/%Y/', blank=True)
     active = models.BooleanField('사용', default=True)
+    # 상세 정보 (모두 선택)
+    kind = models.CharField('종류', max_length=50, blank=True, help_text='예: 외측 마이크로미터, 버니어캘리퍼스, 3차원 측정기')
+    maker = models.CharField('제조사', max_length=100, blank=True)
+    model_no = models.CharField('모델', max_length=100, blank=True)
+    serial_no = models.CharField('시리얼 번호', max_length=100, blank=True)
+    measuring_range = models.CharField('측정 범위', max_length=100, blank=True, help_text='예: 0-25mm')
+    resolution = models.CharField('분해능', max_length=50, blank=True, help_text='예: 0.001mm')
+    department = models.ForeignKey('core.Department', on_delete=models.PROTECT, null=True, blank=True, related_name='+',
+                                   verbose_name='관리 부서')
+    location = models.CharField('보관 위치', max_length=100, blank=True)
+    owner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='+',
+                              verbose_name='담당자')
+    cal_type = models.CharField('교정 구분', max_length=10, choices=CAL_TYPES, default='EXTERNAL')
+    cal_agency = models.CharField('교정 기관', max_length=100, blank=True, help_text='사외 교정이면 기관 이름')
     history = HistoricalRecords()
 
     class Meta:
@@ -319,6 +336,43 @@ class Gauge(models.Model):
 
     def usable_on(self, day):
         return self.active and day <= self.next_due
+
+
+class GaugeCalibration(models.Model):
+    """교정 이력. 합격이면 계측기의 최근 교정일을 앞으로 옮기고, 불합격이면 계측기를 사용 중지한다(측정 거부)."""
+    RESULTS = [('PASS', '합격'), ('FAIL', '불합격')]
+
+    gauge = models.ForeignKey(Gauge, on_delete=models.PROTECT, related_name='calibrations', verbose_name='계측기')
+    calibrated_on = models.DateField('교정일')
+    cal_type = models.CharField('교정 구분', max_length=10, choices=CAL_TYPES, default='EXTERNAL')
+    agency = models.CharField('교정 기관', max_length=100, blank=True)
+    result = models.CharField('결과', max_length=4, choices=RESULTS, default='PASS')
+    cert_no = models.CharField('성적서 번호', max_length=100, blank=True)
+    certificate = models.FileField('교정 성적서', upload_to='gauges/%Y/', blank=True)
+    note = models.TextField('비고', blank=True, help_text='불합격이면 지난 측정 결과 영향 검토 내용')
+    history = HistoricalRecords()
+
+    class Meta:
+        verbose_name = verbose_name_plural = '계측기 교정 이력'
+
+    def __str__(self):
+        return f'{self.gauge.number} {self.calibrated_on} {self.get_result_display()}'
+
+    def clean(self):
+        if self.calibrated_on and self.calibrated_on > timezone.localdate():
+            raise ValidationError({'calibrated_on': '교정일은 오늘 이후일 수 없습니다.'})
+
+    def save(self, *args, **kwargs):
+        with transaction.atomic():
+            super().save(*args, **kwargs)
+            g = Gauge.objects.select_for_update().get(pk=self.gauge_id)
+            if self.result == 'FAIL':
+                g.active = False
+            elif self.calibrated_on > g.last_calibrated:
+                g.last_calibrated = self.calibrated_on
+            else:
+                return
+            g.save()
 
 
 class Qualification(models.Model):

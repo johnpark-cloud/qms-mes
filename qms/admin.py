@@ -20,6 +20,7 @@ from core.rules import child_editable
 
 from .models import (AuditChecklist, AuditFinding, AuditItem, Capa, ChangeRequest, Characteristic, ControlPlan,
                      ControlPlanLine, CustomerClaim, CustomerRule, Document, DocumentRevision, Evidence, ExcelTemplate, Gauge,
+                     GaugeCalibration,
                      Inspection, InspectionSpec, InternalAudit, Measurement, Memo, MemoPhoto, PpapElement, PpapSubmission, Qualification, Scar)
 from .rules import NotApproved, make_specs_from_plan, new_spec_revision
 from .similar import similar_html
@@ -147,6 +148,19 @@ class InspectionAdmin(ReportLinksMixin, BaseAdmin):
     change_form_template = 'qms/inspection_change_form.html'
 
 
+class GaugeCalibrationInline(admin.TabularInline):
+    model = GaugeCalibration
+    extra = 0
+    fields = ['calibrated_on', 'cal_type', 'agency', 'result', 'cert_no', 'certificate', 'note']
+
+
+@admin.register(GaugeCalibration)
+class GaugeCalibrationAdmin(BaseAdmin):
+    list_display = ['gauge', 'calibrated_on', 'cal_type', 'agency', 'result', 'cert_no']
+    list_filter = ['result', 'cal_type']
+    search_fields = ['gauge__number', 'gauge__name', 'agency', 'cert_no']
+
+
 @admin.register(Gauge)
 class GaugeAdmin(BaseAdmin):
     list_display = ['number', 'name', 'last_calibrated', 'next_due', 'days_left', 'active']
@@ -155,7 +169,10 @@ class GaugeAdmin(BaseAdmin):
     fieldsets = [
         (None, {'fields': ['number', 'name', 'last_calibrated']}),
         ('추가 정보', {'classes': ['collapse'], 'fields': ['interval_days', 'certificate', 'active']}),
+        ('상세 정보', {'classes': ['collapse'], 'fields': ['kind', 'maker', 'model_no', 'serial_no', 'measuring_range', 'resolution',
+                                                       'department', 'location', 'owner', 'cal_type', 'cal_agency']}),
     ]
+    inlines = [GaugeCalibrationInline]
 
     @admin.display(description='남은 일수')
     def days_left(self, obj):

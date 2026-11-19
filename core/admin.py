@@ -24,6 +24,7 @@ admin.site.index_title = '메뉴'
 _app_list = admin.site.get_app_list
 # 사이드바에 따로 두지 않는 목록이 전체 메뉴에서 들어갈 묶음
 INDEX_EXTRA = {'통합 업무 홈': ['qms.memo', 'personal.leaveprofile', 'personal.leaveuse', 'personal.payslip'],
+               '품질관리 (QMS)': ['qms.gaugecalibration'],
                '품질보증 및 개선': ['qms.documentrevision', 'qms.audititem'],
                '기준정보 및 시스템 관리': ['core.importprofile', 'core.attachment', 'auth.group']}
 
