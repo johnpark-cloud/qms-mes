@@ -47,6 +47,7 @@ e2e를 Git Bash에서 실행할 때 한글이 깨지면 `PYTHONIOENCODING=utf-8`
 | React 화면(`frontend/`) | `npm run build`가 성공해야 하고(`tsc` 타입 검사 포함), `frontend/dist/`를 다시 만들어 함께 커밋한 뒤 `scripts\e2e_browser.py`를 실행한다 |
 | 화면·템플릿·CSS | 단위 테스트 + e2e. 디자인 변경은 브라우저에서 PC·휴대폰 폭, 라이트·다크 모드를 직접 확인한다(`DESIGN.md`) |
 | 관리 명령(`backup`, `restore`, `collect`, `notify`) | 임시 폴더나 `--dry-run`으로 실행하고 결과 파일·출력을 확인한다 |
+| 예시 데이터(`demo_data`) | `core.tests_demo`(두 번 실행해도 같은 건수, 실제 연차·급여는 건드리지 않음). 임시 `QMS_DATA_DIR`(SQLite)에서 `migrate` 뒤 실행해 메뉴를 열어 본다 |
 | 문서만 | 테스트 불필요. 문서에 적은 명령·경로가 실제로 있는지 확인한다 |
 
 ## 운영 DB 사본으로 미리 확인
