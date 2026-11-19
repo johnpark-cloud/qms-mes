@@ -827,6 +827,11 @@ class Partner(MasterModel):
         if not self.code:
             self.code = self.next_code()
 
+    def save(self, *args, **kwargs):
+        if not self.code:  # full_clean 없이 저장하는 길(셸·관리 명령)도 번호를 매긴다
+            self.code = self.next_code()
+        super().save(*args, **kwargs)
+
     @classmethod
     def next_code(cls):
         # shortcut: 동시에 두 명이 새 거래처를 저장하면 같은 번호가 나와 unique 오류가 난다 — 혼자 쓰는 동안은 둔다

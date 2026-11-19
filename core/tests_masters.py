@@ -76,6 +76,12 @@ class PartnerTest(TestCase):
         p.full_clean()
         self.assertEqual(p.code, 'X-1')  # 직접 쓴 코드는 그대로
 
+    def test_code_numbered_when_saved_without_clean(self):
+        # 셸·관리 명령처럼 full_clean 없이 저장해도 빈 코드가 겹쳐 unique 오류가 나지 않는다
+        a = Partner.objects.create(name='가', is_customer=True)
+        b = Partner.objects.create(name='나', is_customer=True)
+        self.assertEqual((a.code, b.code), ('P0001', 'P0002'))
+
     def test_old_qc_columns_copied_to_contacts(self):
         import importlib
         from django.apps import apps
