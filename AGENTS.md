@@ -10,6 +10,7 @@
 | `docs/architecture.md` | 앱 구성, 모듈 역할, 의존 방향, 데이터 위치 |
 | `docs/business-rules.md` | 인터록·판정·승인 등 바꾸면 안 되는 업무 규칙과 코드 위치 |
 | `docs/testing.md` | 테스트 명령, 검증 절차, 완료 기준 |
+| `docs/data-flow.md` | PC ↔ 서버 파일 들여오기·내보내기 원칙, CSV 표준 열 |
 | `PRODUCT.md` | 사용자·사용 환경·제품 원칙 |
 | `DESIGN.md` | 화면 디자인 규칙 (`core/static/qms/fiori.css` 토큰) |
 | `docs/superpowers/specs/`, `plans/` | 기능별 설계·구현 계획 (작업 이력) |
