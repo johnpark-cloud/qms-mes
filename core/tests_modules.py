@@ -306,7 +306,7 @@ class ConsumerTest(TestCase):
         force_off('mes', 'qms_change', 'qms_inspection', 'qms_audit', 'qms_capa')
         self.client.force_login(self.user)
         self.assertEqual(self.client.get(f'/report/{tpl.pk}/{self.capa.pk}/').status_code, 404)
-        r = preview_import(profile, SimpleUploadedFile('a.csv', b'A\nWO-1\n'))
+        r = preview_import(profile, SimpleUploadedFile('a.csv', b'A\nWO-1\n'), self.user)
         self.assertIn('꺼져', r['errors'][0])
         with tempfile.TemporaryDirectory() as inbox, self.assertRaisesMessage(CommandError, '꺼져'):
             call_command('collect', inbox=inbox)

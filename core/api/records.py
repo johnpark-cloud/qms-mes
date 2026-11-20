@@ -11,7 +11,6 @@ from django.contrib.contenttypes.models import ContentType
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.db.models import Q
 from django.forms import modelform_factory
-from django.forms.models import model_to_dict
 from django.http import Http404
 from django.shortcuts import get_object_or_404
 from django.urls import reverse
@@ -96,15 +95,7 @@ class RecordListView(APIView):
         bad = {k: ['이 화면에서 넣을 수 없는 칸입니다.'] for k in values if k not in spec.create}
         if bad:
             raise ValidationError(bad)
-        blank = {k: v for k, v in model_to_dict(model(), fields=spec.create).items() if v is not None}  # 모델 기본값(불량 0 등)
-        form = modelform_factory(model, fields=spec.create)({**blank, **values})
-        if not form.is_valid():
-            raise ValidationError({k: list(v) for k, v in form.errors.items()})
-        obj = form.instance
-        for name in ('created_by', 'operator'):  # 관리 화면 MasterAdmin.save_model과 같이 만든 사람을 남긴다
-            if any(f.name == name for f in model._meta.fields) and not getattr(obj, f'{name}_id'):
-                setattr(obj, name, request.user)
-        rules.save_with_lock(obj, request.user)
+        obj = rules.save_new(model, spec.create, request.user, values)
         return Response({'id': obj.pk, 'url': record_url(obj)}, status=201)
 
 
@@ -251,15 +242,10 @@ class RecordDetailView(APIView):
                for k in values if k not in spec.edit}
         if bad:
             raise ValidationError(bad)
-        if _parent_locked(obj, spec) or is_locked(obj) and not can_edit_locked(obj, request.user):
-            raise rules.Locked(rules.LOCKED_MSG)
+        rules.assert_editable(obj, request.user, spec.lock_parent)
         if request.data.get('version') != record_version(obj, ()):
             return Response({'detail': str(rules.Stale())}, status=409)
-        form = modelform_factory(model, fields=spec.edit)({**model_to_dict(obj, fields=spec.edit), **values}, instance=obj)
-        if not form.is_valid():
-            raise ValidationError({k: list(v) for k, v in form.errors.items()})
-        form.instance.validate_constraints()  # 폼은 고칠 수 없는 칸(예: 문서)이 낀 고유 조건을 건너뛴다
-        rules.save_with_lock(form.instance, request.user)
+        rules.save_edit(obj, spec.edit, request.user, values)
         obj = model.objects.get(pk=obj.pk)
         return Response(_detail(obj, spec, request.user))
 

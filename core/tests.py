@@ -825,15 +825,15 @@ class AuditFixTest(TestCase):
         from .importer import run_import
         from .models import ImportProfile
         profile = ImportProfile.objects.create(name='품번', target='item', mapping={'code': '코드', 'name': '이름', 'item_type': '구분'})
-        count, errors = run_import(profile, SimpleUploadedFile('i.csv', '코드,이름,구분\nN1,,원자재\n'.encode()))
+        count, errors = run_import(profile, SimpleUploadedFile('i.csv', '코드,이름,구분\nN1,,원자재\n'.encode()), self.su)
         self.assertEqual((count, len(errors)), (0, 1))  # 빈 품명은 'None'으로 저장되지 않고 필수 오류
         self.assertFalse(Item.objects.filter(code='N1').exists())
-        count, errors = run_import(profile, SimpleUploadedFile('i.csv', f'코드,이름,구분\nN2,{"가" * 201},원자재\n'.encode()))
+        count, errors = run_import(profile, SimpleUploadedFile('i.csv', f'코드,이름,구분\nN2,{"가" * 201},원자재\n'.encode()), self.su)
         self.assertEqual(count, 0)  # 길이 초과도 거른다
         for name, data in (('e.csv', b''), ('x.xlsx', b'not excel'), ('k.csv', b'\xff\xff\xff')):
-            self.assertEqual(run_import(profile, SimpleUploadedFile(name, data))[0], 0, name)
+            self.assertEqual(run_import(profile, SimpleUploadedFile(name, data), self.su)[0], 0, name)
         profile.header_row = 9
-        self.assertIn('읽을 수 없습니다', run_import(profile, SimpleUploadedFile('i.csv', '코드,이름,구분\n'.encode()))[1][0])
+        self.assertIn('읽을 수 없습니다', run_import(profile, SimpleUploadedFile('i.csv', '코드,이름,구분\n'.encode()), self.su)[1][0])
 
     def test_hold_history(self):
         from .models import Hold

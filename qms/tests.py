@@ -305,10 +305,10 @@ class QmsTest(TestCase):
         profile = ImportProfile.objects.create(name='A사 계획', target='work_order', mapping={
             'number': '지시번호', 'item': '품번', 'planned_qty': '수량', 'due_date': '납기'})
         ok = '지시번호,품번,수량,납기\nWO-1,C1,100,2026-11-01\nWO-2,C1,50,\n'.encode('cp949')
-        self.assertEqual(run_import(profile, SimpleUploadedFile('plan.csv', ok)), (2, []))
+        self.assertEqual(run_import(profile, SimpleUploadedFile('plan.csv', ok), self.lead), (2, []))
         self.assertEqual(WorkOrder.objects.get(number='WO-1').due_date, datetime.date(2026, 11, 1))
         bad = '지시번호,품번,수량,납기\nWO-3,C1,1,\nWO-4,없는품번,1,\n'.encode('utf-8')
-        count, errors = run_import(profile, SimpleUploadedFile('plan.csv', bad))
+        count, errors = run_import(profile, SimpleUploadedFile('plan.csv', bad), self.lead)
         self.assertEqual(len(errors), 1)
         self.assertFalse(WorkOrder.objects.filter(number='WO-3').exists())  # 전체 롤백
 
@@ -320,7 +320,7 @@ class QmsTest(TestCase):
         wb.save(buf)
         profile = ImportProfile.objects.create(name='품번', target='item',
                                                mapping={'code': '코드', 'name': '이름', 'item_type': '구분'})
-        self.assertEqual(run_import(profile, SimpleUploadedFile('items.xlsx', buf.getvalue())), (1, []))
+        self.assertEqual(run_import(profile, SimpleUploadedFile('items.xlsx', buf.getvalue()), self.lead), (1, []))
         self.assertEqual(Item.objects.get(code='S1').item_type, Item.SEMI)
 
     # 보고서

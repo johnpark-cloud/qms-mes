@@ -39,7 +39,7 @@ docs/        구조·업무 규칙·테스트 문서, superpowers/ 설계·계�
 | `views.py` | LOT 추적, 통합 검색, 부적합 간편 등록, 승인 서명, 삭제·수정 요청, 출력, 부적합 메일·사진 ZIP, 엑셀 가져오기 |
 | `timeline.py`, `search.py`, `nav.py`, `context_processors.py` | LOT 타임라인, 검색, 사이드바 메뉴(권한별, 업무 영역 7묶음). 전체 메뉴(`/admin/`)도 `core/admin.py` `grouped_app_list`가 같은 묶음으로 정렬한다 |
 | `middleware.py` | 로그인 사용자 HTML 화면에 `no-store` 헤더(뒤로가기 때 최신 내용) |
-| `importer.py` | 엑셀/CSV 일괄 등록 |
+| `importer.py` | 엑셀/CSV 일괄 등록. 대상은 `recordspec.SPECS` create에서 만들고 저장은 `rules.save_new`·`save_edit`(기록 화면과 같은 길) |
 | `export.py` | 문서 구조(dict)·표를 A4 `.xlsx`로 내보낸다(`document_xlsx`, `table_xlsx`, `xlsx_response`). React 인쇄 화면도 같은 문서 구조를 쓴다 |
 | `audit.py` | simple-history 이력을 감사 추적 화면용으로 읽는다(`audited_models`는 `PRIVATE_APPS` 제외, `row_payload`는 `password` 변경 제외) |
 | `rules.py` | admin·기존 뷰·API가 함께 쓰는 업무 규칙(잠금·삭제·승인 등). 규칙 본문은 한 곳에만 둔다 |

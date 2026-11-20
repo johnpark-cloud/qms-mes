@@ -22,7 +22,7 @@ from django.utils.http import urlencode
 from simple_history.utils import bulk_update_with_history
 
 from . import rules
-from .importer import TARGET_MODELS, run_import
+from .importer import run_import, target_of
 from .timeline import lot_actions, lot_timeline
 from .models import (Approvable, Attachment, EditRequest, Hold, ImportProfile, Lot, Nonconformance, NonconformancePhoto, is_approver,
                      validate_photo)
@@ -249,10 +249,13 @@ def import_view(request):
     result = None
     if request.method == 'POST' and form.is_valid():
         profile = form.cleaned_data['profile']
-        opts = TARGET_MODELS[profile.target]._meta  # 가져오기는 기존 행을 덮어쓰므로 추가·변경 권한이 모두 필요하다
+        target = target_of(profile)
+        if target is None:
+            raise PermissionDenied('이 가져오기 설정의 대상은 더 이상 들여올 수 없습니다.')
+        opts = target.model._meta  # 가져오기는 기존 행을 덮어쓰므로 추가·변경 권한이 모두 필요하다
         if not all(request.user.has_perm(f'{opts.app_label}.{a}_{opts.model_name}') for a in ('add', 'change')):
             raise PermissionDenied(f'{opts.verbose_name} 추가·변경 권한이 없습니다.')
-        count, errors = run_import(profile, form.cleaned_data['file'])
+        count, errors = run_import(profile, form.cleaned_data['file'], request.user)
         result = {'count': count, 'errors': errors}
     return render(request, 'core/import.html', {'form': form, 'result': result, 'title': '엑셀 일괄 등록'})
 

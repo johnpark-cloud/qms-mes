@@ -2,6 +2,8 @@
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.contrib.contenttypes.models import ContentType
 from django.db import IntegrityError, models, transaction
+from django.forms import modelform_factory
+from django.forms.models import model_to_dict
 from django.http import Http404
 from django.utils import timezone
 
@@ -51,6 +53,38 @@ def save_with_lock(obj, user, children=()):
             raise Locked(LOCKED_MSG) from e
         raise
     finish_edit(unlock)
+
+
+def save_new(model, fields, user, values):
+    """새로 만들기 공용(기록 화면 POST·들여오기): fields 칸만 폼 검증(칸별 오류) → 만든 사람 → 잠금 규칙 저장.
+    보류 인터록 등은 모델 clean/save가 막는다. 빠진 칸은 모델 기본값(불량 0 등)을 쓴다."""
+    blank = {k: v for k, v in model_to_dict(model(), fields=fields).items() if v is not None}
+    form = modelform_factory(model, fields=fields)({**blank, **values})
+    if not form.is_valid():
+        raise ValidationError({k: list(v) for k, v in form.errors.items()})
+    obj = form.instance
+    for name in ('created_by', 'operator'):  # 관리 화면 MasterAdmin.save_model과 같이 만든 사람을 남긴다
+        if any(f.name == name for f in model._meta.fields) and not getattr(obj, f'{name}_id'):
+            setattr(obj, name, user)
+    save_with_lock(obj, user)
+    return obj
+
+
+def assert_editable(obj, user, lock_parent=''):
+    """승인된 기록(또는 lock_parent 부모가 승인된 기록)은 수정 승인·시스템 관리자만 고친다. 부모 잠금은 관리자도 못 푼다."""
+    if lock_parent and is_locked(getattr(obj, lock_parent)) or is_locked(obj) and not can_edit_locked(obj, user):
+        raise Locked(LOCKED_MSG)
+
+
+def save_edit(obj, fields, user, values):
+    """고치기 공용(기록 화면 PATCH·들여오기): 지금 값에 values를 덮어 fields 칸만 폼 검증 → 잠금 규칙 저장. 먼저 assert_editable."""
+    model = type(obj)
+    form = modelform_factory(model, fields=fields)({**model_to_dict(obj, fields=fields), **values}, instance=obj)
+    if not form.is_valid():
+        raise ValidationError({k: list(v) for k, v in form.errors.items()})
+    form.instance.validate_constraints()  # 폼은 고칠 수 없는 칸(예: 문서)이 낀 고유 조건을 건너뛴다
+    save_with_lock(form.instance, user)
+    return form.instance
 
 
 def delete_as(obj, user):

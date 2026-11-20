@@ -263,12 +263,16 @@ class WorkResult(models.Model):
         WorkOrder.objects.filter(pk=self.work_order_id, status=WorkOrder.PLANNED).update(status=WorkOrder.RUNNING)
 
 
+def import_targets():
+    """들여오기 대상 선택지(core/importer.py targets). 호출형이라 대상이 늘어도 마이그레이션이 필요 없다."""
+    from .importer import target_choices
+    return target_choices()
+
+
 class ImportProfile(models.Model):
     """회사별 엑셀/CSV 양식의 열 매핑. 코드를 고치지 않고 새 회사 양식을 받기 위한 설정."""
-    TARGETS = [('item', '품번'), ('work_order', '작업지시')]
-
     name = models.CharField('이름', max_length=100, unique=True)
-    target = models.CharField('대상', max_length=20, choices=TARGETS)
+    target = models.CharField('대상', max_length=50, choices=import_targets)
     header_row = models.PositiveSmallIntegerField('제목 행 번호', default=1)
     mapping = models.JSONField('열 매핑', help_text='예: {"number": "지시번호", "item": "품번", "planned_qty": "수량", "due_date": "납기"}')
     history = HistoricalRecords()
@@ -278,6 +282,16 @@ class ImportProfile(models.Model):
 
     def __str__(self):
         return self.name
+
+    def clean(self):
+        from .importer import target_of
+        target = target_of(self)
+        if target is None or not isinstance(self.mapping, dict):
+            return  # 대상 선택지·JSON 형식은 칸 검사가 막는다
+        bad = [k for k in self.mapping if k not in target.columns]
+        if bad:
+            raise ValidationError({'mapping': f'이 대상에 없는 칸입니다: {", ".join(bad)}. '
+                                              f'쓸 수 있는 칸: {", ".join(target.columns)}'})
 
 
 class Lot(models.Model):

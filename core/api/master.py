@@ -8,7 +8,7 @@ from rest_framework.views import APIView
 
 from core.api.permissions import require_perm
 from core.export import table_xlsx, xlsx_response
-from core.importer import TARGET_MODELS, preview_import, run_import
+from core.importer import preview_import, run_import, target_of
 from core.models import CodeValue, ImportProfile, Item, NumberRule, Process
 from core.numbering import (NumberingError, candidates, codebook, default_item_type, describe_text, fields,
                             next_number, parse_pattern, rulebook, _table)
@@ -280,10 +280,13 @@ class ImportView(APIView):
             return _bad('파일을 선택하세요.', 'file')
         if d.get('commit') not in ('0', '1'):
             return _bad('commit 값이 올바르지 않습니다.', 'commit')
-        opts = TARGET_MODELS[profile.target]._meta  # import_view와 같다: 기존 행을 덮어쓰므로 추가·변경 권한이 모두 필요하다
+        target = target_of(profile)
+        if target is None:
+            return _bad('이 가져오기 설정의 대상은 더 이상 들여올 수 없습니다.', 'profile')
+        opts = target.model._meta  # import_view와 같다: 기존 행을 덮어쓰므로 추가·변경 권한이 모두 필요하다
         for a in ('add', 'change'):
             require_perm(request.user, f'{opts.app_label}.{a}_{opts.model_name}')
         if d['commit'] == '0':
-            return Response(preview_import(profile, d['file']))
-        count, errors = run_import(profile, d['file'])
+            return Response(preview_import(profile, d['file'], request.user))
+        count, errors = run_import(profile, d['file'], request.user)
         return Response({'count': count, 'errors': errors})
