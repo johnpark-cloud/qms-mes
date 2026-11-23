@@ -74,7 +74,8 @@ function TodoLists({ data }: { data: any }) {
   const lists = SECTIONS.map((s) => ({ s, rows: s.rows(data) })).filter(({ rows }) => rows.length)
   if (!lists.length) return <Typography.Text type="secondary">처리할 일이 없습니다.</Typography.Text>
   return (
-    <div style={{ display: 'grid', gap: 16, gridTemplateColumns: 'repeat(auto-fill, minmax(min(320px, 100%), 1fr))', alignItems: 'start' }}>
+    // 한 줄에 한 종류: 여러 칸으로 나누면 눈이 좌우로 오가 읽기 힘들다(사용자 피드백).
+    <div style={{ display: 'grid', gap: 16 }}>
       {lists.map(({ s, rows }) => <ListCard key={s.title} title={s.title} note={[s.title === '미분류 메모' ? '' : `${rows.length}건`, s.note].filter(Boolean).join(' · ')} rows={rows} />)}
     </div>
   )

@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
-import { Button, Tag } from 'antd'
+import { Button, Descriptions, Table, Tag, Typography } from 'antd'
 import type { ColumnsType } from 'antd/es/table'
 import { useCallback, useRef, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
@@ -41,26 +41,50 @@ function Summary({ s }: { s: InspectionSummary }) {
   )
 }
 
+// 미리보기: 판정 머리 → 검사 정보 표 → 측정 결과 표. 전체 화면을 열지 않아도 무엇을 어떻게 판정했는지 한 번에 보인다.
 function Peek({ row }: { row: InspectionRow }) {
   const { data } = useQuery({ queryKey: ['inspection', row.id], queryFn: () => api<InspectionDetail>(`/api/qms/inspections/${row.id}/`) })
+  const ms = data?.measurements ?? []
+  const ng = ms.filter((m) => m.passed === false).length
+  const ok = ms.filter((m) => m.passed === true).length
+  const time = row.inspected_at.slice(0, 16).replace('T', ' ')
   return (
-    <div className="prop-grid">
-      <span>LOT</span>
-      <span>{row.lot_number}</span>
-      <span>품번</span>
-      <span>
-        {row.item_code} · {row.item_name}
-      </span>
-      <span>공급자</span>
-      <span>{row.supplier}</span>
-      <span>검사기준</span>
-      <span>{row.spec_title}</span>
-      <span>검사자</span>
-      <span>{row.inspector}</span>
-      <span>판정</span>
-      <span>{row.result_display}</span>
-      <span>측정 항목</span>
-      <span>{data ? `${data.measurements.length}개` : '불러오는 중'}</span>
+    <div style={{ display: 'grid', gap: 20 }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+        <div style={{ minWidth: 0 }}>
+          <Typography.Title level={4} style={{ margin: 0 }}>{row.lot_number}</Typography.Title>
+          <Typography.Text type="secondary">{row.spec_title}</Typography.Text>
+        </div>
+        <Tag color={COLOR[row.result_display]} style={{ fontSize: 16, padding: '4px 14px', marginInlineEnd: 0 }}>{row.result_display}</Tag>
+      </div>
+      <Descriptions size="small" bordered column={2} title="검사 정보"
+        items={[
+          { key: 'item', label: '품번 · 품명', span: 2, children: `${row.item_code} · ${row.item_name}` },
+          { key: 'supplier', label: '공급자', children: row.supplier || '—' },
+          { key: 'qty', label: 'LOT 수량', children: data?.lot.qty ?? '—' },
+          { key: 'spec', label: '검사기준', children: data ? `Rev.${data.spec.revision ?? '—'}` : '—' },
+          { key: 'sampling', label: '샘플링', children: data?.spec.sampling || '—' },
+          { key: 'inspector', label: '검사자', children: row.inspector || '—' },
+          { key: 'at', label: '검사 일시', children: time },
+          { key: 'nc', label: '부적합', children: data?.nonconformance ? <a href={data.nonconformance.url}>{data.nonconformance.number}</a> : '없음' },
+          { key: 'capa', label: 'CAPA', children: data?.capa?.length ? data.capa.map((c) => <a key={c.id} href={c.url} style={{ marginInlineEnd: 8 }}>{c.number}</a>) : '없음' },
+        ]}
+      />
+      <div>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 8 }}>
+          <Typography.Text strong style={{ fontSize: 16 }}>측정 결과</Typography.Text>
+          <Typography.Text type="secondary">{data ? `${ms.length}항목 · 합격 ${ok} · 불합격 ${ng}` : '불러오는 중'}</Typography.Text>
+        </div>
+        <Table size="small" pagination={false} loading={!data} rowKey={(_, i) => String(i)} dataSource={ms}
+          rowClassName={(m) => (m.passed === false ? 'row-ng' : '')}
+          columns={[
+            { title: '항목', dataIndex: 'name', render: (v: string, m) => <>{v}{m.special ? <Tag style={{ marginInlineStart: 6 }}>{m.special}</Tag> : null}</> },
+            { title: '규격', dataIndex: 'spec_text' },
+            { title: '측정값', dataIndex: 'value', align: 'right', render: (v: string | null) => v ?? '—' },
+            { title: '판정', dataIndex: 'passed', align: 'center', width: 64, render: (v: boolean | null) => (v === null ? '—' : <Tag color={v ? 'green' : 'red'} style={{ marginInlineEnd: 0 }}>{v ? 'OK' : 'NG'}</Tag>) },
+          ]}
+        />
+      </div>
     </div>
   )
 }

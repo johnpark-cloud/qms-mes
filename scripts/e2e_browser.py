@@ -341,6 +341,13 @@ try:
             row = page.locator('[data-row]', has_text='E2E-IN-1')
             row.wait_for(timeout=5000)
             row.click()
+            drawer = page.locator('.ant-drawer-body')
+            drawer.get_by_text('측정 결과').wait_for(timeout=5000)  # 미리보기: 검사 정보 표 + 측정 결과 표
+            peek = drawer.inner_text()
+            if os.environ.get('E2E_SHOTS'):
+                page.wait_for_timeout(600)  # 서랍이 다 열린 뒤
+                page.screenshot(path=os.path.join(os.environ['E2E_SHOTS'], 'inspection-peek.png'))
+            check('검사 미리보기 구성', all(w in peek for w in ('검사 정보', '품번 · 품명', '측정 결과', '판정')), peek[:60])
             page.get_by_role('button', name='전체 화면으로').click()
             page.wait_for_url('**/app/inspections/*')
             insp_id = page.url.rstrip('/').split('/')[-1]

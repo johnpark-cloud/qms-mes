@@ -116,3 +116,6 @@ a.flow-box:hover { border-color: currentColor; }
 .miller-col { overflow-y: auto; border-right: 1px solid var(--app-border); padding: 4px; }
 .miller-col:last-child { border-right: 0; }
 @media (max-width: 640px) { .miller { grid-template-columns: 1fr; height: auto; } .miller-col { max-height: 30vh; border-right: 0; border-bottom: 1px solid var(--app-border); } }
+
+/* 미리보기 측정 결과: 불합격 줄을 옅은 빨강으로 */
+.row-ng > td { background: var(--ant-color-error-bg, #fff1f0) !important; }

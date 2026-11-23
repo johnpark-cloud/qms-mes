@@ -56,16 +56,15 @@ export default function Tile({ title, tile, details = false }: { title: string; 
   const { token } = theme.useToken()
   const color = useToneColor(tile.tone)
   const go = tile.href?.startsWith('#') ? tile.more : (tile.href ?? tile.more)
+  // 제목 → 큰 숫자 → 부제를 위아래로 쌓는다. 옆으로 두면 좁은 카드에서 제목·부제가 한 글자씩 세로로 꺾인다.
   const head = (
     <>
-      <span style={{ minWidth: 0 }}>
-        <span style={{ display: 'block', fontWeight: 500, color: token.colorText }}>{title}</span>
-        <span style={{ display: 'block', color: token.colorTextSecondary, overflowWrap: 'anywhere' }}>{tile.sub}</span>
-      </span>
-      <span style={{ fontSize: 36, fontWeight: 500, lineHeight: 1.1, color, fontVariantNumeric: 'tabular-nums' }}>{tile.value}</span>
+      <span style={{ fontWeight: 500, color: token.colorText, wordBreak: 'keep-all' }}>{title}</span>
+      <span style={{ fontSize: 32, fontWeight: 600, lineHeight: 1.15, color, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>{tile.value}</span>
+      {tile.sub && <span style={{ fontSize: 12, color: token.colorTextSecondary, wordBreak: 'keep-all' }}>{tile.sub}</span>}
     </>
   )
-  const headStyle = { display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, textDecoration: 'none' }
+  const headStyle = { display: 'flex', flexDirection: 'column' as const, gap: 4, textDecoration: 'none', minWidth: 0 }
   return (
     <div style={{ background: token.colorBgContainer, border: `1px solid ${token.colorBorder}`, borderRadius: token.borderRadiusLG, padding: 16, height: '100%', boxSizing: 'border-box', display: 'flex', flexDirection: 'column', gap: 12, minWidth: 0 }}>
       {go ? <a href={go} style={headStyle}>{head}</a> : <div style={headStyle}>{head}</div>}
