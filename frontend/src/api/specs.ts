@@ -60,7 +60,6 @@ export interface SpecDetail {
   special_options: Option[]
   diff: { fields: Record<string, [string, string]>; rows: DiffRow[] } | null
   templates: { id: number; name: string; url: string }[]
-  edit_request_url: string
 }
 
 export interface RevLog {

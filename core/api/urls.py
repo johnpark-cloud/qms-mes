@@ -38,6 +38,8 @@ urlpatterns = [
     path('records/<str:label>/<int:pk>/request/', records.RecordRequestView.as_view()),
     path('records/<str:label>/<int:pk>/dispose/', records.RecordDisposeView.as_view()),
     path('records/<str:label>/<int:pk>/close/', records.RecordCloseView.as_view()),
+    path('edit-requests/<int:pk>/', records.EditRequestView.as_view()),
+    path('edit-requests/<int:pk>/decide/', records.EditRequestView.as_view()),
     path('qms/', include('qms.api.urls')),
     path('schema/', SpectacularAPIView.as_view(permission_classes=[IsStaff]), name='api_schema'),
 ]

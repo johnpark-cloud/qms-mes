@@ -172,7 +172,7 @@ WIDGETS = {w.key: w for w in [
                                  for n in d['nc_mail_pending']]), everyone),
     Widget('edit_requests', '삭제·수정 요청', TILE, tile(
         lambda d: len(d['edit_requests']), '관리자 처리 대기', '#edit-requests',
-        rows=lambda request, d: [row(str(r), reverse('edit_request_decide', args=[r.pk]), str(r.requested_by))
+        rows=lambda request, d: [row(str(r), f'/app/requests/{r.pk}', str(r.requested_by))
                                  for r in d['edit_requests']]), lambda u: u.is_superuser),
     Widget('approvals', '승인 대기', TILE, tile(lambda d: sum(len(d[k]) for k in PENDING), '품질팀장 서명', '#approvals',
                                            rows=approval_rows), is_approver),
@@ -243,7 +243,7 @@ def todo_lists_data(ctx, d, size):
         'nc_mail_pending': _lines(d['nc_mail_pending'], str, lambda n: reverse('nc_mail', args=[n.pk]),
                                   approved_at=lambda n: _local(n.approved_at)),
         'nc_notify_pending': _lines(d['nc_notify_pending'], str, lambda n: change('core_nonconformance', n)),
-        'edit_requests': _lines(d['edit_requests'], str, lambda r: reverse('edit_request_decide', args=[r.pk]),
+        'edit_requests': _lines(d['edit_requests'], str, lambda r: f'/app/requests/{r.pk}',
                                 requested_by=lambda r: str(r.requested_by), requested_at=lambda r: _local(r.requested_at)),
         'my_rejected': [{'label': str(r), 'reject_reason': r.reject_reason} for r in d['my_rejected']],
         'memos_unsorted': d['memos_unsorted'],

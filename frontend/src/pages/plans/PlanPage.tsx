@@ -185,7 +185,6 @@ export default function PlanPage() {
     ...(d.can_make_specs ? [{ key: 'make-specs', label: '검사기준 초안 만들기', disabled: makeSpecs.isPending, onClick: () => makeSpecs.mutate() }] : []),
     { key: 'xlsx', label: <a href={`/api/qms/plans/${id}/document/?export=xlsx`} download>엑셀 받기</a> },
     { key: 'pdf', label: <Link to={`/plans/${id}/print`}>인쇄/PDF</Link> },
-    ...(locked ? [{ key: 'edit', label: <a href={d.edit_request_url}>수정 요청</a> }] : []),
   ]
 
   const props = [
@@ -226,6 +225,8 @@ export default function PlanPage() {
         actions={actions}
         menu={menu}
         record={{ ct: 'qms.controlplan', id }}
+        editRequest={locked}
+        listPath="/plans"
         props={props}
         side={[
           { key: 'relations', label: '연결', node: <RelationsPanel ct="qms.controlplan" id={id} /> },

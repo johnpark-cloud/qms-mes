@@ -55,7 +55,6 @@ export interface PlanDetail {
   type_options: Option[]
   stage_options: Option[]
   diff: { fields: Record<string, [string, string]>; rows: DiffRow[] } | null
-  edit_request_url: string
 }
 
 // qms/models.py ControlPlan.STAGES 와 같은 값이다.

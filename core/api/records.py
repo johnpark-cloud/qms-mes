@@ -316,12 +316,20 @@ class RecordCloseView(APIView):
         return Response(_detail(model.objects.get(pk=pk), spec, request.user))
 
 
+# 기록 설명서 없이 전용 화면이 있는 기록(core/relations.py record_url)도 같은 요청 API를 쓴다
+DEDICATED = {'core.item', 'qms.inspectionspec', 'qms.controlplan', 'qms.inspection'}
+
+
 class RecordRequestView(APIView):
     schema = None
 
     def post(self, request, label, pk):
         """수정·삭제 요청. 시스템 관리자는 요청과 동시에 실행된다(rules.submit_edit_request)."""
-        model, _ = _model(request.user, label)
+        if label in DEDICATED:
+            model = apps.get_model(label)
+            require_perm(request.user, f'{model._meta.app_label}.view_{model._meta.model_name}')
+        else:
+            model, _ = _model(request.user, label)
         obj = get_object_or_404(model, pk=pk)
         kind = request.data.get('kind')
         rules.check_edit_request(obj, kind, request.user)
@@ -329,7 +337,45 @@ class RecordRequestView(APIView):
                                                       request.data.get('password'))
         deleted = kind == EditRequest.DELETE and req.status == EditRequest.APPROVED
         return Response({'status': req.status, 'deleted': deleted, 'error': decide_error,
-                         'decide_url': reverse('edit_request_decide', args=[req.pk]) if decide_error else None}, status=201)
+                         'decide_url': f'/app/requests/{req.pk}' if decide_error else None}, status=201)
+
+
+def _request_payload(req):
+    from core.records import blockers
+    obj = req.target
+    rows = []
+    for f in obj._meta.concrete_fields if obj else ():
+        value = getattr(obj, f'get_{f.name}_display', lambda: getattr(obj, f.name))()  # noqa: B023
+        rows.append({'label': str(f.verbose_name), 'value': '' if value is None else str(value)})
+    pending_delete = obj and req.kind == EditRequest.DELETE and req.status == EditRequest.PENDING
+    return {'id': req.pk, 'kind': req.get_kind_display(), 'status': req.status, 'status_label': req.get_status_display(),
+            'object_repr': req.object_repr, 'model': str(req.content_type.model_class()._meta.verbose_name),
+            'target_url': obj and record_url(obj), 'reason': req.reason, 'requested_by': str(req.requested_by),
+            'requested_at': req.requested_at, 'decided_by': req.decided_by and str(req.decided_by),
+            'decided_at': req.decided_at, 'reject_reason': req.reject_reason, 'rows': rows,
+            'blockers': [f'{o._meta.verbose_name}: {o}' for o in blockers(obj)] if pending_delete else []}
+
+
+class EditRequestView(APIView):
+    """요청 처리 화면(/app/requests/<번호>): 시스템 관리자만 보고 승인·거절한다(EditRequest.decide)."""
+    schema = None
+
+    def get(self, request, pk):
+        if not request.user.is_superuser:
+            raise PermissionDenied('시스템 관리자만 처리할 수 있습니다.')
+        return Response(_request_payload(get_object_or_404(EditRequest, pk=pk)))
+
+    def post(self, request, pk):
+        if not request.user.is_superuser:
+            raise PermissionDenied('시스템 관리자만 처리할 수 있습니다.')
+        req = get_object_or_404(EditRequest, pk=pk)
+        approve = request.data.get('approve') is True
+        reason = request.data.get('reject_reason')
+        reason = reason.strip() if isinstance(reason, str) else ''
+        if not approve and not reason:
+            raise ValidationError('거절 사유를 입력하세요.')
+        req.decide(request.user, approve, reason)
+        return Response(_request_payload(req))
 
 
 class RecordHistoryView(APIView):

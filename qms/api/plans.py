@@ -1,7 +1,6 @@
 from django.db import IntegrityError, transaction
 from django.db.models import Count, Exists, OuterRef, Q
 from django.shortcuts import get_object_or_404
-from django.urls import reverse
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
@@ -71,7 +70,6 @@ def _detail(plan, user):
         'type_options': [{'value': '', 'label': '없음'}] + [{'value': v, 'label': label} for v, label in InspectionSpec.TYPES],
         'stage_options': [{'value': v, 'label': label} for v, label in ControlPlan.STAGES],
         'diff': compare_plans(prev, plan),
-        'edit_request_url': reverse('edit_request', args=['EDIT', 'qms', 'controlplan', plan.pk]),
     }
 
 

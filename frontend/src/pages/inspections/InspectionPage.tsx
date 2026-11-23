@@ -60,6 +60,7 @@ export default function InspectionPage() {
       // 판정된 검사는 고칠 수 없으므로 편집 버튼이 없다.
       actions={<Button type="primary" onClick={() => nav(`/inspections/${id}/print`)}>인쇄/PDF</Button>}
       record={{ ct: 'qms.inspection', id }}
+      listPath="/inspections"
       menu={[
         { key: 'xlsx', label: <a href={`/api/qms/inspections/${id}/document/?export=xlsx`} download>엑셀 받기</a> },
         ...d.templates.map((t) => ({ key: `t${t.id}`, label: <a href={t.url} download>엑셀 양식: {t.name}</a> })),

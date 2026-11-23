@@ -9,6 +9,7 @@ import AttachmentPanel from '../../components/AttachmentPanel'
 import MemoPanel from '../../components/MemoPanel'
 import RecordPage from '../../components/RecordPage'
 import RelationsPanel from '../../components/RelationsPanel'
+import EditRequestModal from '../../components/EditRequestModal'
 import SignModal from '../../components/SignModal'
 import { addRecent } from '../../lib/recent'
 
@@ -123,40 +124,6 @@ export function Editor({ e, ...rest }: { e: Edit; [k: string]: any }) {
   if (e.type === 'tags') return <Select mode="tags" open={false} tokenSeparators={[',']} suffixIcon={null} placeholder="입력하고 Enter (쉼표로 여러 개)" {...rest} />
   if (e.type === 'choice') return <Select options={e.choices ?? []} showSearch optionFilterProp="label" allowClear={!e.required} {...rest} />
   return <Input {...rest} />
-}
-
-// 수정·삭제 요청: 사유와 본인 비밀번호 (core.rules.submit_edit_request). 시스템 관리자는 요청과 동시에 실행된다.
-function EditRequestModal({ open, title, onClose, onSubmit }: {
-  open: boolean; title: string; onClose: () => void; onSubmit: (v: { reason: string; password: string }) => Promise<void>
-}) {
-  const [err, setErr] = useState('')
-  const [busy, setBusy] = useState(false)
-  useEffect(() => setErr(''), [open])
-  const submit = async (v: { reason: string; password: string }) => {
-    setBusy(true)
-    try {
-      await onSubmit(v)
-      onClose()
-    } catch (e) {
-      setErr(e instanceof Error ? e.message : '요청하지 못했습니다.')
-    } finally {
-      setBusy(false)
-    }
-  }
-  return (
-    <Modal open={open} onCancel={onClose} title={title} footer={null} destroyOnHidden>
-      <Form layout="vertical" onFinish={submit}>
-        <Form.Item label="사유" name="reason" rules={[{ required: true, whitespace: true, message: '사유를 입력하세요.' }]}>
-          <Input.TextArea autoSize={{ minRows: 2, maxRows: 6 }} autoFocus />
-        </Form.Item>
-        <Form.Item label="비밀번호" name="password" rules={[{ required: true, message: '비밀번호를 입력하세요.' }]}>
-          <Input.Password autoComplete="current-password" />
-        </Form.Item>
-        {err && <Alert style={{ marginBottom: 12 }} type="error" message={err} />}
-        <Button type="primary" htmlType="submit" loading={busy} danger={title.startsWith('삭제')}>{title.startsWith('삭제') && !title.endsWith('요청') ? '삭제' : '요청'}</Button>
-      </Form>
-    </Modal>
-  )
 }
 
 // 부적합 MRB 처분: 처분·특채 승인번호·실패비용 + 품질팀장 비밀번호 (core.rules.dispose_nc). 규칙 문구는 서버 그대로 보인다.
@@ -274,7 +241,7 @@ export default function RecordView() {
     const r = await api<{ error: string | null; decide_url: string | null }>(base + 'request/',
       { method: 'POST', body: JSON.stringify({ kind: 'EDIT', ...v }) })
     if (r.decide_url) {
-      location.href = r.decide_url
+      navigate(r.decide_url.slice(4))
       return
     }
     await q.refetch()
@@ -284,7 +251,7 @@ export default function RecordView() {
     const r = await api<{ deleted: boolean; decide_url: string | null }>(base + 'request/',
       { method: 'POST', body: JSON.stringify({ kind: 'DELETE', ...v }) })
     if (r.decide_url) {
-      location.href = r.decide_url // 막는 기록 안내는 요청 처리 화면에서
+      navigate(r.decide_url.slice(4)) // 막는 기록 안내는 요청 처리 화면에서
       return
     }
     if (r.deleted) {

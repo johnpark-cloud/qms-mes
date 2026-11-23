@@ -56,7 +56,7 @@ BASE_PATHS = (
     'report/',
     'api/auth/', 'api/personal/', 'api/search/', 'api/items/', 'api/core/lots/', 'api/core/trace/', 'api/core/items/',
     'api/core/numbering/', 'api/core/processes/', 'api/core/import/', 'api/core/nc-quick/', 'api/attachments/', 'api/relations/',
-    'api/revision-log/', 'api/audit-log/', 'api/schema/', 'api/records/',
+    'api/revision-log/', 'api/audit-log/', 'api/schema/', 'api/records/', 'api/edit-requests/',
     'api/qms/overview/', 'api/qms/todo/', 'api/qms/dashboard/', 'api/qms/memos/',
 )
 

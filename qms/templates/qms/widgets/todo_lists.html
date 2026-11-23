@@ -89,7 +89,7 @@
   <section class="card" id="edit-requests">
     <h2>삭제·수정 요청 대기 <span class="count">관리자 처리</span></h2>
     <table><tbody>
-      {% for r in edit_requests %}<tr><td><a href="{% url 'edit_request_decide' r.pk %}">{{ r }}</a></td><td>{{ r.requested_by }} · {{ r.requested_at|date:"m-d H:i" }}</td></tr>{% endfor %}
+      {% for r in edit_requests %}<tr><td><a href="/app/requests/{{ r.pk }}">{{ r }}</a></td><td>{{ r.requested_by }} · {{ r.requested_at|date:"m-d H:i" }}</td></tr>{% endfor %}
     </tbody></table>
   </section>
   {% endif %}

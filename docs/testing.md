@@ -6,7 +6,7 @@
 
 | 목적 | 명령 | 비고 |
 | --- | --- | --- |
-| 단위 테스트 전체 | `.\.venv\Scripts\python manage.py test` | core·qms·personal 모두. 테스트용 DB를 따로 만들므로 `data/`의 운영 DB는 건드리지 않는다. 2026-11-23 기준 627개(SQLite에서는 PostgreSQL 전용 2개 건너뜀) |
+| 단위 테스트 전체 | `.\.venv\Scripts\python manage.py test` | core·qms·personal 모두. 테스트용 DB를 따로 만들므로 `data/`의 운영 DB는 건드리지 않는다. 2026-11-23 기준 632개(SQLite에서는 PostgreSQL 전용 2개 건너뜀) |
 | PostgreSQL에서 전체 | `.\.venv\Scripts\python manage.py test --noinput` | 사용자 환경변수 `QMS_DB_NAME`·`QMS_DB_USER`·`QMS_DB_PASSWORD`가 있으면 위 명령도 PostgreSQL에서 돈다(SQLite로 돌리려면 그 창에서 `Remove-Item Env:QMS_DB_NAME`). e2e 두 스크립트는 `QMS_DB_NAME`을 빼고 임시 SQLite를 쓴다. 테스트 DB `test_qms`를 만들고 지우므로 **한 번에 하나만** 실행한다(두 실행이 겹치면 서로의 테스트 DB를 지워 연결 오류가 난다). `PgBackupRestoreTest`는 PostgreSQL에서만 돈다 |
 | 앱 하나만 | `.\.venv\Scripts\python manage.py test qms` | 작업 중 빠른 확인용. 완료 판단에는 전체 실행이 필요하다 |
 | 테스트 하나만 | `.\.venv\Scripts\python manage.py test core.tests.ShellTest.test_logged_in_pages_not_stored` | |
@@ -36,6 +36,7 @@ e2e를 Git Bash에서 실행할 때 한글이 깨지면 `PYTHONIOENCODING=utf-8`
 | `qms/tests_claim_steps.py` | 8D 단계별 기한: 단계마다 따르는 기한(D1~D3 봉쇄, D4 원인, D5 대책, D6~D8 종결), 규칙 없는 고객 기본값, 규칙 순서 검증, 목록 「지연」·「단계별 기한」(늦은 완료·지연 중·시간 단위), 내 할 일이 지금 단계 기한을 씀, 기록 화면·목록 칸 |
 | `qms/tests_repeat_nc.py` | 반복 부적합 → CAPA 제안: 같은 품번·유형 90일 3건(공백 무시, 다른 품번·유형·빈 유형·91일 전 제외), CAPA를 만든 부적합 뒤로 다시 셈, CAPA 모듈 끄면 빠짐, 부적합 화면 안내·CAPA 만들기 주소(최근 부적합 출처), 내 할 일 목록, 알림 묶음 |
 | `qms/tests_upload.py` | 측정 원자료 업로드(`docs/data-flow.md` 5절): 미리보기 저장 안 함·올린 사람이 검사원, 불합격 → 부적합·보류, 자격 없음·교정 기한 지남·계측기 필수/자동 선택, 없는 LOT·검사 구분·검사기준·검사항목·계측기·열, 묶음 하나 틀리면 전부 저장 안 함, 권한 403·꺼진 모듈·빈 양식, 작성 안내·엑셀 양식(검사 구분·계측기 목록, 채워 올리면 판정) |
+| `core/api/tests_requests.py` | `EditRequestApiTest`: 전용 화면 기록(검사기준서·품목)의 수정·삭제 요청 API, 관리자 삭제가 막히면 `/app/requests/<번호>`로, 요청 처리 조회·결정은 시스템 관리자만(거절 사유 필수·중복 처리 거부), 막는 기록 표시, 내 할 일 링크 |
 | `core/api/tests_relations.py` | `RelationsApiTest`: 연결 패널 API 묶음·권한 없는 묶음 숨김·기록 권한·개인 앱 제외·관리 화면 없는 기록(url 없음)·쪽 나누기·쿼리 수 |
 | `qms/tests.py` `DocumentNumberingTest` | 관리 화면 문서 추가의 자동 번호·개정 자동 채움 |
 | `core/tests_modules.py` | 모듈 켜기/끄기: `CoverageTest`(모든 URL·업무 모델이 대응표에 있음), `SwitchRuleTest`(행 없으면 켜짐, 기본 플랫폼 불가, 의존 모듈, 전부 꺼도 보류 인터록), `GateTest`(일반 404·관리자 조회만, API `module_inactive`, 관리 화면·첨부·메모·자동완성, 시스템 관리자만 전환, 메뉴·`/api/auth/me/`), `OffSafetyTest`(열린 기록이면 끄기 거부, 꺼진 뒤 시스템 관리자 종결·검사 판정만 허용, 인터록 메시지 `[부적합]`·`[4M 변경]`) |

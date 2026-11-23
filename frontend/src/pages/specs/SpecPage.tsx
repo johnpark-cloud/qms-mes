@@ -174,7 +174,6 @@ export default function SpecPage() {
     { key: 'xlsx', label: <a href={`/api/qms/specs/${id}/document/?export=xlsx`} download>엑셀 받기</a> },
     { key: 'pdf', label: <Link to={`/specs/${id}/print`}>인쇄/PDF</Link> },
     ...d.templates.map((t) => ({ key: `t${t.id}`, label: <a href={t.url} download>엑셀 양식: {t.name}</a> })),
-    ...(locked ? [{ key: 'edit', label: <a href={d.edit_request_url}>수정 요청</a> }] : []),
   ]
 
   const props = [
@@ -217,6 +216,8 @@ export default function SpecPage() {
         actions={actions}
         menu={menu}
         record={{ ct: 'qms.inspectionspec', id }}
+        editRequest={locked}
+        listPath="/specs"
         props={props}
         side={[
           { key: 'relations', label: '연결', node: <RelationsPanel ct="qms.inspectionspec" id={id} /> },

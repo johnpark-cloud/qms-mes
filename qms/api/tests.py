@@ -173,7 +173,7 @@ class TodoApiTest(TestCase):
         self.assertEqual(t['claims'][0]['href'], f'/app/r/qms/customerclaim/{claim.pk}')  # 새 기록 화면
         self.assertEqual(t['nc_mail_pending'][0]['href'], f'/nc/{nc.pk}/mail/')
         self.assertEqual(t['nc_notify_pending'][0]['label'], str(nc))
-        self.assertEqual((t['edit_requests'][0]['requested_by'], t['edit_requests'][0]['href']), ('qe', f'/request/{er.pk}/decide/'))
+        self.assertEqual((t['edit_requests'][0]['requested_by'], t['edit_requests'][0]['href']), ('qe', f'/app/requests/{er.pk}'))
         self.assertEqual(t['my_rejected'], [{'label': str(EditRequest.objects.get(status='REJECTED')), 'reject_reason': '안 됨'}])
         self.assertEqual(t['first_articles'][0]['label'], str(fa))
         self.assertEqual((t['ppaps'][0]['label'], t['ppaps'][0]['overdue']), (str(ppap), True))
@@ -228,9 +228,10 @@ class SpecApiTest(TestCase):
         self.assertEqual(r.status_code, 409)
         self.assertEqual(Characteristic.objects.get(pk=c.pk).name, c.name)
 
-    def test_edit_request_url_opens(self):  # 승인·잠긴 검사기준의 「수정 요청」 링크가 요청 화면으로 열린다
-        url = self.c(self.eng).get(f'/api/qms/specs/{self.spec.pk}/').json()['edit_request_url']
-        self.assertEqual(self.c(self.eng).get(url).status_code, 200)
+    def test_edit_request_on_spec(self):  # 승인·잠긴 검사기준의 「수정 요청」은 새 화면 창에서 요청 API로 간다
+        r = self.c(self.eng).post(f'/api/records/qms.inspectionspec/{self.spec.pk}/request/',
+                                  {'kind': 'EDIT', 'reason': '오타', 'password': 'x'}, format='json')
+        self.assertEqual(r.status_code, 201, r.content)
 
     def test_put_field_errors_by_row(self):
         draft = self.new_draft()

@@ -36,6 +36,7 @@ import RecordList from './pages/records/RecordList'
 import RecordNew from './pages/records/RecordNew'
 import RecordView from './pages/records/RecordView'
 import Todo from './pages/Todo'
+import EditRequestPage from './pages/EditRequestPage'
 import Trace from './pages/Trace'
 import { useAppTheme } from './theme'
 
@@ -70,6 +71,7 @@ function App() {
             <Route element={<AppLayout />}>
               <Route path="overview" element={<Overview />} />
               <Route path="todo" element={<Todo />} />
+              <Route path="requests/:id" element={<EditRequestPage />} />
               <Route path="specs" element={<SpecList />} />
               <Route path="specs/:id" element={<SpecPage />} />
               <Route path="plans" element={<PlanList />} />
