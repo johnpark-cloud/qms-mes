@@ -83,6 +83,7 @@
 | 계측기를 하나라도 등록한 뒤부터, 검사 입력 화면(기존·React)의 판정은 계량형 항목마다 계측기가 정해져야 한다(React 화면은 항목별 `gauges`, 없으면 기본 `gauge`). 항목별 계측기도 교정 기한을 검사한다. 설비 수집(`collect`)과 관리 화면 입력은 제외. | `qms/rules.py` `submit_inspection` |
 | 검사 입력 화면은 계량형 항목마다 검사항목의 계측기 종류(비면 관리계획서 측정방법)가 종류·이름에 들어간 계측기를 미리 고른다. 사용 중이고 교정 기한 안인 계측기만 고르며(번호순 첫 번째), 미리 고르기일 뿐 판정 때 교정 기한 검사는 그대로 한다. | `qms/api/inspections.py` `FormView` |
 | 교정 14일 전부터 내 할 일·알림에 표시한다. | `qms/due.py` |
+| 같은 품번·같은 부적합 유형이 최근 90일 동안 CAPA 없이 3건이면 내 할 일·알림·부적합 화면에서 CAPA를 제안한다(강제하지 않음). CAPA를 만든 부적합까지는 세지 않는다. | `qms/due.py` `repeat_ncs`, `core/api/records.py` `_notices` |
 | 교정 이력(`GaugeCalibration`)이 합격이면 계측기의 최근 교정일을 그 교정일로 앞당긴다(더 옛날 날짜면 그대로). 불합격이면 최근 교정일은 그대로 두고 계측기를 사용 중지해 측정을 거부한다. 교정일은 오늘 이후일 수 없고, 결과·교정일은 등록 후 기록 화면에서 고치지 않는다(새 이력으로 바로잡음). | `GaugeCalibration.clean`·`save`, `core/recordspec.py` `qms.gaugecalibration` |
 
 측정값 입력(검사 입력 화면, `collect` 자동 수집)은 NaN·무한대 값을 거부한다. `collect`는 읽을 수 없는 CSV를 `error/` 폴더로 옮기고 다음 파일을 계속 처리한다(`qms/rules.py` `measurement`, `qms/management/commands/collect.py`).

@@ -1,6 +1,7 @@
 """기한·대기 항목 계산. '내 할 일' 화면과 알림(manage.py notify)이 같은 기준을 쓴다."""
 import datetime
 
+from django.contrib.contenttypes.models import ContentType
 from django.db.models import Exists, OuterRef
 from django.utils import timezone
 
@@ -17,8 +18,10 @@ DUE_MODULE = {
     'claims': 'qms_claim', 'scars': 'qms_supplier', 'capas': 'qms_capa', 'audits': 'qms_audit', 'findings': 'qms_audit',
     'ppaps': 'qms_ppap', 'pending_ppaps': 'qms_ppap', 'gauges': 'qms_inspection', 'spc_alarms': 'qms_inspection',
     'pending_specs': 'qms_inspection', 'pending_plans': 'qms_inspection', 'first_articles': 'qms_change',
-    'pending_changes': 'qms_change', 'pending_docs': 'qms_document',
+    'pending_changes': 'qms_change', 'pending_docs': 'qms_document', 'repeat_ncs': 'qms_capa',
 }
+REPEAT_COUNT, REPEAT_DAYS = 3, 90  # 같은 품번·같은 부적합 유형이 90일 안에 CAPA 없이 3건이면 CAPA를 제안한다
+
 
 
 def due_items(approver=False, user=None):
@@ -51,6 +54,7 @@ def due_items(approver=False, user=None):
         'memos_unsorted': Memo.objects.filter(content_type__isnull=True).count(),
         'held_lots': Hold.objects.filter(released_at__isnull=True).values('lot').distinct().count(),
         'capas': capas,
+        'repeat_ncs': repeat_ncs(now),
         'audits': list(InternalAudit.objects.filter(performed_at__isnull=True, planned_date__lte=today + datetime.timedelta(days=14))),
         'findings': list(AuditFinding.objects.filter(grade__in=AuditFinding.NEEDS_CAPA, capa__isnull=True).select_related('audit')),
         'ppaps': list(PpapSubmission.objects.filter(submitted_at__isnull=True, due_date__lte=today + datetime.timedelta(days=14))
@@ -71,6 +75,30 @@ def due_items(approver=False, user=None):
     }
     on = active_set()
     return d | {key: [] for key, module in DUE_MODULE.items() if module not in on}
+
+
+def repeat_ncs(now, item_id=None):
+    """반복 부적합 묶음 [{item, defect_type, ncs, latest}] (4단계 개선 1). 묶음 = 최근 REPEAT_DAYS일의 같은 품번·같은 유형
+    (앞뒤 공백 무시, 빈 유형 제외). CAPA를 만든 부적합까지는 그 CAPA가 다루므로 그 뒤 건만 센다."""
+    ncs = Nonconformance.objects.filter(detected_at__gte=now - datetime.timedelta(days=REPEAT_DAYS)).exclude(defect_type='')
+    if item_id:
+        ncs = ncs.filter(lot__item_id=item_id)
+    ncs = list(ncs.select_related('lot__item').order_by('detected_at', 'pk'))
+    with_capa = set(Capa.objects.filter(source_type=ContentType.objects.get_for_model(Nonconformance),
+                                        source_id__in=[n.pk for n in ncs]).values_list('source_id', flat=True))
+    groups = {}
+    for n in ncs:
+        key = (n.lot.item_id, n.defect_type.strip())
+        if not key[1]:
+            continue
+        groups[key] = [] if n.pk in with_capa else groups.get(key, []) + [n]
+    return [{'item': g[0].lot.item, 'defect_type': key[1], 'ncs': g, 'latest': g[-1]}
+            for key, g in groups.items() if len(g) >= REPEAT_COUNT]
+
+
+def repeat_group_of(nc):
+    """이 부적합이 든 반복 묶음, 없으면 None."""
+    return next((g for g in repeat_ncs(timezone.now(), nc.lot.item_id) if nc in g['ncs']), None)
 
 
 def recent_spc_alarms(now):
@@ -106,6 +134,8 @@ def digest(d):
         ('4M 초품 미확인 (출하 차단 중)', [str(c) for c in d['first_articles']]),
         ('심사 예정', [str(a) for a in d['audits']]),
         ('CAPA 미연결 심사 발견사항', [str(f) for f in d['findings']]),
+        ('반복 부적합 (CAPA 제안)', [f"{g['item']} · {g['defect_type']} · 최근 {REPEAT_DAYS}일 {len(g['ncs'])}건"
+                              for g in d['repeat_ncs']]),
         ('PPAP 제출 기한', [f'{p} · 기한 {p.due_date}' for p in d['ppaps']]),
         ('부적합 보완 필요', [f'{n} · 없는 항목: {", ".join(n.missing_fields())}' for n in d['nc_incomplete']]),
         ('메일 발송 대기', [str(n) for n in d['nc_mail_pending']]),

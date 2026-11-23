@@ -157,6 +157,33 @@ def _can_request(obj, kind, user):
 CAPA_SOURCE = {'qms.customerclaim': '8D', 'qms.scar': 'SCAR', 'core.nonconformance': 'NC', 'qms.auditfinding': 'AUDIT'}  # qms/admin.py capa_links와 같은 코드
 
 
+def capa_new_url(obj, title=None):
+    """CAPA 새로 만들기 화면 주소(출처·제목 채움). obj는 CAPA_SOURCE 기록."""
+    query = {'source': CAPA_SOURCE[obj._meta.label_lower], 'source_type': ContentType.objects.get_for_model(obj).pk,
+             'source_id': obj.pk, 'title': (title or str(obj))[:200]}
+    return '/app/r/qms/capa/new?' + urlencode(query)
+
+
+def repeat_title(group):
+    from qms.due import REPEAT_DAYS  # core → qms는 함수 안에서만(docs/architecture.md 의존 방향)
+    return f"반복 부적합: {group['item'].code} {group['defect_type']} (최근 {REPEAT_DAYS}일 {len(group['ncs'])}건)"
+
+
+def _notices(obj, user):
+    """기록 위 안내 띠. 반복 부적합이면 CAPA를 제안한다(CAPA 모듈이 켜져 있을 때만)."""
+    if not isinstance(obj, Nonconformance) or not modules.active('qms_capa'):
+        return []
+    from qms.due import REPEAT_DAYS, repeat_group_of
+    group = repeat_group_of(obj)
+    if not group:
+        return []
+    message = (f"같은 품번({group['item'].code})·같은 유형({group['defect_type']}) 부적합이 최근 {REPEAT_DAYS}일 동안 "
+               f"CAPA 없이 {len(group['ncs'])}건입니다. 시정조치(CAPA)를 만드세요.")
+    can = user.has_perm('qms.add_capa')
+    return [{'message': message, 'label': 'CAPA 만들기' if can else '',
+             'url': capa_new_url(group['latest'], repeat_title(group)) if can else ''}]
+
+
 def _links(obj, user):
     """「⋯」 메뉴 바로가기: LOT 이력 추적, CAPA 만들기(새로 만들기 화면, 출처 채움 — CAPA 모듈이 켜져 있을 때만)."""
     label = obj._meta.label_lower
@@ -165,9 +192,7 @@ def _links(obj, user):
     if lot:
         links.append({'label': 'LOT 이력 (추적)', 'url': trace_url(lot.number)})
     if label in CAPA_SOURCE and modules.active('qms_capa') and user.has_perm('qms.add_capa'):
-        query = {'source': CAPA_SOURCE[label], 'source_type': ContentType.objects.get_for_model(obj).pk, 'source_id': obj.pk,
-                 'title': str(obj)[:200]}
-        links.append({'label': 'CAPA 만들기', 'url': '/app/r/qms/capa/new?' + urlencode(query)})
+        links.append({'label': 'CAPA 만들기', 'url': capa_new_url(obj)})
     return links
 
 
@@ -217,6 +242,7 @@ def _detail(obj, spec, user):
             'dispose': [recordspec.editor(obj, n) for n in rules.DISPOSE_FIELDS] if isinstance(obj, Nonconformance) else None,
             'can_close': spec.close and not obj.closed_at and _perm(user, model, 'change'),
             'links': _links(obj, user),
+            'notices': _notices(obj, user),
             'requests': {'edit': _can_request(obj, EditRequest.EDIT, user),
                          'delete': _can_request(obj, EditRequest.DELETE, user)}}
 

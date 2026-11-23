@@ -6,7 +6,7 @@
 
 | 목적 | 명령 | 비고 |
 | --- | --- | --- |
-| 단위 테스트 전체 | `.\.venv\Scripts\python manage.py test` | core·qms·personal 모두. 테스트용 DB를 따로 만들므로 `data/`의 운영 DB는 건드리지 않는다. 2026-11-23 기준 617개(SQLite에서는 PostgreSQL 전용 2개 건너뜀) |
+| 단위 테스트 전체 | `.\.venv\Scripts\python manage.py test` | core·qms·personal 모두. 테스트용 DB를 따로 만들므로 `data/`의 운영 DB는 건드리지 않는다. 2026-11-23 기준 621개(SQLite에서는 PostgreSQL 전용 2개 건너뜀) |
 | PostgreSQL에서 전체 | `.\.venv\Scripts\python manage.py test --noinput` | 사용자 환경변수 `QMS_DB_NAME`·`QMS_DB_USER`·`QMS_DB_PASSWORD`가 있으면 위 명령도 PostgreSQL에서 돈다(SQLite로 돌리려면 그 창에서 `Remove-Item Env:QMS_DB_NAME`). e2e 두 스크립트는 `QMS_DB_NAME`을 빼고 임시 SQLite를 쓴다. 테스트 DB `test_qms`를 만들고 지우므로 **한 번에 하나만** 실행한다(두 실행이 겹치면 서로의 테스트 DB를 지워 연결 오류가 난다). `PgBackupRestoreTest`는 PostgreSQL에서만 돈다 |
 | 앱 하나만 | `.\.venv\Scripts\python manage.py test qms` | 작업 중 빠른 확인용. 완료 판단에는 전체 실행이 필요하다 |
 | 테스트 하나만 | `.\.venv\Scripts\python manage.py test core.tests.ShellTest.test_logged_in_pages_not_stored` | |
@@ -33,6 +33,7 @@ e2e를 Git Bash에서 실행할 때 한글이 깨지면 `PYTHONIOENCODING=utf-8`
 | `core/tests_masters.py` | 기준정보: `MasterTest`(상위 부서 순환 거부, 사번·사업자번호는 입력했을 때만 중복 검사, 품질팀장만 추가·수정, 등록자 자동 기록, 메뉴), `PartnerTest`(거래처 구분 필수, 코드 자동 번호(P숫자 최댓값+1, 직접 쓴 코드 유지), 옛 품질 담당 칸 → 담당자 복사(덮지 않음), 품질엔지니어는 인증서만 수정, 만료 임박 인증서가 기한 목록에 나옴), `FieldDefTest`(키 잠금, 선택지 필수, 종류별 값 검사, 사용 중지 칸 값 유지, 관리 화면 입력 칸·칸 배치), `AttachmentTest`(개인 기록 거부, 받기에 대상 기록 권한 필요, API 올리기·목록, 모르는 종류 거부, 백업에 첨부 포함), `LinkMastersTest`(미리보기는 안 바꿈, `--apply`는 백업 폴더 필수·백업 후 연결, 여러 후보·구분 불일치·못 찾음 보고, 이미 채운 칸 유지, 승인된 PPAP도 이력 남김, 심사원 이름 순서) |
 | `core/tests_import_targets.py` | 들여오기 대상(`docs/data-flow.md` 5절): 종류마다 미리보기(저장 안 함)·확정, 키로 고치기(수정 칸만, 다른 칸이 다르면 오류), 승인 잠금 거부, 보류 LOT 출하 행 오류·전체 롤백, 꺼진 모듈 거부, 없는 키·두 건 키·공정 순서 오류, 코드값 상위 경로, 설정의 없는 칸 거부, API 추가·변경 권한, 빈 양식(종류마다 받기 → 채워 올리기, 추가·변경 권한·꺼진 모듈은 목록에서 빠짐), 작성 안내(칸마다 필수·적는 값·예), 엑셀 양식(종류마다 받기 → 채워 올리기, 숨긴 목록 시트·드롭다운 막기/경고·열 제목 메모, 모르는 kind 400) |
 | `core/tests_import_log.py` | 원본 파일·들여오기 기록(`docs/data-flow.md` 7.4절): 미리보기·오류 확정은 안 남김, 확정하면 원본 그대로 `QMS_IMPORT_DIR`에 보관·받기, 가져오기 설정·옛 `/import/` 화면도 남김, 대상 열람 권한 없으면 목록에서 빠지고 403, 꺼진 모듈 숨김·404, 백업에 원본 포함 |
+| `qms/tests_repeat_nc.py` | 반복 부적합 → CAPA 제안: 같은 품번·유형 90일 3건(공백 무시, 다른 품번·유형·빈 유형·91일 전 제외), CAPA를 만든 부적합 뒤로 다시 셈, CAPA 모듈 끄면 빠짐, 부적합 화면 안내·CAPA 만들기 주소(최근 부적합 출처), 내 할 일 목록, 알림 묶음 |
 | `qms/tests_upload.py` | 측정 원자료 업로드(`docs/data-flow.md` 5절): 미리보기 저장 안 함·올린 사람이 검사원, 불합격 → 부적합·보류, 자격 없음·교정 기한 지남·계측기 필수/자동 선택, 없는 LOT·검사 구분·검사기준·검사항목·계측기·열, 묶음 하나 틀리면 전부 저장 안 함, 권한 403·꺼진 모듈·빈 양식, 작성 안내·엑셀 양식(검사 구분·계측기 목록, 채워 올리면 판정) |
 | `core/api/tests_relations.py` | `RelationsApiTest`: 연결 패널 API 묶음·권한 없는 묶음 숨김·기록 권한·개인 앱 제외·관리 화면 없는 기록(url 없음)·쪽 나누기·쿼리 수 |
 | `qms/tests.py` `DocumentNumberingTest` | 관리 화면 문서 추가의 자동 번호·개정 자동 채움 |

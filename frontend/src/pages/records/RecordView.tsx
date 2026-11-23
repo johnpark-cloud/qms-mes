@@ -30,6 +30,7 @@ interface Detail {
   fields: Field[]; children: Child[]; side: string[]; admin_url: string | null; list_url: string; groups: Group[]
   version: number; locked: boolean; edit: Edit[]; can_change: boolean; can_approve: boolean
   can_dispose: boolean; dispose: Edit[] | null; can_close: boolean; links: { label: string; url: string }[]
+  notices: { message: string; label: string; url: string }[] // 기록 위 안내 띠(반복 부적합 → CAPA 제안)
   requests: { edit: boolean; delete: boolean }
 }
 interface Hist { history_id: number; kind?: string; date: string; user: string; type: string; changes: { field: string; old: string; new: string }[] }
@@ -308,6 +309,10 @@ export default function RecordView() {
       <EditRequestModal open={deleting} title={me?.is_superuser ? '삭제' : '삭제 요청'} onClose={() => setDeleting(false)} onSubmit={requestDelete} />
       {d.dispose && <DisposeModal open={disposing} fields={d.dispose} onClose={() => setDisposing(false)} onSubmit={dispose} />}
       {err && <Alert style={{ marginBottom: 12 }} type="error" message={err} />}
+      {d.notices.map((n) => (
+        <Alert key={n.message} style={{ marginBottom: 12 }} type="warning" showIcon message={n.message}
+          action={n.url ? <a href={n.url}><Button size="small" type="primary">{n.label}</Button></a> : undefined} />
+      ))}
       <RecordPage
         title={d.title}
         status={d.status ?? undefined}

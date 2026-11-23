@@ -5,6 +5,7 @@ from typing import Callable
 from django.urls import reverse
 from django.utils import timezone
 
+from core.api.records import capa_new_url, repeat_title
 from core.models import Hold, is_approver
 from core.modules import active
 from core.relations import record_url, trace_url
@@ -132,7 +133,7 @@ TODO_SECTIONS = [  # (todo_lists.html 구역 id, 이름, due_items 키): 보통 
     ('nc-notify', '고객 통보', 'nc_notify_pending'), ('edit-requests', '삭제·수정 요청', 'edit_requests'),
     ('my-rejected', '거절된 내 요청', 'my_rejected'), ('memos-unsorted', '미분류 메모', 'memos_unsorted'),
     ('fa', '초품 미확인', 'first_articles'), ('gauges', '계측기 교정', 'gauges'), ('partner-certs', '공급자 인증 만료', 'partner_certs'),
-    ('ppaps', 'PPAP 제출', 'ppaps'),
+    ('ppaps', 'PPAP 제출', 'ppaps'), ('repeat-ncs', '반복 부적합', 'repeat_ncs'),
 ]
 
 
@@ -256,6 +257,8 @@ def todo_lists_data(ctx, d, size):
                                 overdue=lambda c: c.valid_until < d['today']),
         'ppaps': _lines(d['ppaps'], str, lambda p: change('qms_ppapsubmission', p), due_date=lambda p: p.due_date,
                         overdue=lambda p: p.due_date < d['today']),
+        'repeat_ncs': [{'label': f"{g['item']} · {g['defect_type']}", 'href': capa_new_url(g['latest'], repeat_title(g)),
+                        'count': len(g['ncs'])} for g in d['repeat_ncs']],
         'approvals': [{'kind': kind, 'label': str(o), 'href': href(o)} for kind, key, href in pend for o in d[key]],
     }
 
