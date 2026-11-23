@@ -2,9 +2,12 @@
 from django.contrib.contenttypes.models import ContentType
 from django.core.exceptions import ValidationError
 from django.db.models import Count, Exists, OuterRef, Q, Subquery
+from django.http import HttpResponse
 from django.shortcuts import get_object_or_404
 from django.urls import reverse
 from django.utils import timezone
+from django.utils.http import content_disposition_header
+from rest_framework.parsers import MultiPartParser
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
@@ -14,7 +17,8 @@ from core.export import document_xlsx, table_xlsx, xlsx_response
 from core.models import Hold, Item, Lot, Nonconformance
 from core.relations import record_url, trace_url
 from qms.models import Capa, ExcelTemplate, Gauge, Inspection, InspectionSpec
-from qms.rules import RECEIVE_MSG, measurement, receive_lot, submit_inspection
+from qms.rules import (RECEIVE_MSG, UPLOAD_RESULT, gauge_kind, measurement, pick_gauge, receive_lot, submit_inspection,
+                       upload_measurements, upload_template, usable_gauges)
 
 from .specs import BAD_BODY, PAGE_SIZE, _bad
 
@@ -140,21 +144,18 @@ class FormView(APIView):
             Inspection(lot=lot, spec=spec).clean()
         except ValidationError as e:
             return _bad(e.messages[0])
-        today = timezone.localdate()
-        usable = [g for g in Gauge.objects.filter(active=True).order_by('number') if g.usable_on(today)]
+        usable = usable_gauges()
 
-        def kind_of(c):  # 검사항목의 계측기 종류, 비면 관리계획서 측정방법
-            return (c.gauge_kind or (c.plan_line.method if c.plan_line else '')).strip()
-
-        def pick(key):  # 종류·이름에 그 말이 들어 있는 첫 계측기(교정 기한 안)
-            return next((g.pk for g in usable if key.lower() in f'{g.kind} {g.name}'.lower()), None) if key else None
+        def pick(key):
+            g = pick_gauge(key, usable)
+            return g.pk if g else None
 
         chars = spec.characteristics.select_related('plan_line').order_by('pk')
         return Response({
             'lot': _lot(lot), 'spec': {'id': spec.pk, 'title': str(spec), 'sampling': spec.sampling},
             'characteristics': [{'id': c.pk, 'name': c.name, 'spec_text': c.spec_text(), 'unit': c.unit,
-                                 'is_variable': c.is_variable, 'special': c.special, 'gauge_kind': kind_of(c),
-                                 'gauge': pick(kind_of(c)) if c.is_variable else None}
+                                 'is_variable': c.is_variable, 'special': c.special, 'gauge_kind': gauge_kind(c),
+                                 'gauge': pick(gauge_kind(c)) if c.is_variable else None}
                                 for c in chars],
             'gauges': [{'value': g.pk, 'label': str(g)} for g in usable],
             'defect_types': DEFECT_TYPES,
@@ -226,6 +227,36 @@ class SubmitView(APIView):
         nc = insp.nonconformance
         return Response({'id': insp.pk, 'result': insp.result, 'result_display': insp.get_result_display(),
                          'nonconformance': {'id': nc.pk, 'number': nc.number} if nc else None}, status=201)
+
+
+class UploadView(APIView):
+    """측정 원자료 업로드(docs/data-flow.md 5절). GET은 미리보기 열, POST(file, commit 0|1)는 판정한다. 올린 사람이 검사원."""
+    schema = None
+    parser_classes = [MultiPartParser]
+
+    def get(self, request):
+        require_perm(request.user, PERM)
+        return Response({'label': '측정 원자료(검사 판정)', 'columns': UPLOAD_RESULT})
+
+    def post(self, request):
+        require_perm(request.user, PERM)
+        d = request.data
+        if not d.get('file'):
+            return _bad('파일을 선택하세요.', 'file')
+        if d.get('commit') not in ('0', '1'):
+            return _bad('commit 값이 올바르지 않습니다.', 'commit')
+        count, errors, rows = upload_measurements(d['file'], request.user, d['commit'] == '0')
+        return Response({'count': count, 'errors': errors, 'rows': rows})
+
+
+class UploadTemplateView(APIView):
+    schema = None
+
+    def get(self, request):
+        require_perm(request.user, PERM)
+        r = HttpResponse(upload_template(), content_type='text/csv; charset=utf-8')
+        r['Content-Disposition'] = content_disposition_header(True, '측정 원자료 양식.csv')
+        return r
 
 
 LIST_COLUMNS = ['검사 일시', 'LOT', '품번', '품명', '공급자', '검사기준', '검사자', '판정', '부적합']

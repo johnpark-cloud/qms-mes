@@ -29,6 +29,8 @@ urlpatterns = [
     path('inspect/form/<int:lot_id>/<int:spec_id>/', inspections.FormView.as_view()),
     path('inspect/check/', inspections.CheckView.as_view()),
     path('inspect/submit/', inspections.SubmitView.as_view()),
+    path('inspect/upload/', inspections.UploadView.as_view()),
+    path('inspect/upload/template/', inspections.UploadTemplateView.as_view()),
     path('kpi/', analysis.KpiView.as_view()),
     path('suppliers/', analysis.SuppliersView.as_view()),
     path('spc/<int:pk>/', analysis.SpcView.as_view()),

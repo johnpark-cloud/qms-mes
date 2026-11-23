@@ -16,6 +16,10 @@ interface Target {
   label: string
   headers: Record<string, string>
 }
+interface Measure {
+  label: string
+  columns: Record<string, string>
+}
 interface Preview {
   count: number
   errors: string[]
@@ -27,7 +31,9 @@ const errText = (e: unknown, fallback: string) => (e instanceof Error ? e.messag
 export default function ImportPage() {
   const profiles = useQuery({ queryKey: ['import-profiles'], queryFn: () => api<Profile[]>('/api/core/import/profiles/') })
   const targets = useQuery({ queryKey: ['import-targets'], queryFn: () => api<Target[]>('/api/core/import/targets/') })
-  // 'p:3'은 가져오기 설정, 't:qms.gauge'는 빈 양식(표준 열 제목)
+  // 검사 권한이 없거나 검사 모듈이 꺼져 있으면 서버가 거부하고 선택지에서 빠진다
+  const measure = useQuery({ queryKey: ['import-measure'], queryFn: () => api<Measure>('/api/qms/inspect/upload/'), retry: false })
+  // 'p:3'은 가져오기 설정, 't:qms.gauge'는 빈 양식(표준 열 제목), 'm'은 측정 원자료(검사 판정)
   const [choice, setChoice] = useState<string>()
   const [file, setFile] = useState<File | null>(null)
   const [preview, setPreview] = useState<Preview | null>(null)
@@ -37,7 +43,8 @@ export default function ImportPage() {
   const [busy, setBusy] = useState(false)
   const profile = profiles.data?.find((p) => `p:${p.id}` === choice)
   const target = targets.data?.find((t) => `t:${t.key}` === choice)
-  const mapping = profile?.mapping ?? target?.headers ?? {}
+  const isMeasure = choice === 'm' && !!measure.data
+  const mapping = profile?.mapping ?? target?.headers ?? (isMeasure ? measure.data!.columns : {})
 
   const run = async (commit: '0' | '1') => {
     setErr('')
@@ -46,10 +53,10 @@ export default function ImportPage() {
       // FormData 본문은 api()가 Content-Type 을 건드리지 않으므로 브라우저가 경계값을 붙인다.
       const body = new FormData()
       if (target) body.append('target', target.key)
-      else body.append('profile', String(profile!.id))
+      else if (profile) body.append('profile', String(profile.id))
       body.append('file', file!)
       body.append('commit', commit)
-      const r = await api<Preview>('/api/core/import/', { method: 'POST', body })
+      const r = await api<Preview>(isMeasure ? '/api/qms/inspect/upload/' : '/api/core/import/', { method: 'POST', body })
       if (commit === '0') {
         setPreview(r)
         setDone(null)
@@ -78,7 +85,7 @@ export default function ImportPage() {
 
   const columns = [
     { title: '행', dataIndex: 'line', width: 70 },
-    ...Object.keys(mapping).map((f) => ({ title: target ? mapping[f] : `${f} (${mapping[f]})`, render: (_: unknown, r: Preview['rows'][number]) => r.values[f] })),
+    ...Object.keys(mapping).map((f) => ({ title: profile ? `${f} (${mapping[f]})` : mapping[f], render: (_: unknown, r: Preview['rows'][number]) => r.values[f] })),
   ]
   const canCommit = !!preview && preview.errors.length === 0 && preview.rows.length > 0
 
@@ -96,6 +103,7 @@ export default function ImportPage() {
           // 회사 설정은 몇 개뿐이라 위에, 종류 20여 개는 아래에 둔다(검색으로 찾는다).
           options={[
             { label: '가져오기 설정', options: (profiles.data ?? []).map((p) => ({ value: `p:${p.id}`, label: `${p.name} · ${p.target_display}` })) },
+            ...(measure.data ? [{ label: '검사 판정', options: [{ value: 'm', label: measure.data.label }] }] : []),
             { label: '빈 양식(표준 열 제목)', options: (targets.data ?? []).map((t) => ({ value: `t:${t.key}`, label: t.label })) },
           ]}
           value={choice}
@@ -105,6 +113,7 @@ export default function ImportPage() {
           }}
         />
         {target && <Button href={`/api/core/import/template/?target=${encodeURIComponent(target.key)}`}>빈 양식 받기</Button>}
+        {isMeasure && <Button href="/api/qms/inspect/upload/template/">빈 양식 받기</Button>}
         <input
           aria-label="파일 선택"
           type="file"
@@ -114,7 +123,7 @@ export default function ImportPage() {
             stale()
           }}
         />
-        <Button type="primary" disabled={!(profile || target) || !file} loading={busy} onClick={() => run('0')}>
+        <Button type="primary" disabled={!(profile || target || isMeasure) || !file} loading={busy} onClick={() => run('0')}>
           미리보기
         </Button>
         <Button disabled={!canCommit || busy} onClick={() => run('1')}>

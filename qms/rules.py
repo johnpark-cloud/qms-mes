@@ -5,6 +5,7 @@ from django.contrib.contenttypes.models import ContentType
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import transaction
 from django.db.models import Max
+from django.utils import timezone
 
 from core.grid import collect_rows, record_version
 from core.models import Lot, RevisionLog
@@ -61,6 +62,111 @@ def submit_inspection(lot, spec, user, gauge, values, defect_type='', defect_qty
             nc.inspected_qty, nc.detected_by = lot.qty, user
             nc.save()
     return insp
+
+
+def usable_gauges():
+    """오늘 쓸 수 있는(사용 중·교정 기한 안) 계측기, 관리번호 순."""
+    today = timezone.localdate()
+    return [g for g in Gauge.objects.filter(active=True).order_by('number') if g.usable_on(today)]
+
+
+def gauge_kind(char):
+    """검사항목의 계측기 종류, 비면 관리계획서 측정방법."""
+    return (char.gauge_kind or (char.plan_line.method if char.plan_line else '')).strip()
+
+
+def pick_gauge(key, usable):
+    """종류·이름에 그 말이 들어 있는 첫 계측기. 없으면 None."""
+    return next((g for g in usable if key.lower() in f'{g.kind} {g.name}'.lower()), None) if key else None
+
+
+# ---------- 측정 원자료 업로드 (docs/data-flow.md 5절) ----------
+
+UPLOAD_COLUMNS = ('lot', 'type', 'characteristic', 'value', 'gauge')
+UPLOAD_RESULT = {'lot': 'LOT', 'type': '검사 구분', 'count': '항목 수', 'result': '판정', 'nonconformance': '부적합'}
+_TYPES = {**{c: c for c, _ in InspectionSpec.TYPES}, **{label: c for c, label in InspectionSpec.TYPES}}
+_OK, _NG = ('OK', '1', 'PASS', '합격'), ('NG', '0', 'FAIL', '불합격')
+
+
+def _upload_text(v):
+    return '' if v is None else str(v).strip()
+
+
+def _upload_group(lot_no, t, lines, user, usable):
+    """같은 (LOT, 검사 구분) 행 묶음을 submit_inspection으로 판정한다. 틀리면 ValidationError(행 번호를 붙인 글)."""
+    first = lines[0][0]
+    lot = Lot.objects.filter(number=lot_no).select_related('item').first()
+    if lot is None:
+        raise ValidationError(f'{first}행: LOT "{lot_no}"이(가) 없습니다.')
+    if t not in dict(InspectionSpec.TYPES):
+        raise ValidationError(f'{first}행: 검사 구분 "{t}"을(를) 알 수 없습니다.')
+    spec = InspectionSpec.current(lot.item, t)
+    if spec is None:
+        raise ValidationError(f'{first}행: {lot.item.code} {dict(InspectionSpec.TYPES)[t]}의 승인된 검사기준이 없습니다.')
+    chars = {c.name: c for c in spec.characteristics.select_related('plan_line')}
+    values, gauges = {}, {}
+    for line, name, value, number in lines:
+        c = chars.get(name)
+        if c is None:
+            raise ValidationError(f'{line}행: 검사항목 "{name}"이(가) {spec}에 없습니다.')
+        if c.pk in values:
+            raise ValidationError(f'{line}행: 검사항목 "{name}"이(가) 두 번 나옵니다.')
+        if not c.is_variable:  # 계수형은 화면과 같은 OK/NG로 바꾼다. 모르는 글은 불합격으로 넘기지 않고 거부한다
+            value = 'OK' if value.upper() in _OK else 'NG' if value.upper() in _NG else None
+            if value is None:
+                raise ValidationError(f'{line}행: {name} 값은 OK·NG(1·0, 합격·불합격)로 적으세요.')
+        elif measurement(c, value) is None:
+            raise ValidationError(f'{line}행: {name} 값 "{value}"이(가) 숫자가 아닙니다.')
+        values[c.pk] = value
+        if c.is_variable:  # 계측기 칸이 비면 검사 입력 화면과 같이 맞는 계측기를 고른다
+            g = Gauge.objects.filter(number=number).first() if number else pick_gauge(gauge_kind(c), usable)
+            if number and g is None:
+                raise ValidationError(f'{line}행: 계측기 "{number}"이(가) 없습니다.')
+            if g:
+                gauges[c.pk] = g
+    try:
+        return submit_inspection(lot, spec, user, None, values, gauges=gauges)
+    except ValidationError as e:
+        raise ValidationError(f'{first}행 {lot_no}: {" ".join(e.messages)}')
+
+
+def upload_measurements(uploaded, user, dry_run):
+    """측정 원자료 파일(CSV·xlsx)을 검사 입력 화면과 같은 판정 경로로 넣는다. 묶음 하나라도 틀리면 전부 되돌린다.
+    (판정 건수, 오류 목록, 결과 행)을 돌려준다. dry_run이면 판정까지 해 본 뒤 늘 되돌린다(미리보기)."""
+    from core.importer import READ_ERROR, read_rows
+    try:
+        rows = list(read_rows(uploaded, 1))
+    except Exception:  # 빈 파일·깨진 xlsx·인코딩을 알 수 없는 CSV
+        return 0, [READ_ERROR], []
+    groups = {}
+    for line, r in rows:
+        try:
+            lot_no, t, name, value = (_upload_text(r[k]) for k in UPLOAD_COLUMNS[:4])
+        except KeyError as e:
+            return 0, [f'열 {e} 없음'], []
+        groups.setdefault((lot_no, _TYPES.get(t, t)), []).append((line, name, value, _upload_text(r.get('gauge'))))
+    count, errors, results, usable = 0, [], [], usable_gauges()
+    with transaction.atomic():
+        for (lot_no, t), lines in groups.items():
+            try:
+                with transaction.atomic():
+                    insp = _upload_group(lot_no, t, lines, user, usable)
+            except ValidationError as e:
+                errors.append(' '.join(e.messages))
+                continue
+            count += 1
+            nc = insp.nonconformance
+            results.append({'line': lines[0][0], 'values': {
+                'lot': lot_no, 'type': insp.spec.get_inspection_type_display(), 'count': str(len(lines)),
+                'result': insp.get_result_display(), 'nonconformance': f'{nc.number} 등록 · LOT 보류' if nc else ''}})
+        if errors or dry_run:
+            transaction.set_rollback(True)
+    return count, errors, results
+
+
+def upload_template():
+    """측정 원자료 빈 양식: 1행 열 제목만. 한국어 엑셀이 바로 열도록 UTF-8 BOM."""
+    return (','.join(UPLOAD_COLUMNS) + '\r\n').encode('utf-8-sig')
 
 
 def receive_lot(number, item, qty_raw, supplier):
