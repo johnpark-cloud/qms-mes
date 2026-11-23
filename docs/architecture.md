@@ -13,7 +13,7 @@ QMS+MES는 Django 관리 화면(admin)을 기반으로 하고, 매일 쓰는 업
 | 정적 파일 | whitenoise | `config/settings.py` |
 | 화면 부분 갱신 | htmx (동봉, 외부 로드 없음) | `templates/admin/base_site.html` |
 | DB | SQLite 기본, `QMS_DB_NAME` 지정 시 PostgreSQL | `config/settings.py` |
-| PDF | 별도 라이브러리 없음. 인쇄용 HTML → 브라우저 "PDF로 저장" | `core/templates/core/print.html` |
+| PDF | 별도 라이브러리 없음. 인쇄용 화면 → 브라우저 "PDF로 저장" | React `DocumentView`(문서 구조 API), 새 화면이 없는 기록만 `core/templates/core/print.html` |
 
 ## 폴더와 앱
 
@@ -33,7 +33,7 @@ docs/        구조·업무 규칙·테스트 문서, superpowers/ 설계·계�
 
 | 파일 | 역할 |
 | --- | --- |
-| `models.py` | `Approvable`(승인 필드·잠금 기반 클래스), 품번 `Item`·공정 `Process`·BOM `BomLine`·라우팅 `RoutingStep`, 작업지시 `WorkOrder`·실적 `WorkResult`, LOT `Lot`·계보 `LotLink`, 부적합 `Nonconformance`·사진 `NonconformancePhoto`, 보류 `Hold`, 출하 `Shipment`, 삭제·수정 요청 `EditRequest`, 엑셀 가져오기 설정 `ImportProfile`·확정한 들여오기 기록 `ImportLog`(원본 파일은 `QMS_IMPORT_DIR`, 기본 `data/imports/`), 개정 이력 `RevisionLog`(신청 → 승인자 확정, 확정 후 수정·삭제 불가), 기준정보 `MasterModel` 기반의 부서 `Department`(조직도: 상위 부서·부서장)·거래처 `Partner`(코드 자동 부여 `next_code`, 구분, 담당자 여러 명 `contacts` JSON, 인증서 `PartnerCertificate`; 옛 `qc_*` 칸은 남아 있으나 쓰지 않음), 사용자 정의 필드 `FieldDef`(값은 각 기준정보의 `extra` JSON), 기록 첨부 `Attachment`(ContentType + id, 파일은 `data/attachments/`). `Lot`·`Shipment`의 `partner`가 거래처를 가리킨다 |
+| `models.py` | `Approvable`(승인 필드·잠금 기반 클래스), 품번 `Item`·공정 `Process`·BOM `BomLine`·라우팅 `RoutingStep`, 작업지시 `WorkOrder`·실적 `WorkResult`, LOT `Lot`·계보 `LotLink`, 부적합 `Nonconformance`·사진 `NonconformancePhoto`, 보류 `Hold`, 출하 `Shipment`, 삭제·수정 요청 `EditRequest`, 엑셀 가져오기 설정 `ImportProfile`·확정한 들여오기 기록 `ImportLog`(원본 파일은 `QMS_IMPORT_DIR`, 기본 `data/imports/`), 개정 이력 `RevisionLog`(신청 → 승인자 확정, 확정 후 수정·삭제 불가), 기준정보 `MasterModel` 기반의 부서 `Department`(조직도: 상위 부서·부서장)·인사 정보 `Member`(사용자 1:1, 부서·사번·직위·직책·연락처; 화면은 `core/api/users.py` `/api/core/org/`)·거래처 `Partner`(코드 자동 부여 `next_code`, 구분, 담당자 여러 명 `contacts` JSON, 인증서 `PartnerCertificate`; 옛 `qc_*` 칸은 남아 있으나 쓰지 않음), 사용자 정의 필드 `FieldDef`(값은 각 기준정보의 `extra` JSON), 기록 첨부 `Attachment`(ContentType + id, 파일은 `data/attachments/`). `Lot`·`Shipment`의 `partner`가 거래처를 가리킨다 |
 | `admin.py` | `BaseAdmin`(삭제는 시스템 관리자만, 승인 잠금, 요청 링크, 상세 화면 관련 기록 `related_panel`), 부적합 폼(MRB 처분 시 비밀번호·보완 필수 칸 검사) |
 | `records.py` | 삭제(`delete_record`), 잠금(`is_locked`), 잠금 해제 확인(`can_edit_locked`) 규칙 |
 | `views.py` | LOT 추적, 통합 검색, 부적합 간편 등록, 승인 서명, 삭제·수정 요청, 출력, 부적합 메일·사진 ZIP, 엑셀 가져오기 |
@@ -72,7 +72,7 @@ docs/        구조·업무 규칙·테스트 문서, superpowers/ 설계·계�
 
 ### frontend (`frontend/`)
 
-React 19·TypeScript·Vite·Ant Design 새 화면. 개발 PC에서 `npm run build`로 `frontend/dist/`를 만들고 그 결과를 저장소에 함께 넣는다. Django는 `/app/` 아래 모든 주소에 `dist/index.html`을 내려 주고(`core/views.py` `spa`), JS·CSS는 whitenoise가 `/static/app/`에서 제공하므로 운영 PC에는 Node가 필요 없다. 지금은 `/app/overview`·`/app/todo`·`/app/specs`(목록·`:id` 기록 페이지·`:id/print` 인쇄)·`/app/inspect`(스캔·`:lot/:spec` 측정)·`/app/inspections`(목록·`:id` 기록 페이지·`:id/print` 성적서 인쇄)·`/app/items`(목록·`:id` 속성·BOM·라우팅)·`/app/processes`·`/app/customer-rules`(표 편집)·`/app/plans`(목록·`:id` 기록 페이지·`:id/print` 가로 인쇄)·`/app/import`(엑셀 일괄 등록 미리보기·확정)·`/app/trace`(LOT 계보 그림·이력)·`/app/memos`(미분류 메모)·`/app/audit`가 있고 데이터는 API로만 받는다. `core/api/views.py`에는 LOT 찾기(`/api/core/lots/?q=`, 번호·품번·품명·공급자 일부)·LOT 계보와 이력(`/api/core/trace/?lot=`)·통합 검색(`/api/search/`)·품번 조회(`/api/items/`)·감사 추적(`/api/audit-log/`, 승인자만)·개정 이력 확정(`/api/revision-log/<id>/approve/`)이 있다.
+React 19·TypeScript·Vite·Ant Design 새 화면. 개발 PC에서 `npm run build`로 `frontend/dist/`를 만들고 그 결과를 저장소에 함께 넣는다. Django는 `/app/` 아래 모든 주소에 `dist/index.html`을 내려 주고(`core/views.py` `spa`), JS·CSS는 whitenoise가 `/static/app/`에서 제공하므로 운영 PC에는 Node가 필요 없다. 지금은 `/app/overview`·`/app/todo`·`/app/specs`(목록·`:id` 기록 페이지·`:id/print` 인쇄)·`/app/inspect`(스캔·`:lot/:spec` 측정)·`/app/inspections`(목록·`:id` 기록 페이지·`:id/print` 성적서 인쇄)·`/app/items`(목록·`:id` 속성·BOM·라우팅)·`/app/processes`·`/app/customer-rules`(표 편집)·`/app/plans`(목록·`:id` 기록 페이지·`:id/print` 가로 인쇄)·`/app/r/:app/:model/:id/print`(기록 양식지: `/api/records/<앱.모델>/<번호>/document/`, 구역은 `recordspec.DOCS` 또는 모델의 `print_table`, 옛 `/print/`는 여기로 넘김)·`/app/import`(엑셀 일괄 등록 미리보기·확정)·`/app/trace`(LOT 계보 그림·이력)·`/app/memos`(미분류 메모)·`/app/audit`가 있고 데이터는 API로만 받는다. `core/api/views.py`에는 LOT 찾기(`/api/core/lots/?q=`, 번호·품번·품명·공급자 일부)·LOT 계보와 이력(`/api/core/trace/?lot=`)·통합 검색(`/api/search/`)·품번 조회(`/api/items/`)·감사 추적(`/api/audit-log/`, 승인자만)·개정 이력 확정(`/api/revision-log/<id>/approve/`)이 있다.
 
 | 위치 | 역할 |
 | --- | --- |
@@ -102,7 +102,7 @@ React 19·TypeScript·Vite·Ant Design 새 화면. 개발 PC에서 `npm run buil
 
 ## 요청 흐름과 화면
 
-- 모든 화면이 `templates/admin/base_site.html`(회색 상단 바 + `qms_sidebar.html` 사이드바)을 상속한다. 예외는 인쇄용 화면(`print.html`, `nc_print.html`, `audit_pack.html`)과 htmx 조각 템플릿이다.
+- 모든 화면이 `templates/admin/base_site.html`(회색 상단 바 + `qms_sidebar.html` 사이드바)을 상속한다. 예외는 인쇄용 화면(`print.html`, `audit_pack.html`)과 htmx 조각 템플릿이다.
 - 새 React 화면은 `/app/`, JSON API는 `/api/`(`core/api`·`qms/api`)에 있다. 기존 화면과 같은 로그인 세션·권한을 쓴다.
 - URL은 `config/urls.py` 한 곳에 있다. `/admin/`은 기준정보·전체 기록이고, `/todo/`·`/overview/`·`/inspect/`·`/trace/`·`/nc/new/`·`/kpi/`·`/suppliers/`·`/audit-pack/`·`/memo/*`·`/me/`·`/search/`가 전용 화면이다. `/`는 `/app/todo`로 보내고, 부적합 간편 등록 새 화면 `/app/nc-new`는 `/api/core/nc-quick/`로 옛 화면과 같은 양식·저장 함수(`core/views.py` `save_quick_nc`)를 쓴다. 옛 화면 주소 → 새 화면 주소 짝은 `core/nav.py` `APP_PAGES` 한 곳에 둔다(사이드바·me API·검색이 `app_href`로 바꾼다). LOT 이력 링크는 `core/relations.py` `trace_url`이 만든다.
 - 첨부 파일(`/media/`)은 `staff_member_required`로 로그인한 스태프만 받을 수 있다.

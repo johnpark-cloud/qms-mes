@@ -743,7 +743,7 @@ class RecordsMesMasterApiTest(TestCase):
         self.assertEqual(root['검사 실적'], '/app/inspections')
         self.assertEqual(root['품목·BOM·라우팅'], '/app/items')
         self.assertEqual(root['고객사별 8D 기한'], '/app/customer-rules')
-        self.assertEqual({k for k, v in root.items() if v.startswith('/admin/')}, {'사용자', '모듈 설정', '관리자 화면'})
+        self.assertEqual({k for k, v in root.items() if v.startswith('/admin/')}, {'관리자 화면'})
         lead = User.objects.create_user('lead', password='pw', is_staff=True)
         lead.groups.add(Group.objects.get(name='품질팀장'))
         self.client.force_login(lead)
@@ -791,9 +791,50 @@ class RecordsCreateApiTest(TestCase):
         self.assertEqual(f['work_order']['type'], 'choice')
         self.assertIn({'value': str(self.wo.pk), 'label': 'WO-1'}, f['work_order']['choices'])
         self.assertFalse(f['lot']['required'])
-        self.assertEqual(self.client.get('/api/records/qms.exceltemplate/new/').status_code, 404)  # create 없는 설명서
+        self.assertEqual(self.client.get('/api/records/core.hold/new/').status_code, 404)  # create 없는 설명서
         self.assertEqual(self.client.get('/api/records/core.workorder/').json()['new_url'], '/app/r/core/workorder/new')
-        self.assertEqual(self.client.get('/api/records/qms.exceltemplate/').json()['new_url'], '/admin/qms/exceltemplate/add/')
+        # 옛 관리 화면 추가 폼으로 보내지 않는다: 파일·JSON 칸 양식도 새 화면에서 만든다
+        self.assertEqual(self.client.get('/api/records/qms.exceltemplate/').json()['new_url'], '/app/r/qms/exceltemplate/new')
+        self.assertEqual(self.client.get('/api/records/core.importprofile/').json()['new_url'], '/app/r/core/importprofile/new')
+        self.assertEqual(self.client.get('/api/records/qms.documentrevision/').json()['new_url'], '/app/r/qms/documentrevision/new')
+        self.assertIsNone(self.client.get('/api/records/core.hold/').json()['new_url'])
+
+    def test_create_with_file_and_json(self):
+        import json
+
+        from django.contrib.contenttypes.models import ContentType
+
+        from qms.models import ExcelTemplate
+        f = {e['key']: e for e in self.client.get('/api/records/qms.exceltemplate/new/').json()['fields']}
+        self.assertEqual((f['file']['type'], f['mapping']['type']), ('file', 'json'))
+        self.assertIn('B3', f['mapping']['help'])
+        ct = str(ContentType.objects.get(app_label='core', model='nonconformance').pk)
+        values = {'name': '고객 양식', 'target': ct, 'mapping': '{"B3": "number"}'}
+        r = self.client.post('/api/records/qms.exceltemplate/', {'values': json.dumps(values),
+                                                                 'file': SimpleUploadedFile('양식.xlsx', b'x')})
+        self.assertEqual(r.status_code, 201, r.content)
+        t = ExcelTemplate.objects.get(pk=r.json()['id'])
+        self.assertEqual(t.mapping, {'B3': 'number'})
+        self.assertTrue(t.file.name.endswith('.xlsx'))
+        # 파일이 없고 JSON이 깨지면 칸별 오류
+        r = self.client.post('/api/records/qms.exceltemplate/', {'values': json.dumps({**values, 'mapping': '{'})})
+        self.assertEqual(r.status_code, 400, r.content)
+        self.assertEqual(set(r.json()['fields']), {'file', 'mapping'})
+        # 설명서 밖 파일 칸은 거부
+        r = self.client.post('/api/records/core.importprofile/', {'values': json.dumps({'name': 'x'}),
+                                                                  'photo': SimpleUploadedFile('a.png', b'x')})
+        self.assertEqual(r.status_code, 400)
+        self.assertIn('photo', r.json()['fields'])
+
+    def test_create_import_profile_json_mapping(self):
+        from core.models import ImportProfile
+        r = self.post('core.importprofile', {'name': '고객 A', 'target': 'work_order', 'header_row': '2',
+                                             'mapping': '{"number": "지시번호"}'})
+        self.assertEqual(r.status_code, 201, r.content)
+        self.assertEqual(ImportProfile.objects.get(pk=r.json()['id']).mapping, {'number': '지시번호'})
+        r = self.post('core.importprofile', {'name': '고객 B', 'target': 'work_order', 'mapping': '{"nope": "x"}'})
+        self.assertEqual(r.status_code, 400)  # 모델 clean: 대상에 없는 칸
+        self.assertIn('mapping', r.json()['fields'])
 
     def test_create_work_order_and_result(self):
         from core.models import WorkOrder, WorkResult
@@ -937,3 +978,64 @@ class NewScreenCreateTest(TestCase):
                              content_type='application/json')
         self.assertEqual(r.status_code, 201, r.content)
         self.assertTrue(Gauge.objects.filter(number='G-9').exists())
+
+
+class RecordDocumentApiTest(TestCase):
+    """양식지(W3): 기록 화면 「양식지」 → A4 한 장 문서. 옛 인쇄 주소(/print/…)는 새 양식지로 넘긴다."""
+
+    def setUp(self):
+        from core.models import Item, Lot, Nonconformance, NonconformancePhoto
+        from qms.models import Capa, Gauge
+        self.root = User.objects.create_superuser('root', password='pw')
+        self.lot = Lot.objects.create(number='L-1', item=Item.objects.create(code='R1', name='양극재', item_type=Item.RAW))
+        self.nc = Nonconformance.objects.create(lot=self.lot, description='찍힘', defect_type='외관', detected_by=self.root)
+        NonconformancePhoto.objects.create(nonconformance=self.nc, file=SimpleUploadedFile('a.jpg', b'0' * 10), caption='찍힘 부위')
+        self.capa = Capa.objects.create(title='치수 대책', source='OTHER', action='지그', owner=self.root,
+                                        due_date=timezone.localdate())
+        self.gauge = Gauge.objects.create(number='G-1', name='마이크로미터', last_calibrated=timezone.localdate())
+        self.client.force_login(self.root)
+
+    def doc(self, label, pk):
+        r = self.client.get(f'/api/records/{label}/{pk}/document/')
+        self.assertEqual(r.status_code, 200)
+        return r.json()
+
+    def test_nc_report_sections_photos_signoff(self):
+        d = self.doc('core.nonconformance', self.nc.pk)
+        self.assertEqual(d['title'], '부적합 보고서')
+        self.assertTrue(d['draft'])  # MRB 승인 전
+        self.assertEqual([t['title'][:1] for t in d['tables']], list('①②③④⑤⑥⑦'))
+        self.assertIn(['LOT', 'L-1'], d['tables'][1]['rows'])
+        self.assertIn(['부적합 유형', '외관'], d['tables'][2]['rows'])
+        self.assertEqual(d['head'], [])  # 구역 표가 머리말을 대신한다
+        self.assertEqual([p['caption'] for p in d['photos']], ['찍힘 부위'])
+        self.assertEqual(d['signoff']['written_by'], 'root')
+        self.assertEqual(d['signoff']['approved_by'], '')
+
+    def test_capa_sections_and_generic_head(self):
+        d = self.doc('qms.capa', self.capa.pk)
+        self.assertEqual(d['title'], '시정조치 보고서(CAPA)')
+        self.assertEqual([t['title'] for t in d['tables']], ['개요', '원인·대책', '유효성 확인'])
+        self.assertIn(['조치 내용', '지그'], d['tables'][1]['rows'])
+        self.assertFalse(d['draft'])
+        g = self.doc('qms.gauge', self.gauge.pk)  # 구역이 없는 기록: 상세 칸 전부를 머리말로
+        self.assertEqual(g['title'], '계측기')
+        self.assertIn(['관리번호', 'G-1'], g['head'])
+
+    def test_xlsx(self):
+        r = self.client.get(f'/api/records/core.nonconformance/{self.nc.pk}/document/?export=xlsx')
+        self.assertEqual(r.status_code, 200)
+        ws = load_workbook(BytesIO(r.content)).active
+        self.assertEqual(ws['A1'].value, '부적합 보고서')
+
+    def test_view_permission_required(self):
+        u = User.objects.create_user('nobody', password='pw', is_staff=True)
+        self.client.force_login(u)
+        self.assertEqual(self.client.get(f'/api/records/core.nonconformance/{self.nc.pk}/document/').status_code, 403)
+        self.assertEqual(self.client.get('/api/records/auth.user/1/document/').status_code, 404)
+
+    def test_old_print_url_moves_to_new_sheet(self):
+        r = self.client.get(f'/print/core/nonconformance/{self.nc.pk}/')
+        self.assertRedirects(r, f'/app/r/core/nonconformance/{self.nc.pk}/print', fetch_redirect_response=False)
+        r = self.client.get('/print/qms/inspection/7/')
+        self.assertEqual(r.status_code, 404)  # 없는 검사는 넘기기 전에 404

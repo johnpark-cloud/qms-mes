@@ -15,7 +15,9 @@ APP_PAGES = {'/admin/core/item/': '/app/items', '/admin/core/process/': '/app/pr
              # 옛 서버 화면 → 같은 일을 하는 새 화면 (옛 주소도 계속 열린다)
              '/todo/': '/app/todo', '/overview/': '/app/overview', '/inspect/': '/app/inspect', '/import/': '/app/import',
              '/trace/': '/app/trace', '/memo/inbox/': '/app/memos', '/nc/new/': '/app/nc-new',
-             '/kpi/': '/app/kpi', '/suppliers/': '/app/suppliers'}
+             '/kpi/': '/app/kpi', '/suppliers/': '/app/suppliers', '/audit-pack/': '/app/audit-pack',
+             '/memo/new/': '/app/memos', '/admin/core/moduleswitch/': '/app/modules',
+             '/admin/auth/user/': '/app/users'}
 
 
 def nav_url(name):
@@ -125,7 +127,7 @@ NAV = [
                        ('엑셀 일괄 등록', 'import', 'core.view_importprofile'),
                        ('부서', 'admin:core_department_changelist', 'core.view_department'),
                        ('사용자 정의 필드', 'admin:core_fielddef_changelist', 'core.view_fielddef'),
-                       ('사용자', 'admin:auth_user_changelist', lambda u: u.is_superuser),  # 관리 화면은 시스템 관리자 메뉴
+                       ('사용자·조직도', 'admin:auth_user_changelist', lambda u: u.is_superuser),  # 새 화면 /app/users (core/api/users.py)
                        ('감사 추적', 'app_audit', is_approver),  # 변경 이력(audit trail) 조회
                        ('모듈 설정', 'admin:core_moduleswitch_changelist', lambda u: u.is_superuser),
                        ('관리자 화면', 'admin:index', lambda u: u.is_superuser)]),

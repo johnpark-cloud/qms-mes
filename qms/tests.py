@@ -432,7 +432,7 @@ class QmsTest(TestCase):
         ws = load_workbook(BytesIO(tpl.fill(ship))).active
         self.assertEqual([ws['B1'].value, ws['A3'].value, ws['F3'].value, ws['G3'].value], ['RAW-1', '수분', 150, '합격'])
         self.client.force_login(self.lead)
-        self.assertContains(self.client.get(f'/print/core/shipment/{ship.pk}/'), '출하성적서')
+        self.assertContains(self.client.get(f'/api/records/core.shipment/{ship.pk}/document/'), '출하성적서')
 
     # 자동수집
     def test_collect_csv(self):
@@ -630,7 +630,7 @@ class QmsTest(TestCase):
         ppap.level = 2
         with self.assertRaises(ValidationError):
             ppap.save()
-        self.assertContains(self.client.get(f'/print/qms/ppapsubmission/{ppap.pk}/'), '부품 제출 보증서')
+        self.assertContains(self.client.get(f'/api/records/qms.ppapsubmission/{ppap.pk}/document/'), '부품 제출 보증서')
 
     def test_due_items_nc_and_requests(self):
         from core.models import EditRequest
@@ -793,7 +793,7 @@ class QmsTest(TestCase):
         self.assertIn('CL-2', html)
         self.assertIn('초과', html)
         self.assertEqual(self.client.get(f'/spc/{self.thk.pk}/').status_code, 200)
-        self.assertIn('CL-2', self.client.get(f'/print/qms/customerclaim/{claim.pk}/').content.decode())
+        self.assertIn('CL-2', self.client.get(f'/api/records/qms.customerclaim/{claim.pk}/document/').content.decode())
         # 빨간 상태 배지가 그려지는 화면들 (format_html 인자 누락 회귀 방지)
         ppap = PpapSubmission.objects.create(item=self.cell_item, customer='A사', reason='신규')
         AuditItem.objects.create(checklist=AuditChecklist.objects.create(name='QSA'), clause='1', requirement='x')

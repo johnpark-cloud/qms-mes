@@ -86,6 +86,7 @@ export interface DocStruct {
   tables: { title: string; columns: string[]; rows: string[][] }[]
   revisions: ({ label: string; changes: string; reason: string; requested_by: string; approved_by: string; approved_at: string }[]) | null
   signoff: { written_by: string; written_at: string; approved_by: string; approved_at: string }
+  photos?: { url: string; caption: string }[]
 }
 
 export interface Page<T> {

@@ -58,7 +58,8 @@ class Target(NamedTuple):
         return str(self.model._meta.verbose_name)
 
 
-EXCLUDED = {'core.numberrule', 'core.fielddef'}  # 설정 기록: 화면에서만 만든다(data-flow.md 6절)
+EXCLUDED = {'core.numberrule', 'core.fielddef', 'core.importprofile', 'qms.exceltemplate',
+            'qms.documentrevision'}  # 설정·파일 기록: 화면에서만 만든다(data-flow.md 6절)
 EXTRA = {'core.item': {'create': ('code', 'name', 'item_type'), 'edit': ('name', 'item_type')}}  # 품목은 전용 화면이라 SPECS 밖
 LEGACY = {'core.item': 'item', 'core.workorder': 'work_order'}  # 이미 저장된 설정의 대상 값(바꾸면 데이터 마이그레이션 필요)
 LOOKUP_KEYS = ('number', 'code', 'username')  # 외래키가 가리키는 모델에서 이 순서로 첫 유일 칸을 키로 쓴다

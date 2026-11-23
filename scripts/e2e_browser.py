@@ -714,6 +714,23 @@ try:
             ok, page_err = False, str(e)[:80]
         check('기록 화면: 부적합 MRB 처분', ok, page.url if ok else page_err)
 
+        # W3: 기록 양식지(A4 한 장) — 상세의 버튼과 옛 /print/ 주소 둘 다 새 양식지로
+        try:
+            rec = re.search(r'/app/r/core/nonconformance/(\d+)', page.url).group(1)
+            page.get_by_role('button', name='양식지 · 인쇄').click()
+            page.wait_for_url(f'**/app/r/core/nonconformance/{rec}/print')
+            page.locator('.doc-title', has_text='부적합 보고서').wait_for(timeout=5000)
+            page.locator('.doc-h2', has_text='① ').first.wait_for(timeout=5000)
+            page.goto(f'/print/core/nonconformance/{rec}/')
+            page.wait_for_url(f'**/app/r/core/nonconformance/{rec}/print')
+            page.locator('.doc-page', has_text='E2E 찍힘').wait_for(timeout=5000)
+            ok, page_err = True, ''
+        except Exception as e:
+            ok, page_err = False, str(e)[:120]
+        if os.environ.get('E2E_SHOTS'):
+            page.screenshot(path=os.path.join(os.environ['E2E_SHOTS'], 'nc-sheet.png'), full_page=True)
+        check('기록 양식지: 부적합 보고서(구역 표) · 옛 인쇄 주소 → 새 양식지', ok, page.url if ok else page_err)
+
         # 기록 화면 새로 만들기: 목록 「새로 만들기」 → 입력 → 저장 → 새 기록 화면
         try:
             page.goto('/app/r/core/department')
@@ -768,6 +785,63 @@ try:
         except Exception as e:
             ok, page_err = False, str(e)[:120]
         check('사용자 정의 칸 새로 만들기 → 선택지 Enter 입력 → 상세 "국민, 신한"', ok, page.url if ok else page_err)
+
+        # 옛 서버 화면을 대신한 새 화면(W2-2): 모듈 설정 표, 심사 자료 출력 품번 선택
+        try:
+            page.goto('/app/modules')
+            page.get_by_role('switch', name='심사 켜짐').wait_for(timeout=5000)
+            page.goto('/app/audit-pack')
+            page.get_by_text('품번을 고르면').wait_for(timeout=5000)
+            item = api_get(page, '/api/qms/audit-pack/')['items'][0]['id']
+            page.goto(f'/app/audit-pack?item={item}')
+            page.get_by_role('heading', name='1. 검사 요약').wait_for(timeout=5000)
+            ok, page_err = True, ''
+        except Exception as e:
+            ok, page_err = False, str(e)[:120]
+        if os.environ.get('E2E_SHOTS'):
+            page.screenshot(path=os.path.join(os.environ['E2E_SHOTS'], 'audit-pack.png'), full_page=True)
+        check('모듈 설정·심사 자료 출력 새 화면', ok, page.url if ok else page_err)
+
+        # 파일·JSON 칸 양식도 관리 화면 대신 새 화면에서 만든다(W2-3): 엑셀 보고서 양식
+        try:
+            page.goto('/app/r/qms/exceltemplate/new')
+            page.locator('#name').fill('E2E 양식')
+            page.locator('#target').click()
+            page.keyboard.type('부적합')
+            page.keyboard.press('Enter')
+            page.locator('input[type=file]').set_input_files({'name': 'e2e-template.xlsx', 'buffer': b'x',
+                                                              'mimeType': 'application/octet-stream'})
+            page.locator('#mapping').fill('{"B3": "number"}')
+            page.get_by_role('button', name='저장').click()
+            page.wait_for_url(re.compile(r'/app/r/qms/exceltemplate/\d+$'))
+            page.get_by_text('e2e-template').first.wait_for(timeout=5000)
+            ok, page_err = True, ''
+        except Exception as e:
+            ok, page_err = False, str(e)[:120]
+        check('엑셀 보고서 양식 새로 만들기 → 파일·셀 매핑 저장', ok, page.url if ok else page_err)
+
+        # 옛 사용자 관리 화면 대신 사용자·조직도(W5): 새 사용자 → 관리자 비밀번호 확인 → 조직도에 나타남
+        try:
+            page.goto('/app/users')
+            page.get_by_text('부서 없음').wait_for(timeout=5000)
+            page.get_by_role('button', name='사용자 추가').click()
+            page.get_by_label('아이디', exact=True).fill('e2e-kim')
+            page.get_by_label('성', exact=True).fill('김')
+            page.get_by_label('이름', exact=True).fill('검사')
+            page.get_by_label('초기 비밀번호', exact=True).fill('Qms!2026long')
+            page.get_by_label('검사원').check()
+            page.get_by_role('button', name='만들기').click()
+            page.locator('.ant-modal input[type=password]').fill('e2e-pass-123')
+            page.get_by_role('button', name='서명').click()
+            page.wait_for_url(re.compile(r'/app/users/\d+$'))
+            page.locator('.ant-tree', has_text='김검사').wait_for(timeout=5000)
+            page.get_by_text('계정 생성 (역할: 검사원)').wait_for(timeout=5000)
+            ok, page_err = True, ''
+        except Exception as e:
+            ok, page_err = False, str(e)[:120]
+        if os.environ.get('E2E_SHOTS'):
+            page.screenshot(path=os.path.join(os.environ['E2E_SHOTS'], 'users.png'), full_page=True)
+        check('사용자·조직도: 새 사용자 만들기(관리자 비밀번호 확인) → 조직도·변경 기록', ok, page.url if ok else page_err)
 
         # 세션이 끊기면 API를 부르는 화면이 로그인으로 보내야 한다 (client.ts 의 403 처리)
         page.context.clear_cookies()

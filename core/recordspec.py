@@ -4,6 +4,7 @@
 core는 qms 모델을 import하지 않는다('app.model' 라벨만). 삭제·잠금 규칙은 core/records.py에 있다(건드리지 않는다).
 """
 import datetime
+import json
 from typing import Callable, NamedTuple
 
 from django.db import models
@@ -87,7 +88,8 @@ SPECS = {
               ('approved', '승인됨', lambda qs: qs.filter(approved_at__isnull=False))),
         side=('relations', 'files', 'history'),
         order=('-created_at', '-pk'),
-        edit=('revision', 'change_note')),
+        edit=('revision', 'change_note'),
+        create=('document', 'revision', 'file', 'change_note')),
     'qms.gauge': Spec(
         fields=('number', 'name', 'kind', 'maker', 'model_no', 'serial_no', 'measuring_range', 'resolution',
                 'department', 'location', 'owner', 'cal_type', 'cal_agency', 'interval_months', 'last_calibrated', 'next_due',
@@ -347,14 +349,41 @@ SPECS = {
         search=('name',),
         side=('relations', 'history'),
         order=('name',),
-        edit=('name',)),
+        edit=('name',),
+        create=('name', 'target', 'file', 'mapping')),
     'core.importprofile': Spec(
         fields=('name', 'target', 'header_row', 'mapping'),
         columns=('name', 'target', 'header_row'),
         search=('name',),
         side=('relations', 'history'),
         order=('name',),
-        edit=('name', 'header_row')),
+        edit=('name', 'header_row'),
+        create=('name', 'target', 'header_row', 'mapping')),
+}
+
+
+# 양식지(W3): 기록 화면 「양식지」 → A4 한 장(core/api/records.py document_of). (제목, ((구역, 칸들), ...)).
+# 여기 없는 기록은 상세 칸 전부를 머리말 표로 그린다. 부적합·출하·PPAP는 모델 print_table 표(①~⑦·성적서·PSW)를 쓴다
+DOCS = {
+    'qms.capa': ('시정조치 보고서(CAPA)', (
+        ('개요', ('number', 'title', 'source', 'source_record', 'status', 'owner', 'due_date')),
+        ('원인·대책', ('root_cause', 'action', 'done_at')),
+        ('유효성 확인', ('effective', 'verified_by', 'verified_at', 'verification_note', 'closed_at')))),
+    'qms.customerclaim': ('8D 보고서', (
+        ('클레임', ('number', 'customer', 'partner', 'lot', 'received_at', 'defect_qty', 'nonconformance', 'description')),
+        ('기한', ('current_step', 'delay', 'containment_due', 'root_cause_due', 'corrective_due', 'closure_due')),
+        ('8D', ('d1_team', 'd2_problem', 'd3_containment', 'd4_root_cause', 'd5_corrective', 'd6_verification',
+                'd7_prevention', 'd8_closure', 'closed_at')))),
+    'qms.scar': ('공급자 시정조치 요구서(SCAR)', (
+        ('요구', ('number', 'supplier', 'partner', 'lot', 'nonconformance', 'issued_at', 'response_due', 'request')),
+        ('회신', ('response', 'responded_at', 'closed_at')))),
+    'qms.changerequest': ('4M 변경 신청서', (
+        ('변경', ('number', 'item', 'category', 'effective_at', 'description')),
+        ('고객', ('customer_notice', 'customer_approval_ref')),
+        ('승인·초품', ('approved_by', 'approved_at', 'first_article_state')))),
+    'qms.internalaudit': ('내부심사 보고서', (
+        ('심사', ('name', 'kind', 'scope', 'checklist', 'planned_date', 'performed_at', 'closed_at')),
+        ('심사원·피심사', ('auditor', 'auditor_user', 'auditee', 'auditee_dept')))),
 }
 
 
@@ -425,6 +454,11 @@ def editor(obj, name):
                 'choices': None, 'columns': [{'key': k, 'label': n} for k, n in cols]}
     if isinstance(f, models.JSONField) and f.default is list:  # 글 목록(사용자 정의 칸 선택지): 입력하고 Enter
         return {'key': name, 'label': str(f.verbose_name), 'type': 'tags', 'value': v or [], 'required': False, 'choices': None}
+    if isinstance(f, models.JSONField):  # 사전(셀·열 매핑): JSON 글로 적는다. 예시는 help
+        return {'key': name, 'label': str(f.verbose_name), 'type': 'json', 'required': not f.blank, 'choices': None,
+                'value': json.dumps(v, ensure_ascii=False, indent=2) if v else '', 'help': str(f.help_text)}
+    if isinstance(f, models.FileField):  # 새로 만들기에서만(파일은 multipart로 보낸다)
+        return {'key': name, 'label': str(f.verbose_name), 'type': 'file', 'value': None, 'required': not f.blank, 'choices': None}
     if f.choices:
         kind = 'choice'
     elif isinstance(f, models.BooleanField):

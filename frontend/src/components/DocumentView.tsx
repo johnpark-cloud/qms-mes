@@ -10,7 +10,7 @@ export default function DocumentView({ doc }: { doc: DocStruct }) {
       <div className="doc-top">
         <div>
           <h1 className="doc-title">{doc.title}</h1>
-          <div>{doc.number ? `${doc.number} · ` : ''}{doc.revision}</div>
+          <div>{[doc.number, doc.revision].filter(Boolean).join(' · ')}</div>
         </div>
         <table className="doc-sign">
           <thead><tr><th></th><th>작성</th><th>승인</th></tr></thead>
@@ -20,24 +20,37 @@ export default function DocumentView({ doc }: { doc: DocStruct }) {
           </tbody>
         </table>
       </div>
-      <table className="doc-table doc-head">
+      {doc.head.length > 0 && <table className="doc-table doc-head">
         <tbody>
           {doc.head.map(([k, v]) => (
             <tr key={k}><th>{k}</th><td>{v}</td></tr>
           ))}
         </tbody>
-      </table>
+      </table>}
       {doc.tables.map((t, i) => (
         <section key={i}>
           <h2 className="doc-h2">{t.title}</h2>
-          <table className="doc-table">
-            <thead><tr>{t.columns.map((c, j) => <th key={j}>{c}</th>)}</tr></thead>
-            <tbody>
-              {t.rows.map((r, j) => <tr key={j}>{r.map((c, k) => <td key={k}>{c}</td>)}</tr>)}
-            </tbody>
-          </table>
+          {t.columns[0] === '항목' ? (
+            // 항목·내용 두 칸 표(기록 양식지)는 머리줄 없이 항목을 머리칸으로
+            <table className="doc-table doc-head">
+              <tbody>{t.rows.map((r, j) => <tr key={j}><th>{r[0]}</th><td>{r[1]}</td></tr>)}</tbody>
+            </table>
+          ) : (
+            <table className="doc-table">
+              <thead><tr>{t.columns.map((c, j) => <th key={j}>{c}</th>)}</tr></thead>
+              <tbody>
+                {t.rows.map((r, j) => <tr key={j}>{r.map((c, k) => <td key={k}>{c}</td>)}</tr>)}
+              </tbody>
+            </table>
+          )}
         </section>
       ))}
+      {!!doc.photos?.length && <section>
+        <h2 className="doc-h2">사진</h2>
+        <div className="doc-photos">
+          {doc.photos.map((p, i) => <figure key={i}><img src={p.url} alt={p.caption || `사진 ${i + 1}`} /><figcaption>{p.caption}</figcaption></figure>)}
+        </div>
+      </section>}
       {doc.revisions && <>
       <h2 className="doc-h2">개정 이력</h2>
       <table className="doc-table">

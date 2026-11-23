@@ -1,5 +1,5 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { Alert, Button, Checkbox, Empty, Form, Input, InputNumber, Modal, Select, Spin, Table, Typography, message } from 'antd'
+import { Alert, Button, Checkbox, Empty, Form, Input, InputNumber, Modal, Select, Spin, Table, Typography, Upload, message } from 'antd'
 import { useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
@@ -19,9 +19,10 @@ interface Row { id: number; url: string | null; status: string | null; cells: Re
 interface Child { key: string; label: string; columns: { key: string; label: string }[]; rows: Row[]; add_url: string | null }
 type Value = string | number | boolean | null | Record<string, string>[] | string[]
 export interface Edit {
-  key: string; label: string; type: 'str' | 'text' | 'int' | 'date' | 'datetime' | 'bool' | 'choice' | 'rows' | 'tags'; value: Value; required: boolean
+  key: string; label: string; type: 'str' | 'text' | 'int' | 'date' | 'datetime' | 'bool' | 'choice' | 'rows' | 'tags' | 'json' | 'file'; value: Value; required: boolean
   choices: { value: string; label: string }[] | null
   columns?: { key: string; label: string }[]  // type 'rows': 한 줄에 들어갈 칸
+  help?: string  // type 'json': 적는 예
   hidden?: boolean  // 새로 만들기: 화면에 안 보이고 주소로 채운 값만 보낸다(CAPA 출처 기록)
 }
 /** 한 칸에 체크 상자로 모아 보일 예/아니오 칸들 (core/recordspec.py groups_of) */
@@ -121,6 +122,18 @@ export function Editor({ e, ...rest }: { e: Edit; [k: string]: any }) {
   if (e.type === 'date') return <Input type="date" {...rest} />
   if (e.type === 'datetime') return <Input type="datetime-local" {...rest} />
   if (e.type === 'text') return <Input.TextArea autoSize={{ minRows: 2, maxRows: 8 }} {...rest} />
+  if (e.type === 'json') return (
+    <>
+      <Input.TextArea autoSize={{ minRows: 4, maxRows: 16 }} spellCheck={false} style={{ fontFamily: 'Consolas, monospace' }} {...rest} />
+      {e.help && <Typography.Text type="secondary" style={{ fontSize: 12 }}>{e.help}</Typography.Text>}
+    </>
+  )
+  if (e.type === 'file') return (  // 값은 antd UploadFile 하나: createRecord가 multipart로 보낸다
+    <Upload maxCount={1} beforeUpload={() => false} fileList={rest.value ? [rest.value] : []}
+      onChange={({ fileList }) => rest.onChange?.(fileList[0] ?? null)}>
+      <Button id={rest.id}>파일 고르기</Button>
+    </Upload>
+  )
   if (e.type === 'tags') return <Select mode="tags" open={false} tokenSeparators={[',']} suffixIcon={null} placeholder="입력하고 Enter (쉼표로 여러 개)" {...rest} />
   if (e.type === 'choice') return <Select options={e.choices ?? []} showSearch optionFilterProp="label" allowClear={!e.required} {...rest} />
   return <Input {...rest} />
@@ -294,6 +307,7 @@ export default function RecordView() {
           ) : (
             <>
               <Link to={d.list_url.slice(4)}><Button>{d.kind} 목록</Button></Link>
+              <Link to={`/r/${app}/${model}/${id}/print`}><Button>양식지 · 인쇄</Button></Link>
               {d.requests.edit && !d.can_change && <Button onClick={() => setAsking(true)}>수정 요청</Button>}
               {d.can_approve && <Button onClick={() => setSigning(true)}>승인</Button>}
               {d.can_dispose && <Button onClick={() => setDisposing(true)}>처분</Button>}

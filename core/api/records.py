@@ -3,6 +3,7 @@
 권한은 그 모델의 view_ 권한. 변경 이력도 view_ 권한이면 본다(미결 #6, 2026-11-13 사용자 결정).
 꺼진 모듈은 미들웨어가 주소의 label 인자로 막는다.
 """
+import json
 from datetime import datetime
 from urllib.parse import urlencode
 
@@ -14,11 +15,12 @@ from django.forms import modelform_factory
 from django.http import Http404
 from django.shortcuts import get_object_or_404
 from django.urls import reverse
+from django.utils import timezone
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from core import audit, modules, recordspec, rules
-from core.export import table_xlsx, xlsx_response
+from core.export import document_xlsx, table_xlsx, xlsx_response
 from core.grid import record_version
 from core.models import Approvable, EditRequest, Lot, Nonconformance, is_approver
 from core.records import can_edit_locked, is_locked
@@ -90,12 +92,17 @@ class RecordListView(APIView):
         """새로 만들기: 설명서 create 칸만, full_clean(칸별 오류) → 저장. 보류 인터록 등은 모델 clean/save가 막는다."""
         model, spec = _create_spec(request.user, label)
         values = request.data.get('values')
+        if isinstance(values, str):  # 파일 칸이 있으면 multipart: values는 JSON 글, 파일은 칸 이름으로 온다
+            try:
+                values = json.loads(values)
+            except ValueError:
+                values = None
         if not isinstance(values, dict):
             raise ValidationError('values가 필요합니다.')
-        bad = {k: ['이 화면에서 넣을 수 없는 칸입니다.'] for k in values if k not in spec.create}
+        bad = {k: ['이 화면에서 넣을 수 없는 칸입니다.'] for k in [*values, *request.FILES] if k not in spec.create}
         if bad:
             raise ValidationError(bad)
-        obj = rules.save_new(model, spec.create, request.user, values)
+        obj = rules.save_new(model, spec.create, request.user, values, request.FILES)
         return Response({'id': obj.pk, 'url': record_url(obj)}, status=201)
 
 
@@ -106,10 +113,9 @@ def _new_url(model, spec):
     meta = model._meta
     if meta.label_lower == 'core.nonconformance':
         return '/app/nc-new'  # 보류 인터록이 걸리는 현장 간편 등록
-    if meta.label_lower in NO_ADD:
+    if meta.label_lower in NO_ADD or not spec.create:
         return None
-    # 파일·JSON 칸이 필수인 양식(엑셀 양식·가져오기 설정 등)만 관리 화면 추가 폼
-    return f'/app/r/{meta.app_label}/{meta.model_name}/new' if spec.create else f'/admin/{meta.app_label}/{meta.model_name}/add/'
+    return f'/app/r/{meta.app_label}/{meta.model_name}/new'
 
 
 def _create_spec(user, label):
@@ -193,6 +199,8 @@ def _links(obj, user):
         links.append({'label': 'LOT 이력 (추적)', 'url': trace_url(lot.number)})
     if label in CAPA_SOURCE and modules.active('qms_capa') and user.has_perm('qms.add_capa'):
         links.append({'label': 'CAPA 만들기', 'url': capa_new_url(obj)})
+    if label == 'core.nonconformance' and obj.is_approved:
+        links.append({'label': '메일 보내기', 'url': f'/app/nc-mail/{obj.pk}'})
     return links
 
 
@@ -245,6 +253,59 @@ def _detail(obj, spec, user):
             'notices': _notices(obj, user),
             'requests': {'edit': _can_request(obj, EditRequest.EDIT, user),
                          'delete': _can_request(obj, EditRequest.DELETE, user)}}
+
+
+def document_of(obj, spec):
+    """양식지(W3): A4 한 장 문서(DocStruct, frontend/src/api/specs.ts). 구역은 recordspec.DOCS, 표는 print_table 또는 하위 기록."""
+    model = type(obj)
+    title, sections = recordspec.DOCS.get(model._meta.label_lower, (str(model._meta.verbose_name), ()))
+
+    def kv(names):
+        return [[recordspec.label_of(model, n), recordspec.value_of(obj, n)[0]] for n in names]
+
+    def who(u):
+        return (u.get_full_name() or u.username) if u else ''
+
+    def day(t):
+        return timezone.localtime(t).strftime('%Y-%m-%d') if t else ''
+
+    head = [] if sections else kv(spec.fields)
+    tables = [{'title': t, 'columns': ['항목', '내용'], 'rows': kv(names)} for t, names in sections]
+    if hasattr(obj, 'print_table'):  # 부적합 보고서·출하성적서·PSW
+        title, header, rows = obj.print_table()
+        rows = [['' if c is None else str(c) for c in r] for r in rows]
+        if header[0] == '구역':  # 부적합 ①~⑦: 구역마다 표 하나
+            head = []
+            for r in rows:
+                if r[0]:
+                    tables.append({'title': r[0], 'columns': ['항목', '내용'], 'rows': []})
+                tables[-1]['rows'].append(r[1:])
+        else:
+            tables.append({'title': title, 'columns': header, 'rows': rows})
+    else:
+        for c in spec.children:
+            rel = getattr(obj, c.accessor)
+            tables.append({'title': c.label, 'columns': [recordspec.label_of(rel.model, n) for n in c.fields],
+                           'rows': [list(recordspec.cells(o, c.fields).values()) for o in rel.all().order_by(*c.order)]})
+    # 작성 = 부적합은 발견자, 그 밖은 처음 저장한 사람
+    first = obj.history.order_by('history_date', 'history_id').first() if hasattr(obj, 'history') else None
+    return {'title': title, 'number': str(obj), 'revision': '', 'draft': hasattr(obj, 'approved_at') and obj.approved_at is None,
+            'head': head, 'tables': tables, 'revisions': None,
+            'photos': [{'url': p.file.url, 'caption': p.caption} for p in obj.photos.all()] if hasattr(obj, 'photos') else [],
+            'signoff': {'written_by': who(getattr(obj, 'detected_by', None) or (first and first.history_user)), 'written_at': day(first and first.history_date),
+                        'approved_by': who(getattr(obj, 'approved_by', None)), 'approved_at': day(getattr(obj, 'approved_at', None))}}
+
+
+class RecordDocumentView(APIView):
+    schema = None
+
+    def get(self, request, label, pk):
+        model, spec = _model(request.user, label)
+        obj = get_object_or_404(model, pk=pk)
+        doc = document_of(obj, spec)
+        if request.query_params.get('export') == 'xlsx':
+            return xlsx_response(document_xlsx(doc), f"{doc['title']}_{getattr(obj, 'number', obj.pk)}.xlsx")
+        return Response(doc)
 
 
 class RecordDetailView(APIView):

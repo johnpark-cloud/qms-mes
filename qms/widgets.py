@@ -168,7 +168,7 @@ WIDGETS = {w.key: w for w in [
                                            more=NC_LIST), everyone),
     Widget('nc_mail_pending', '메일 발송 대기', TILE, tile(
         lambda d: len(d['nc_mail_pending']), '승인 후 미발송', '#nc-mail', more=NC_LIST,
-        rows=lambda request, d: [row(str(n), reverse('nc_mail', args=[n.pk]), f'{timezone.localtime(n.approved_at):%m-%d} 승인')
+        rows=lambda request, d: [row(str(n), f'/app/nc-mail/{n.pk}', f'{timezone.localtime(n.approved_at):%m-%d} 승인')
                                  for n in d['nc_mail_pending']]), everyone),
     Widget('edit_requests', '삭제·수정 요청', TILE, tile(
         lambda d: len(d['edit_requests']), '관리자 처리 대기', '#edit-requests',
@@ -240,7 +240,7 @@ def todo_lists_data(ctx, d, size):
                         response_due=lambda s: s.response_due, overdue=lambda s: s.response_due < d['today']),
         'nc_incomplete': _lines(d['nc_incomplete'], str, lambda n: change('core_nonconformance', n),
                                 missing_fields=lambda n: n.missing_fields()),
-        'nc_mail_pending': _lines(d['nc_mail_pending'], str, lambda n: reverse('nc_mail', args=[n.pk]),
+        'nc_mail_pending': _lines(d['nc_mail_pending'], str, lambda n: f'/app/nc-mail/{n.pk}',
                                   approved_at=lambda n: _local(n.approved_at)),
         'nc_notify_pending': _lines(d['nc_notify_pending'], str, lambda n: change('core_nonconformance', n)),
         'edit_requests': _lines(d['edit_requests'], str, lambda r: f'/app/requests/{r.pk}',

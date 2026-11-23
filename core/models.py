@@ -441,7 +441,6 @@ class Nonconformance(models.Model):
     mailed_at = models.DateTimeField('메일 발송 일시', null=True, blank=True)
     history = HistoricalRecords()
 
-    print_template = 'core/nc_print.html'
 
     class Meta:
         verbose_name = verbose_name_plural = '부적합'
@@ -458,7 +457,7 @@ class Nonconformance(models.Model):
         return [str(self._meta.get_field(n).verbose_name) for n in names if getattr(self, n) in (None, '')]
 
     def print_table(self):
-        """인쇄 화면의 ①~⑦ 요약표 (사진은 nc_print.html이 붙인다)."""
+        """양식지(부적합 보고서)의 ①~⑦ 구역표. 사진은 문서 API가 붙인다(core/api/records.py document_of)."""
         def d(v, empty='-'):
             return empty if v in (None, '') else v
 
@@ -798,6 +797,24 @@ class Department(MasterModel):
                 raise ValidationError({'parent': self.CYCLE_MSG})
             seen.add(p.pk)
             p = p.parent
+
+
+class Member(models.Model):
+    """사용자 인사 정보(조직도). 계정·역할은 auth.User·그룹에 두고, 화면은 core/api/users.py가 시스템 관리자에게만 연다."""
+    user = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='member', verbose_name='사용자')
+    department = models.ForeignKey(Department, on_delete=models.PROTECT, null=True, blank=True, related_name='members',
+                                   verbose_name='부서')
+    employee_no = models.CharField('사번', max_length=20, blank=True)
+    position = models.CharField('직위', max_length=20, blank=True, help_text='예: 사원, 대리, 과장')
+    title = models.CharField('직책', max_length=20, blank=True, help_text='예: 팀장, 파트장')
+    phone = models.CharField('연락처', max_length=30, blank=True)
+    history = HistoricalRecords()
+
+    class Meta:
+        verbose_name = verbose_name_plural = '인사 정보'
+
+    def __str__(self):
+        return str(self.user)
 
 
 class Partner(MasterModel):

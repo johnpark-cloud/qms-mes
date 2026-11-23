@@ -55,11 +55,11 @@ def save_with_lock(obj, user, children=()):
     finish_edit(unlock)
 
 
-def save_new(model, fields, user, values):
+def save_new(model, fields, user, values, files=None):
     """새로 만들기 공용(기록 화면 POST·들여오기): fields 칸만 폼 검증(칸별 오류) → 만든 사람 → 잠금 규칙 저장.
     보류 인터록 등은 모델 clean/save가 막는다. 빠진 칸은 모델 기본값(불량 0 등)을 쓴다."""
     blank = {k: v for k, v in model_to_dict(model(), fields=fields).items() if v is not None}
-    form = modelform_factory(model, fields=fields)({**blank, **values})
+    form = modelform_factory(model, fields=fields)({**blank, **values}, files)
     if not form.is_valid():
         raise ValidationError({k: list(v) for k, v in form.errors.items()})
     obj = form.instance

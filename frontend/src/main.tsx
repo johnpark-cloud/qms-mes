@@ -35,8 +35,13 @@ import MyLeavePay from './pages/MyLeavePay'
 import RecordList from './pages/records/RecordList'
 import RecordNew from './pages/records/RecordNew'
 import RecordView from './pages/records/RecordView'
+import RecordPrint from './pages/records/RecordPrint'
 import Todo from './pages/Todo'
 import EditRequestPage from './pages/EditRequestPage'
+import AuditPack from './pages/AuditPack'
+import Modules from './pages/Modules'
+import Users from './pages/Users'
+import NcMail from './pages/NcMail'
 import Trace from './pages/Trace'
 import { useAppTheme } from './theme'
 
@@ -68,10 +73,16 @@ function App() {
             <Route path="specs/:id/print" element={<SpecPrint />} />
             <Route path="plans/:id/print" element={<PlanPrint />} />
             <Route path="inspections/:id/print" element={<InspectionPrint />} />
+            <Route path="r/:app/:model/:id/print" element={<RecordPrint />} />
             <Route element={<AppLayout />}>
               <Route path="overview" element={<Overview />} />
               <Route path="todo" element={<Todo />} />
               <Route path="requests/:id" element={<EditRequestPage />} />
+              <Route path="modules" element={<Modules />} />
+              <Route path="users" element={<Users />} />
+              <Route path="users/:id" element={<Users />} />
+              <Route path="nc-mail/:id" element={<NcMail />} />
+              <Route path="audit-pack" element={<AuditPack />} />
               <Route path="specs" element={<SpecList />} />
               <Route path="specs/:id" element={<SpecPage />} />
               <Route path="plans" element={<PlanList />} />

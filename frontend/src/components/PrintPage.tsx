@@ -8,7 +8,7 @@ import DocumentView from './DocumentView'
 // 문서 API(docUrl)를 받아 A4 인쇄 화면을 그린다. 검사기준서·검사 성적서가 같이 쓴다.
 export default function PrintPage({ docUrl, backTo, queryKey }: { docUrl: string; backTo: string; queryKey: unknown[] }) {
   const q = useQuery({ queryKey, queryFn: () => api<DocStruct>(docUrl) })
-  if (q.isError) return <Alert type="error" message={q.error instanceof ApiError ? q.error.detail : '문서를 불러오지 못했습니다.'} />
+  if (q.isError) return <Alert type="error" title={q.error instanceof ApiError ? q.error.detail : '문서를 불러오지 못했습니다.'} />
   if (!q.data) return <Spin />
   return (
     <>

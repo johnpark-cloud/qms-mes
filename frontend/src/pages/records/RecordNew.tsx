@@ -11,7 +11,16 @@ import type { FormInstance } from 'antd'
 /** 저장 POST. 칸별 오류는 폼에, 나머지는 onErr로. 성공하면 새 번호, 실패하면 null */
 export async function createRecord(label: string, values: object, form: FormInstance, onErr: (m: string) => void) {
   try {
-    const r = await api<{ id: number }>(`/api/records/${label}/`, { method: 'POST', body: JSON.stringify({ values }) })
+    // 파일 칸(UploadFile)이 있으면 multipart: values는 JSON 글, 파일은 칸 이름으로 (core/api/records.py)
+    const files = Object.entries(values).filter(([, v]) => v && typeof v === 'object' && 'originFileObj' in v)
+    let body: BodyInit = JSON.stringify({ values })
+    if (files.length) {
+      const fd = new FormData()
+      fd.append('values', JSON.stringify(Object.fromEntries(Object.entries(values).filter(([k]) => !files.some(([f]) => f === k)))))
+      for (const [k, v] of files) fd.append(k, v.originFileObj)
+      body = fd
+    }
+    const r = await api<{ id: number }>(`/api/records/${label}/`, { method: 'POST', body })
     return r.id
   } catch (e) {
     if (e instanceof ApiError && Object.keys(e.fields).length) {

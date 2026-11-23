@@ -35,7 +35,7 @@ MODULES = {
     'qms_ppap': Module('PPAP', ('qms.ppapsubmission', 'qms.ppapelement')),
     # 심사 발견사항이 CAPA를 외래키로 가리킨다
     'qms_audit': Module('심사', ('qms.internalaudit', 'qms.auditfinding', 'qms.auditchecklist', 'qms.audititem', 'qms.evidence'),
-                        ('audit-pack/',), requires=('qms_capa',)),
+                        ('audit-pack/', 'api/qms/audit-pack/'), requires=('qms_capa',)),
     'qms_document': Module('문서 관리', ('qms.document', 'qms.documentrevision')),
     'qms_kpi': Module('품질 KPI', (), ('kpi/', 'api/qms/kpi/')),
 }
@@ -44,7 +44,7 @@ BASE_MODELS = (
     'core.item', 'core.codevalue', 'core.numberrule', 'core.process', 'core.bomline', 'core.routingstep',
     'core.importprofile', 'core.lot', 'core.lotlink', 'core.nonconformance', 'core.nonconformancephoto', 'core.hold',
     'core.editrequest', 'core.revisionlog', 'core.department', 'core.partner', 'core.partnercertificate',
-    'core.fielddef', 'core.attachment', 'core.moduleswitch', 'core.importlog',
+    'core.fielddef', 'core.attachment', 'core.moduleswitch', 'core.importlog', 'core.member',
     'qms.exceltemplate', 'qms.memo', 'qms.memophoto', 'qms.dashboardlayout',
 )
 BASE_APPS = ('auth', 'personal')  # 사용자·권한, 개인 연차·급여
@@ -56,7 +56,7 @@ BASE_PATHS = (
     'report/',
     'api/auth/', 'api/personal/', 'api/search/', 'api/items/', 'api/core/lots/', 'api/core/trace/', 'api/core/items/',
     'api/core/numbering/', 'api/core/processes/', 'api/core/import/', 'api/core/nc-quick/', 'api/attachments/', 'api/relations/',
-    'api/revision-log/', 'api/audit-log/', 'api/schema/', 'api/records/', 'api/edit-requests/',
+    'api/revision-log/', 'api/audit-log/', 'api/schema/', 'api/records/', 'api/edit-requests/', 'api/core/modules/', 'api/core/nc-mail/', 'api/core/org/',
     'api/qms/overview/', 'api/qms/todo/', 'api/qms/dashboard/', 'api/qms/memos/',
 )
 

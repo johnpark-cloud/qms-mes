@@ -21,7 +21,7 @@ from django.utils import timezone
 from django.utils.http import urlencode
 from simple_history.utils import bulk_update_with_history
 
-from . import rules
+from . import recordspec, rules
 from .importer import run_import, target_of
 from .timeline import lot_actions, lot_timeline
 from .models import (Approvable, Attachment, EditRequest, Hold, ImportLog, ImportProfile, Lot, Nonconformance, NonconformancePhoto, is_approver,
@@ -269,10 +269,15 @@ def print_view(request, app_label, model_name, pk):
     model, obj = _get_record(app_label, model_name, pk)
     if not request.user.has_perm(f'{app_label}.view_{model_name}'):
         raise PermissionDenied
+    # 새 화면의 양식지로 넘긴다(W3). 설명서가 없는 기록(관리 화면 전용)만 아래 옛 인쇄 화면을 쓴다
+    if model._meta.label_lower == 'qms.inspection':
+        return redirect(f'/app/inspections/{obj.pk}/print')
+    if recordspec.spec_of(model._meta.label_lower):
+        return redirect(f'/app/r/{app_label}/{model_name}/{obj.pk}/print')
     ctx = {'obj': obj, 'rows': _field_rows(obj), 'title': model._meta.verbose_name}
     if hasattr(obj, 'print_table'):  # 예: 출하 → 출하성적서, PPAP → PSW 요소표
         ctx['title'], ctx['table_header'], ctx['table'] = obj.print_table()
-    return render(request, getattr(obj, 'print_template', 'core/print.html'), ctx)
+    return render(request, 'core/print.html', ctx)
 
 
 def _approved_nc(pk):
@@ -286,6 +291,29 @@ def _mark_mailed(nc):
     # 승인 잠금(save·clean)을 거치지 않고 메일 발송 일시만 바꾸되, 변경 이력은 남긴다
     nc.mailed_at = timezone.now()
     bulk_update_with_history([nc], Nonconformance, ['mailed_at'])
+
+
+def send_nc_mail(nc, subject, body, to_text):
+    """부적합 보고 메일을 사진과 함께 보내고 보냈음 표시. 주소·발송 오류는 ValidationError(표시하지 않음). 새 화면 API도 쓴다."""
+    to = [a.strip() for a in to_text.split(',') if a.strip()]
+    try:
+        if not to:
+            raise ValidationError('수신자 메일 주소를 입력하세요.')
+        for a in to:
+            validate_email(a)
+    except ValidationError:
+        raise ValidationError('메일 주소 형식이 올바르지 않습니다. 쉼표로 구분해 정확히 입력하세요.')
+    msg = EmailMessage(subject, body, None, to)
+    msg.content_subtype = 'html'
+    try:
+        for p in nc.photos.all():
+            with p.file.open('rb') as f:
+                msg.attach(os.path.basename(p.file.name), f.read())
+        msg.send()
+    except (SMTPException, OSError) as e:
+        raise ValidationError(f'메일을 보내지 못했습니다 ({e}). 보냈음 표시는 하지 않았습니다.')
+    _mark_mailed(nc)
+    return to
 
 
 @staff_member_required
@@ -307,26 +335,11 @@ def nc_mail(request, pk):
         return redirect(request.path)
     if request.method == 'POST' and action == 'send' and settings.SMTP_ENABLED:
         ctx['to'] = request.POST.get('to', '')
-        to = [a.strip() for a in ctx['to'].split(',') if a.strip()]
         try:
-            if not to:
-                raise ValidationError('수신자 메일 주소를 입력하세요.')
-            for a in to:
-                validate_email(a)
-        except ValidationError:
-            ctx['error'] = '메일 주소 형식이 올바르지 않습니다. 쉼표로 구분해 정확히 입력하세요.'
+            to = send_nc_mail(nc, subject, render_to_string('core/_nc_mail_body.html', ctx), ctx['to'])
+        except ValidationError as e:
+            ctx['error'] = e.messages[0]
             return render(request, 'core/nc_mail.html', ctx)
-        msg = EmailMessage(subject, render_to_string('core/_nc_mail_body.html', ctx), None, to)
-        msg.content_subtype = 'html'
-        try:
-            for p in ctx['photos']:
-                with p.file.open('rb') as f:
-                    msg.attach(os.path.basename(p.file.name), f.read())
-            msg.send()
-        except (SMTPException, OSError) as e:
-            ctx['error'] = f'메일을 보내지 못했습니다 ({e}). 보냈음 표시는 하지 않았습니다.'
-            return render(request, 'core/nc_mail.html', ctx)
-        _mark_mailed(nc)
         messages.success(request, f'{", ".join(to)}로 보냈습니다.')
         return redirect(request.path)
     return render(request, 'core/nc_mail.html', ctx)

@@ -468,7 +468,7 @@ class NcReportTest(TestCase):
     def test_print_page(self):
         nc = Nonconformance.objects.create(lot=self.lot, description='이물')
         self.client.force_login(self.lead)
-        resp = self.client.get(f'/print/core/nonconformance/{nc.pk}/')
+        resp = self.client.get(f'/api/records/core.nonconformance/{nc.pk}/document/')  # 옛 /print/는 새 양식지로 넘김(W3)
         self.assertContains(resp, '부적합 보고서')
         self.assertContains(resp, nc.number)
 
@@ -793,7 +793,7 @@ class NavTest(TestCase):
                          ('/admin/qms/inspection/?result__exact=FAIL', '/app/inspections?f_result=FAIL'),
                          ('/admin/qms/capa/7/change/', '/app/r/qms/capa/7'), ('/admin/qms/inspectionspec/3/change/', '/app/specs/3'),
                          ('/approve/qms/controlplan/4/', '/app/plans/4'), ('/approve/qms/changerequest/5/', '/app/r/qms/changerequest/5'),
-                         ('/admin/auth/user/', '/admin/auth/user/')):
+                         ('/admin/auth/user/', '/app/users')):
             self.assertEqual(app_href(old), new)
 
 
