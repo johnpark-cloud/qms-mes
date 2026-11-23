@@ -12,6 +12,13 @@ KEEP_DAYS = 30
 PG_BIN = r'C:\Program Files\PostgreSQL\18\bin'  # Windows 기본 설치 위치
 
 
+def folders():
+    """DB 밖에 두는 회사 파일 폴더 {백업 안 이름: 현재 위치}. private: 개인 급여 파일(personal.models.private_storage),
+    attachments: 업무 첨부(core.models.attachment_storage), imports: 들여오기 원본(core.models.ImportLog, QMS_IMPORT_DIR)"""
+    return {'private': Path(settings.DATA_DIR) / 'private', 'attachments': Path(settings.DATA_DIR) / 'attachments',
+            'imports': Path(settings.IMPORT_DIR)}
+
+
 def is_sqlite(db):
     return db['ENGINE'] == 'django.db.backends.sqlite3'
 
@@ -29,7 +36,7 @@ def run_pg(tool, db, *args):
 
 
 class Command(BaseCommand):
-    help = 'DB와 첨부파일을 백업 폴더(예: 회사 NAS)에 복사하고 30일이 지난 백업을 지운다.'
+    help = 'DB와 첨부파일·들여오기 원본을 백업 폴더(예: 회사 NAS)에 복사하고 30일이 지난 백업을 지운다.'
 
     def add_arguments(self, parser):
         parser.add_argument('dest', nargs='?', default=os.environ.get('QMS_BACKUP_DIR'),
@@ -57,9 +64,7 @@ class Command(BaseCommand):
                 raise
         if Path(settings.MEDIA_ROOT).exists():
             shutil.copytree(settings.MEDIA_ROOT, target / 'media')
-        # private: 개인 급여 파일(personal.models.private_storage), attachments: 업무 첨부(core.models.attachment_storage)
-        for name in ('private', 'attachments'):
-            folder = Path(settings.DATA_DIR) / name
+        for name, folder in folders().items():
             if folder.exists():
                 shutil.copytree(folder, target / name)
         cutoff = datetime.datetime.now() - datetime.timedelta(days=KEEP_DAYS)

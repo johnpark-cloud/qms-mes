@@ -20,6 +20,8 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # Company data lives outside the code (PRD: never commit company data).
 DATA_DIR = Path(os.environ.get('QMS_DATA_DIR', BASE_DIR / 'data'))
 DATA_DIR.mkdir(exist_ok=True)
+# 확정한 들여오기 원본 파일(core.models.ImportLog). 나중에 NAS로 옮길 수 있게 따로 지정한다
+IMPORT_DIR = Path(os.environ.get('QMS_IMPORT_DIR', DATA_DIR / 'imports'))
 
 
 def _secret_key():

@@ -1,6 +1,7 @@
 """검사 입력 API. 옛 htmx 화면(qms/views.py inspect_*)과 같은 qms.rules 함수를 쓴다."""
 from django.contrib.contenttypes.models import ContentType
 from django.core.exceptions import ValidationError
+from django.db import transaction
 from django.db.models import Count, Exists, OuterRef, Q, Subquery
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404
@@ -14,7 +15,7 @@ from rest_framework.views import APIView
 from core.api import listing
 from core.api.permissions import require_perm
 from core.export import XLSX, document_xlsx, table_xlsx, xlsx_response
-from core.models import Hold, Item, Lot, Nonconformance
+from core.models import Hold, ImportLog, Item, Lot, Nonconformance
 from core.relations import record_url, trace_url
 from qms.models import Capa, ExcelTemplate, Gauge, Inspection, InspectionSpec
 from qms.rules import (RECEIVE_MSG, UPLOAD_GUIDE, UPLOAD_RESULT, gauge_kind, measurement, pick_gauge, receive_lot, submit_inspection,
@@ -229,6 +230,9 @@ class SubmitView(APIView):
                          'nonconformance': {'id': nc.pk, 'number': nc.number} if nc else None}, status=201)
 
 
+UPLOAD_LABEL = '측정 원자료(검사 판정)'
+
+
 class UploadView(APIView):
     """측정 원자료 업로드(docs/data-flow.md 5절). GET은 미리보기 열, POST(file, commit 0|1)는 판정한다. 올린 사람이 검사원."""
     schema = None
@@ -236,7 +240,7 @@ class UploadView(APIView):
 
     def get(self, request):
         require_perm(request.user, PERM)
-        return Response({'label': '측정 원자료(검사 판정)', 'columns': UPLOAD_RESULT, 'guide': UPLOAD_GUIDE})
+        return Response({'label': UPLOAD_LABEL, 'columns': UPLOAD_RESULT, 'guide': UPLOAD_GUIDE})
 
     def post(self, request):
         require_perm(request.user, PERM)
@@ -245,7 +249,13 @@ class UploadView(APIView):
             return _bad('파일을 선택하세요.', 'file')
         if d.get('commit') not in ('0', '1'):
             return _bad('commit 값이 올바르지 않습니다.', 'commit')
-        count, errors, rows = upload_measurements(d['file'], request.user, d['commit'] == '0')
+        if d['commit'] == '0':
+            count, errors, rows = upload_measurements(d['file'], request.user, True)
+            return Response({'count': count, 'errors': errors, 'rows': rows})
+        with transaction.atomic():
+            count, errors, rows = upload_measurements(d['file'], request.user, False)
+            if not errors:
+                ImportLog.keep(Inspection, UPLOAD_LABEL, d['file'], request.user, count)
         return Response({'count': count, 'errors': errors, 'rows': rows})
 
 

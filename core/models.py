@@ -6,6 +6,7 @@ from django.conf import settings
 from django.contrib.contenttypes.fields import GenericForeignKey
 from django.contrib.contenttypes.models import ContentType
 from django.core.exceptions import PermissionDenied, ValidationError
+from django.core.files.storage import FileSystemStorage
 from django.core.validators import RegexValidator
 from django.db import IntegrityError, models, transaction
 from django.db.models import ProtectedError
@@ -937,6 +938,60 @@ class FieldDef(models.Model):
                 raise ValidationError(self.LOCKED_MSG)
         if self.kind == self.CHOICE and not (isinstance(self.choices, list) and self.choices):
             raise ValidationError({'choices': '종류가 "선택"이면 선택지를 입력하세요.'})
+
+
+class ImportStorage(FileSystemStorage):
+    """확정한 들여오기 원본 보관 폴더. 쓸 때마다 settings.IMPORT_DIR(QMS_IMPORT_DIR)을 읽는다.
+    MEDIA_ROOT 밖: /media/ 주소로 닿지 않고, 대상 열람 권한을 확인하는 들여오기 기록 API로만 받는다."""
+
+    @property
+    def base_location(self):
+        return settings.IMPORT_DIR
+
+    @property
+    def location(self):
+        return os.path.abspath(self.base_location)
+
+
+def import_storage():
+    return ImportStorage()
+
+
+class ImportLog(models.Model):
+    """확정한 들여오기 한 번: 원본 파일 그대로, 누가·언제·무엇을·몇 건. 영구 보관한다(지우는 화면·명령이 없다)."""
+    target = models.CharField('대상', max_length=100, editable=False)  # 모델 라벨(core.lot): 열람 권한·모듈 판단
+    label = models.CharField('종류', max_length=100, editable=False)
+    file = models.FileField('원본 파일', upload_to='%Y/%m/', storage=import_storage, editable=False)
+    file_name = models.CharField('파일 이름', max_length=255, editable=False)
+    count = models.PositiveIntegerField('건수', editable=False)
+    profile = models.CharField('가져오기 설정', max_length=100, blank=True, editable=False)
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, editable=False,
+                             related_name='+', verbose_name='올린 사람')
+    created_at = models.DateTimeField('들여온 일시', auto_now_add=True)
+    history = HistoricalRecords()
+
+    class Meta:
+        verbose_name = verbose_name_plural = '들여오기 기록'
+        ordering = ['-created_at', '-pk']
+
+    def __str__(self):
+        return f'{self.label} {self.file_name}'
+
+    @classmethod
+    def keep(cls, model, label, uploaded, user, count, profile=''):
+        """들여오기를 확정한 같은 트랜잭션 안에서 부른다: 기록을 못 남기면 들여온 것도 되돌린다."""
+        uploaded.seek(0)
+        log = cls(target=model._meta.label_lower, label=label, file_name=os.path.basename(uploaded.name)[:255], count=count,
+                  profile=profile, user=user if user.is_authenticated else None)
+        log.file.save(log.file_name, uploaded, save=False)
+        log.save()
+        return log
+
+    def can_view(self, user):
+        """대상 기록 열람 권한자(시스템 관리자 포함)만. 꺼진 모듈의 기록은 감춘다."""
+        from .modules import active, module_of_model
+        app, model = self.target.split('.')
+        return user.has_perm(f'{app}.view_{model}') and active(module_of_model(self.target))
 
 
 def attachment_storage():

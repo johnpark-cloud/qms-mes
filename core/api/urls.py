@@ -23,6 +23,8 @@ urlpatterns = [
     path('core/import/', master.ImportView.as_view()),
     path('core/import/targets/', master.ImportTargetListView.as_view()),
     path('core/import/template/', master.ImportTemplateView.as_view()),
+    path('core/import/logs/', master.ImportLogListView.as_view()),
+    path('core/import/logs/<int:pk>/file/', master.ImportLogFileView.as_view()),
     path('attachments/', attachments.AttachmentListView.as_view()),
     path('attachments/<int:pk>/', attachments.AttachmentDetailView.as_view()),
     path('relations/<str:label>/<int:pk>/', views.RelationsView.as_view(), name='relations'),

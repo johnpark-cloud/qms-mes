@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 import { Alert, Button, Select, Space, Table } from 'antd'
+import dayjs from 'dayjs'
 import { useState } from 'react'
 import { api } from '../../api/client'
 
@@ -30,6 +31,17 @@ interface Measure {
   columns: Record<string, string>
   guide: Guide[]
 }
+// 확정한 들여오기 한 번(원본 파일 보관). 대상 기록을 볼 수 있는 것만 서버가 준다
+interface Log {
+  id: number
+  created_at: string
+  user: string
+  label: string
+  file_name: string
+  count: number
+  profile: string
+  url: string
+}
 interface Preview {
   count: number
   errors: string[]
@@ -43,6 +55,7 @@ export default function ImportPage() {
   const targets = useQuery({ queryKey: ['import-targets'], queryFn: () => api<Target[]>('/api/core/import/targets/') })
   // 검사 권한이 없거나 검사 모듈이 꺼져 있으면 서버가 거부하고 선택지에서 빠진다
   const measure = useQuery({ queryKey: ['import-measure'], queryFn: () => api<Measure>('/api/qms/inspect/upload/'), retry: false })
+  const logs = useQuery({ queryKey: ['import-logs'], queryFn: () => api<Log[]>('/api/core/import/logs/') })
   // 'p:3'은 가져오기 설정, 't:qms.gauge'는 빈 양식(표준 열 제목), 'm'은 측정 원자료(검사 판정)
   const [choice, setChoice] = useState<string>()
   const [file, setFile] = useState<File | null>(null)
@@ -81,6 +94,7 @@ export default function ImportPage() {
         setDone(r.count)
         setPreview(null)
         setCommitErrors([])
+        logs.refetch()
       }
     } catch (e) {
       setErr(errText(e, '처리하지 못했습니다.'))
@@ -180,6 +194,24 @@ export default function ImportPage() {
           <Table size="small" rowKey="line" columns={columns} dataSource={preview.rows} pagination={{ pageSize: 50, hideOnSinglePage: true }} scroll={{ x: 'max-content' }} />
         </>
       )}
+      <h2 style={{ marginTop: 24 }}>들여오기 기록</h2>
+      <Table
+        aria-label="들여오기 기록"
+        size="small"
+        rowKey="id"
+        loading={logs.isLoading}
+        dataSource={logs.data ?? []}
+        locale={{ emptyText: '확정한 들여오기가 없습니다.' }}
+        pagination={{ pageSize: 20, hideOnSinglePage: true }}
+        scroll={{ x: 'max-content' }}
+        columns={[
+          { title: '들여온 일시', width: 150, render: (_: unknown, l: Log) => dayjs(l.created_at).format('YYYY-MM-DD HH:mm') },
+          { title: '올린 사람', dataIndex: 'user', width: 110 },
+          { title: '종류', render: (_: unknown, l: Log) => (l.profile ? `${l.label} · ${l.profile}` : l.label) },
+          { title: '원본 파일', render: (_: unknown, l: Log) => <a href={l.url}>{l.file_name}</a> },
+          { title: '건수', dataIndex: 'count', width: 70, align: 'right' as const },
+        ]}
+      />
     </div>
   )
 }

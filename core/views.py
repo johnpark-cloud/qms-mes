@@ -24,7 +24,7 @@ from simple_history.utils import bulk_update_with_history
 from . import rules
 from .importer import run_import, target_of
 from .timeline import lot_actions, lot_timeline
-from .models import (Approvable, Attachment, EditRequest, Hold, ImportProfile, Lot, Nonconformance, NonconformancePhoto, is_approver,
+from .models import (Approvable, Attachment, EditRequest, Hold, ImportLog, ImportProfile, Lot, Nonconformance, NonconformancePhoto, is_approver,
                      validate_photo)
 from .records import blockers, is_locked
 from .relations import record_url
@@ -255,7 +255,10 @@ def import_view(request):
         opts = target.model._meta  # 가져오기는 기존 행을 덮어쓰므로 추가·변경 권한이 모두 필요하다
         if not all(request.user.has_perm(f'{opts.app_label}.{a}_{opts.model_name}') for a in ('add', 'change')):
             raise PermissionDenied(f'{opts.verbose_name} 추가·변경 권한이 없습니다.')
-        count, errors = run_import(profile, form.cleaned_data['file'], request.user)
+        with transaction.atomic():
+            count, errors = run_import(profile, form.cleaned_data['file'], request.user)
+            if not errors:
+                ImportLog.keep(target.model, target.label, form.cleaned_data['file'], request.user, count, profile.name)
         result = {'count': count, 'errors': errors}
     return render(request, 'core/import.html', {'form': form, 'result': result, 'title': '엑셀 일괄 등록'})
 

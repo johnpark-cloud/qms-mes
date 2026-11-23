@@ -7,7 +7,7 @@ from pathlib import Path
 from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
 
-from .backup import is_sqlite, run_pg
+from .backup import folders, is_sqlite, run_pg
 
 TABLES = ['core_lot', 'core_nonconformance', 'qms_inspection', 'qms_customerclaim', 'qms_documentrevision']
 
@@ -34,7 +34,8 @@ class Command(BaseCommand):
 
         counts = self._check_sqlite(dump) if is_sqlite(db) else self._check_pg(db, dump)
         self.stdout.write(f'무결성 검사: ok, 첨부파일 폴더: {"있음" if (src / "media").exists() else "없음"}, 개인 파일 폴더: {"있음" if (src / "private").exists() else "없음"}, '
-                          f'첨부 보관 폴더: {"있음" if (src / "attachments").exists() else "없음"}')
+                          f'첨부 보관 폴더: {"있음" if (src / "attachments").exists() else "없음"}, '
+                          f'들여오기 원본 폴더: {"있음" if (src / "imports").exists() else "없음"}')
         for t, n in counts.items():
             self.stdout.write(f'  {t}: {n}건')
         if not apply:
@@ -53,8 +54,7 @@ class Command(BaseCommand):
             run_pg('pg_dump', db, '-Fc', '-f', str(keep / 'db.dump'), db['NAME'])
         if media.exists():
             shutil.move(media, keep / 'media')
-        for name in ('private', 'attachments'):
-            folder = Path(settings.DATA_DIR) / name
+        for name, folder in folders().items():
             if (src / name).exists() and folder.exists():  # 옛 백업(그 폴더 없음)이면 현재 파일을 그대로 둔다
                 shutil.move(folder, keep / name)
         if is_sqlite(db):
@@ -63,9 +63,9 @@ class Command(BaseCommand):
             run_pg('pg_restore', db, '--clean', '--if-exists', '--no-owner', '--single-transaction', '-d', db['NAME'], str(dump))
         if (src / 'media').exists():
             shutil.copytree(src / 'media', media)
-        for name in ('private', 'attachments'):
+        for name, folder in folders().items():
             if (src / name).exists():
-                shutil.copytree(src / name, Path(settings.DATA_DIR) / name)
+                shutil.copytree(src / name, folder)
         self.stdout.write(self.style.SUCCESS(f'복원 완료. 이전 데이터는 {keep}에 보관했습니다.'))
 
     def _check_sqlite(self, dump):

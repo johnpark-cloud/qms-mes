@@ -1,7 +1,7 @@
 from django.core.exceptions import ValidationError
 from django.db import IntegrityError, transaction
 from django.db.models import Count, Q
-from django.http import HttpResponse
+from django.http import FileResponse, Http404, HttpResponse
 from django.utils.http import content_disposition_header
 from django.shortcuts import get_object_or_404
 from rest_framework.parsers import MultiPartParser
@@ -13,7 +13,7 @@ from core.export import XLSX, table_xlsx, xlsx_response
 from core.importer import (guide, headers, preview_import, run_import, standard_profile, target_of, targets, template_csv,
                            template_xlsx)
 from core.modules import active, module_of_model
-from core.models import CodeValue, ImportProfile, Item, NumberRule, Process
+from core.models import CodeValue, ImportLog, ImportProfile, Item, NumberRule, Process
 from core.numbering import (NumberingError, candidates, codebook, default_item_type, describe_text, fields,
                             next_number, parse_pattern, rulebook, _table)
 from core.grid import table_version
@@ -334,5 +334,38 @@ class ImportView(APIView):
             require_perm(request.user, p)
         if d['commit'] == '0':
             return Response(preview_import(profile, d['file'], request.user))
-        count, errors = run_import(profile, d['file'], request.user)
+        with transaction.atomic():
+            count, errors = run_import(profile, d['file'], request.user)
+            if not errors:
+                ImportLog.keep(target.model, target.label, d['file'], request.user, count, profile.name if profile.pk else '')
         return Response({'count': count, 'errors': errors})
+
+
+LOG_LIMIT = 200  # shortcut: 최근 200건만 보여 준다. 더 오래된 기록을 찾아야 하면 기간 검색을 더한다
+
+
+class ImportLogListView(APIView):
+    """확정한 들여오기 기록(docs/data-flow.md 7.4절). 대상 기록 열람 권한이 있는 것만."""
+    schema = None
+
+    def get(self, request):
+        logs = [log for log in ImportLog.objects.select_related('user')[:LOG_LIMIT] if log.can_view(request.user)]
+        return Response([{'id': log.pk, 'created_at': log.created_at, 'user': log.user.username if log.user else '',
+                          'label': log.label, 'file_name': log.file_name, 'count': log.count, 'profile': log.profile,
+                          'url': f'/api/core/import/logs/{log.pk}/file/'} for log in logs])
+
+
+class ImportLogFileView(APIView):
+    """원본 파일 그대로 받기. 목록과 같은 권한 검사. 꺼진 모듈이면 없는 것처럼 404."""
+    schema = None
+
+    def get(self, request, pk):
+        log = get_object_or_404(ImportLog, pk=pk)
+        if not request.user.has_perm(f"{log.target.split('.')[0]}.view_{log.target.split('.')[1]}"):
+            return Response({'detail': '이 기록을 볼 권한이 없습니다.'}, status=403)
+        if not log.can_view(request.user):
+            raise Http404
+        try:
+            return FileResponse(log.file.open('rb'), as_attachment=True, filename=log.file_name)
+        except OSError:
+            raise Http404('파일이 없습니다.')

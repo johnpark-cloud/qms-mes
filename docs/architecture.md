@@ -33,7 +33,7 @@ docs/        구조·업무 규칙·테스트 문서, superpowers/ 설계·계�
 
 | 파일 | 역할 |
 | --- | --- |
-| `models.py` | `Approvable`(승인 필드·잠금 기반 클래스), 품번 `Item`·공정 `Process`·BOM `BomLine`·라우팅 `RoutingStep`, 작업지시 `WorkOrder`·실적 `WorkResult`, LOT `Lot`·계보 `LotLink`, 부적합 `Nonconformance`·사진 `NonconformancePhoto`, 보류 `Hold`, 출하 `Shipment`, 삭제·수정 요청 `EditRequest`, 엑셀 가져오기 설정 `ImportProfile`, 개정 이력 `RevisionLog`(신청 → 승인자 확정, 확정 후 수정·삭제 불가), 기준정보 `MasterModel` 기반의 부서 `Department`(조직도: 상위 부서·부서장)·거래처 `Partner`(코드 자동 부여 `next_code`, 구분, 담당자 여러 명 `contacts` JSON, 인증서 `PartnerCertificate`; 옛 `qc_*` 칸은 남아 있으나 쓰지 않음), 사용자 정의 필드 `FieldDef`(값은 각 기준정보의 `extra` JSON), 기록 첨부 `Attachment`(ContentType + id, 파일은 `data/attachments/`). `Lot`·`Shipment`의 `partner`가 거래처를 가리킨다 |
+| `models.py` | `Approvable`(승인 필드·잠금 기반 클래스), 품번 `Item`·공정 `Process`·BOM `BomLine`·라우팅 `RoutingStep`, 작업지시 `WorkOrder`·실적 `WorkResult`, LOT `Lot`·계보 `LotLink`, 부적합 `Nonconformance`·사진 `NonconformancePhoto`, 보류 `Hold`, 출하 `Shipment`, 삭제·수정 요청 `EditRequest`, 엑셀 가져오기 설정 `ImportProfile`·확정한 들여오기 기록 `ImportLog`(원본 파일은 `QMS_IMPORT_DIR`, 기본 `data/imports/`), 개정 이력 `RevisionLog`(신청 → 승인자 확정, 확정 후 수정·삭제 불가), 기준정보 `MasterModel` 기반의 부서 `Department`(조직도: 상위 부서·부서장)·거래처 `Partner`(코드 자동 부여 `next_code`, 구분, 담당자 여러 명 `contacts` JSON, 인증서 `PartnerCertificate`; 옛 `qc_*` 칸은 남아 있으나 쓰지 않음), 사용자 정의 필드 `FieldDef`(값은 각 기준정보의 `extra` JSON), 기록 첨부 `Attachment`(ContentType + id, 파일은 `data/attachments/`). `Lot`·`Shipment`의 `partner`가 거래처를 가리킨다 |
 | `admin.py` | `BaseAdmin`(삭제는 시스템 관리자만, 승인 잠금, 요청 링크, 상세 화면 관련 기록 `related_panel`), 부적합 폼(MRB 처분 시 비밀번호·보완 필수 칸 검사) |
 | `records.py` | 삭제(`delete_record`), 잠금(`is_locked`), 잠금 해제 확인(`can_edit_locked`) 규칙 |
 | `views.py` | LOT 추적, 통합 검색, 부적합 간편 등록, 승인 서명, 삭제·수정 요청, 출력, 부적합 메일·사진 ZIP, 엑셀 가져오기 |
@@ -113,7 +113,7 @@ React 19·TypeScript·Vite·Ant Design 새 화면. 개발 PC에서 `npm run buil
 | --- | --- |
 | 데이터 폴더 | `data/` (`QMS_DATA_DIR`로 변경) |
 | DB | `data/db.sqlite3`, PostgreSQL은 `QMS_DB_NAME`·`QMS_DB_USER`·`QMS_DB_PASSWORD`·`QMS_DB_HOST`·`QMS_DB_PORT`. SQLite는 `transaction_mode='IMMEDIATE'`, `timeout=20`으로 쓰기를 순서대로 처리한다(동시 저장 시 부적합 번호 중복·"database is locked" 방지). PostgreSQL은 동시 저장을 막지 않으므로, 자동 번호(부적합 `NC-`, CAPA `CAPA-`)는 `core/models.py` `save_numbered`가 savepoint 안에서 저장하고 같은 번호가 이미 있으면 다음 번호로 다시 매긴다(최대 5회). 백업·복원은 `pg_dump`·`pg_restore`(`core/management/commands/backup.py` `run_pg`) |
-| 첨부 | `data/media/`, 기록 첨부(`Attachment`)는 `data/attachments/`, 개인 명세서는 `data/private/` (뒤의 둘은 `/media/` 주소로 닿지 않음) |
+| 첨부 | `data/media/`, 기록 첨부(`Attachment`)는 `data/attachments/`, 개인 명세서는 `data/private/`, 들여오기 원본(`ImportLog`)은 `QMS_IMPORT_DIR`(기본 `data/imports/`) (뒤의 셋은 `/media/` 주소로 닿지 않음) |
 | 로고 | `data/brand/logo.svg|png|jpg` |
 | 비밀키 | `data/secret_key.txt` 자동 생성, 또는 `QMS_SECRET_KEY` |
 | 서버 | `QMS_DEBUG`(기본 1), `QMS_ALLOWED_HOSTS` |

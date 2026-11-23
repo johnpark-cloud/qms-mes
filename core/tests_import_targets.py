@@ -17,6 +17,7 @@ from core.importer import headers, preview_import, problems, run_import, targets
 from core.models import (CodeValue, Department, ImportProfile, Item, Lot, Nonconformance, Partner, Process, RoutingStep,
                          Shipment, WorkOrder)
 from core.rules import LOCKED_MSG
+from core.tests_import_log import temp_imports
 from core.tests_modules import force_off
 from qms.models import AuditChecklist, ChangeRequest, Gauge, InternalAudit
 
@@ -69,6 +70,7 @@ def xlsx_file(wb):
 
 class ImportTargetsTest(TestCase):
     def setUp(self):
+        temp_imports(self)
         self.root = User.objects.create_superuser('root', password='pw')
         self.kim = User.objects.create_user('kim', password='pw', is_staff=True)
         Department.objects.create(code='QA', name='품질')

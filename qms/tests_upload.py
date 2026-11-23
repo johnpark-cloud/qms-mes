@@ -11,7 +11,8 @@ from django.utils import timezone
 from openpyxl import load_workbook
 from rest_framework.test import APIClient
 
-from core.models import Item, Lot
+from core.models import ImportLog, Item, Lot
+from core.tests_import_log import temp_imports
 from core.tests_modules import force_off
 from qms.models import Characteristic, Gauge, Inspection, InspectionSpec, Qualification
 
@@ -25,6 +26,7 @@ def csv_file(body, head=HEAD):
 
 class MeasurementUploadTest(TestCase):
     def setUp(self):
+        temp_imports(self)
         self.user = User.objects.create_user('lead', password='pw', is_staff=True)
         self.user.groups.add(Group.objects.get(name='품질팀장'))
         self.client = APIClient()
@@ -52,6 +54,10 @@ class MeasurementUploadTest(TestCase):
         self.assertEqual((r.data['count'], r.data['errors']), (1, []))
         insp = Inspection.objects.get()
         self.assertEqual((insp.result, insp.inspector), (Inspection.PASS, self.user))  # 올린 사람이 검사원
+        log = ImportLog.objects.get()  # 미리보기는 남기지 않고 확정 한 번만 원본과 함께 남긴다(7.4절)
+        self.assertEqual((log.target, log.file_name, log.count, log.user), ('qms.inspection', '측정.csv', 1, self.user))
+        with log.file.open('rb') as f:
+            self.assertEqual(f.read(), (HEAD + body).encode('utf-8-sig'))
 
     def test_fail_registers_nc_and_holds(self):
         r = self.post('RAW-1,수입검사,두께,12,\nRAW-1,수입검사,외관,NG,\n')

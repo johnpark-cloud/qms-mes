@@ -7,6 +7,7 @@ from django.test import TestCase
 from openpyxl import load_workbook
 from rest_framework.test import APIClient
 
+from core.tests_import_log import temp_imports
 from core.models import BomLine, CodeValue, ImportProfile, Item, NumberRule, Process, RoutingStep
 
 
@@ -312,6 +313,7 @@ class ImportApiTest(TestCase):
         self.client = APIClient()
         self.boss = User.objects.create_superuser('boss', password='x')
         self.client.force_login(self.boss)
+        temp_imports(self)
         self.profile = ImportProfile.objects.create(
             name='품번', target='item', mapping={'code': '코드', 'name': '이름', 'item_type': '구분'})
 

@@ -811,6 +811,8 @@ class AuditFixTest(TestCase):
     def test_import_needs_add_and_change(self):
         from django.core.files.uploadedfile import SimpleUploadedFile
         from .models import ImportProfile
+        from .tests_import_log import temp_imports
+        temp_imports(self)
         profile = ImportProfile.objects.create(name='품번', target='item', mapping={'code': '코드', 'name': '이름', 'item_type': '구분'})
         post = lambda: {'profile': profile.pk, 'file': SimpleUploadedFile('i.csv', '코드,이름,구분\nC1,덮어씀,완제품\n'.encode())}
         self.client.force_login(self._user('검사원'))
