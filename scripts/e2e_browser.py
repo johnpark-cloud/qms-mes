@@ -627,6 +627,27 @@ try:
         except Exception as e:
             check('엑셀 일괄 등록 미리보기→확정', False, str(e)[:80])
 
+        try:  # 3단계 ②: 빈 양식을 받아 채워 올리면 설정 없이 들어간다
+            page.goto('/app/import')
+            page.get_by_label('가져오기 설정').click()
+            page.keyboard.type('품목')
+            page.locator('.ant-select-item-option[title="품목"]').click()
+            with page.expect_download() as dl:
+                page.get_by_text('빈 양식 받기').click()
+            with open(dl.value.path(), encoding='utf-8-sig') as f:
+                head = f.read().strip()
+            csv_path = os.path.join(env['QMS_DATA_DIR'], 'template.csv')
+            with open(csv_path, 'w', encoding='utf-8-sig') as f:
+                f.write(head + '\nE2E-TP1,빈 양식,원자재\n')
+            page.get_by_label('파일 선택').set_input_files(csv_path)
+            page.get_by_role('button', name='미리보기').click()
+            page.locator('.ant-table-tbody tr[data-row-key]').first.wait_for(timeout=5000)
+            page.get_by_role('button', name='확정').click()
+            page.get_by_text('1건 등록했습니다.').wait_for(timeout=5000)
+            check('빈 양식 받기 → 채워 올리기', head == '품번,품명,구분', head)
+        except Exception as e:
+            check('빈 양식 받기 → 채워 올리기', False, str(e)[:80])
+
         try:
             page.goto('/app/todo')
             page.locator('.ant-menu-submenu-title', has_text='기준정보').click()

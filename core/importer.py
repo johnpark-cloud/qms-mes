@@ -143,6 +143,19 @@ def headers(target):
     return {n: recordspec.label_of(target.model, n) for n in target.columns}
 
 
+def standard_profile(target):
+    """빈 양식(표준 열 제목) 파일을 들여올 때 쓰는 저장하지 않는 설정. 가져오기 설정 없이 바로 올린다."""
+    from .models import ImportProfile
+    return ImportProfile(name='표준 양식', target=target.key, header_row=1, mapping=headers(target))
+
+
+def template_csv(target):
+    """종류별 빈 양식: 1행 표준 열 제목만. 한국어 엑셀이 바로 열도록 UTF-8 BOM을 붙인다."""
+    buf = io.StringIO()
+    csv.writer(buf).writerow(headers(target).values())
+    return buf.getvalue().encode('utf-8-sig')
+
+
 def problems():
     """대상 설정 점검: 외래키 칸마다 찾는 방법이 있어야 한다(테스트가 부른다)."""
     bad = []

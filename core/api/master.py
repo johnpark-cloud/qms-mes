@@ -1,6 +1,8 @@
 from django.core.exceptions import ValidationError
 from django.db import IntegrityError, transaction
 from django.db.models import Count, Q
+from django.http import HttpResponse
+from django.utils.http import content_disposition_header
 from django.shortcuts import get_object_or_404
 from rest_framework.parsers import MultiPartParser
 from rest_framework.response import Response
@@ -8,7 +10,8 @@ from rest_framework.views import APIView
 
 from core.api.permissions import require_perm
 from core.export import table_xlsx, xlsx_response
-from core.importer import preview_import, run_import, target_of
+from core.importer import headers, preview_import, run_import, standard_profile, target_of, targets, template_csv
+from core.modules import active, module_of_model
 from core.models import CodeValue, ImportProfile, Item, NumberRule, Process
 from core.numbering import (NumberingError, candidates, codebook, default_item_type, describe_text, fields,
                             next_number, parse_pattern, rulebook, _table)
@@ -267,13 +270,50 @@ class ImportProfileListView(APIView):
                           'header_row': p.header_row, 'mapping': p.mapping} for p in ImportProfile.objects.order_by('name')])
 
 
+def _import_perms(target):
+    """들여오기는 기존 행을 덮어쓰므로 추가·변경 권한이 모두 필요하다(import_view와 같다)."""
+    opts = target.model._meta
+    return [f'{opts.app_label}.{a}_{opts.model_name}' for a in ('add', 'change')]
+
+
+class ImportTargetListView(APIView):
+    """빈 양식을 받을 수 있는 종류: 추가·변경 권한이 있고 모듈이 켜진 것만."""
+    schema = None
+
+    def get(self, request):
+        return Response([{'key': t.key, 'label': t.label, 'headers': headers(t)}
+                         for t in sorted(targets().values(), key=lambda t: t.label)
+                         if request.user.has_perms(_import_perms(t)) and active(module_of_model(t.model._meta.label_lower))])
+
+
+class ImportTemplateView(APIView):
+    """종류별 빈 양식 CSV(docs/data-flow.md 5절 표준 열 제목)."""
+    schema = None
+
+    def get(self, request):
+        target = targets().get(request.query_params.get('target', ''))
+        if target is None:
+            return _bad('들여올 수 없는 종류입니다.', 'target')
+        for p in _import_perms(target):
+            require_perm(request.user, p)
+        resp = HttpResponse(template_csv(target), content_type='text/csv; charset=utf-8')
+        resp['Content-Disposition'] = content_disposition_header(True, f'{target.label} 양식.csv')
+        return resp
+
+
 class ImportView(APIView):
     schema = None
     parser_classes = [MultiPartParser]
 
     def post(self, request):
         d = request.data
-        profile = ImportProfile.objects.filter(pk=d.get('profile')).first() if str(d.get('profile', '')).isdecimal() else None
+        if d.get('target'):  # 빈 양식(표준 열 제목)은 설정 없이 들여온다
+            target = targets().get(d['target'])
+            if target is None:
+                return _bad('들여올 수 없는 종류입니다.', 'target')
+            profile = standard_profile(target)
+        else:
+            profile = ImportProfile.objects.filter(pk=d.get('profile')).first() if str(d.get('profile', '')).isdecimal() else None
         if profile is None:
             return _bad('가져오기 설정을 선택하세요.', 'profile')
         if not d.get('file'):
@@ -283,9 +323,8 @@ class ImportView(APIView):
         target = target_of(profile)
         if target is None:
             return _bad('이 가져오기 설정의 대상은 더 이상 들여올 수 없습니다.', 'profile')
-        opts = target.model._meta  # import_view와 같다: 기존 행을 덮어쓰므로 추가·변경 권한이 모두 필요하다
-        for a in ('add', 'change'):
-            require_perm(request.user, f'{opts.app_label}.{a}_{opts.model_name}')
+        for p in _import_perms(target):
+            require_perm(request.user, p)
         if d['commit'] == '0':
             return Response(preview_import(profile, d['file'], request.user))
         count, errors = run_import(profile, d['file'], request.user)

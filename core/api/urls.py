@@ -21,6 +21,8 @@ urlpatterns = [
     path('core/processes/', master.ProcessTableView.as_view()),
     path('core/import/profiles/', master.ImportProfileListView.as_view()),
     path('core/import/', master.ImportView.as_view()),
+    path('core/import/targets/', master.ImportTargetListView.as_view()),
+    path('core/import/template/', master.ImportTemplateView.as_view()),
     path('attachments/', attachments.AttachmentListView.as_view()),
     path('attachments/<int:pk>/', attachments.AttachmentDetailView.as_view()),
     path('relations/<str:label>/<int:pk>/', views.RelationsView.as_view(), name='relations'),

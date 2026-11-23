@@ -1,4 +1,5 @@
 """3단계 ① 들여오기 대상 일반화(docs/data-flow.md 5·7절): 대상마다 미리보기·확정, 키로 고치기, 잠금·권한·모듈·보류."""
+import codecs
 import csv
 import io
 
@@ -193,3 +194,42 @@ class ImportTargetsTest(TestCase):
         u = User.objects.get(pk=u.pk)  # 권한 캐시 비우기
         client.force_login(u)
         self.assertEqual(post().json(), {'count': 1, 'errors': []})
+
+    def test_template_round_trip_every_target(self):
+        """3단계 ②: 빈 양식을 받아 채워 올리면 설정 없이 그대로 들어간다."""
+        client = APIClient()
+        client.force_login(self.root)
+        listed = {t['key']: t for t in client.get('/api/core/import/targets/').json()}
+        self.assertEqual(set(listed), set(targets()))
+        for key, row in SAMPLES.items():
+            with self.subTest(key), transaction.atomic():
+                r = client.get('/api/core/import/template/', {'target': key})
+                self.assertEqual(r.status_code, 200)
+                self.assertIn('text/csv', r['Content-Type'])
+                self.assertTrue(r.content.startswith(codecs.BOM_UTF8))  # 한국어 엑셀이 글자를 깨지 않게
+                header = next(csv.reader(io.StringIO(r.content.decode('utf-8-sig'))))
+                titles = listed[key]['headers']
+                self.assertEqual(header, list(titles.values()))
+                self.assertEqual(len(set(header)), len(header))  # 같은 제목이 둘이면 칸을 구분하지 못한다
+                model = targets()[key].model
+                before = model.objects.count()
+                r = client.post('/api/core/import/', {'target': key, 'file': csv_file([header, [row.get(f, '') for f in titles]]),
+                                                      'commit': '1'}, format='multipart')
+                self.assertEqual(r.json(), {'count': 1, 'errors': []})
+                self.assertEqual(model.objects.count(), before + 1)
+                transaction.set_rollback(True)
+
+    def test_template_needs_add_and_change(self):
+        client = APIClient()
+        client.force_login(self.kim)
+        self.assertEqual(client.get('/api/core/import/targets/').json(), [])
+        self.assertEqual(client.get('/api/core/import/template/', {'target': 'work_order'}).status_code, 403)
+        grant(self.kim, 'add_workorder', 'change_workorder')
+        client.force_login(User.objects.get(pk=self.kim.pk))
+        self.assertEqual([t['key'] for t in client.get('/api/core/import/targets/').json()], ['work_order'])
+        self.assertEqual(client.get('/api/core/import/template/', {'target': 'work_order'}).status_code, 200)
+        self.assertEqual(client.get('/api/core/import/template/', {'target': 'nope'}).status_code, 400)
+        r = client.post('/api/core/import/', {'target': 'nope', 'file': csv_file([['a']]), 'commit': '0'}, format='multipart')
+        self.assertEqual(r.status_code, 400)
+        force_off('mes')
+        self.assertEqual(client.get('/api/core/import/targets/').json(), [])  # 꺼진 모듈 대상은 목록에서 뺀다
