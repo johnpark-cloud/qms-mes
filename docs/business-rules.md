@@ -106,7 +106,7 @@
 
 | 규칙 | 위치 |
 | --- | --- |
-| 8D 기한은 고객사별 규칙(봉쇄 D3 시간, 대책 D5 일)을 따르고, D1~D8이 모두 채워져야 종결한다. | `CustomerRule`, `CustomerClaim.clean` |
+| 8D 기한은 고객사별 규칙(봉쇄 D3 시간, 원인 D4·대책 D5·종결 D8 일, 기본 24시간·5·10·60일)을 따르고, D1~D8이 모두 채워져야 종결한다. D1~D3은 D3, D4는 D4, D5는 D5, D6~D8은 D8 기한을 따르며 내 할 일·지연 표시는 지금 단계의 기한으로 센다. 규칙은 D3 ≤ D4 ≤ D5 ≤ D8 순서여야 저장된다. | `CustomerRule.clean`, `CustomerClaim.clean`·`step_due`·`current_due`·`delay` |
 | SCAR는 공급자 회신 없이 종결할 수 없다. | `Scar.clean` |
 | CAPA 유효성은 조치 완료 후 확인일·확인자와 함께 기록하고, "유효"여야 종결한다. | `Capa.clean` |
 | 내부심사는 실시일이 있어야 하고, CAPA가 연결되지 않은 중·경부적합 발견사항이 있으면 종결할 수 없다. | `InternalAudit.clean` |

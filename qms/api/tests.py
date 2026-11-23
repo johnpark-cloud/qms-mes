@@ -14,7 +14,7 @@ from rest_framework.test import APIClient
 
 from core.export import XLSX
 from core.models import EditRequest, Hold, Item, Lot, Nonconformance, WorkOrder
-from qms.models import (AuditFinding, Capa, ChangeRequest, Characteristic, CustomerClaim, Gauge, Inspection, InspectionSpec,
+from qms.models import (AuditFinding, Capa, ChangeRequest, Characteristic, CustomerClaim, CustomerRule, Gauge, Inspection, InspectionSpec,
                         InternalAudit, Measurement, PpapSubmission, Scar)
 from qms.overview import sections
 from qms.rules import RECEIVE_MSG, new_spec_revision, submit_inspection
@@ -745,7 +745,13 @@ class CustomerRuleApiTest(TestCase):
         self.assertEqual(r.status_code, 200)
         self.assertEqual(r.json()['rows'][0]['containment_hours'], 12)
         ws = load_workbook(BytesIO(c.get(self.URL + '?export=xlsx').content)).active
-        self.assertEqual([x.value for x in ws[1]], ['고객사', '봉쇄(D3) 기한(시간)', '대책(D5) 기한(일)'])
+        self.assertEqual([x.value for x in ws[1]], ['고객사', '봉쇄(D3) 기한(시간)', '원인(D4) 기한(일)', '대책(D5) 기한(일)', '종결(D8) 기한(일)'])
+        v = c.get(self.URL).json()['version']
+        rid = CustomerRule.objects.get().pk
+        r = c.put(self.URL, {'version': v, 'rows': [{'id': rid, 'customer': 'A사', 'containment_hours': 12, 'root_cause_days': 9,
+                                                     'corrective_days': 7, 'closure_days': 60}]}, format='json')
+        self.assertEqual(r.status_code, 400)  # 원인(D4)이 대책(D5)보다 늦으면 저장하지 않는다
+        self.assertIn('rows.0.root_cause_days', r.json()['fields'])
 
 
 class MemoApiTest(TestCase):

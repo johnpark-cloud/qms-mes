@@ -47,8 +47,10 @@ const PROCESS_COLUMNS: GridColumn[] = [
 ]
 const RULE_COLUMNS: GridColumn[] = [
   { key: 'customer', label: '고객사', kind: 'text' },
-  { key: 'containment_hours', label: '봉쇄(D3) 기한(시간)', kind: 'number', width: 180 },
-  { key: 'corrective_days', label: '대책(D5) 기한(일)', kind: 'number', width: 180 },
+  { key: 'containment_hours', label: '봉쇄(D3) 기한(시간)', kind: 'number', width: 170 },
+  { key: 'root_cause_days', label: '원인(D4) 기한(일)', kind: 'number', width: 160 },
+  { key: 'corrective_days', label: '대책(D5) 기한(일)', kind: 'number', width: 160 },
+  { key: 'closure_days', label: '종결(D8) 기한(일)', kind: 'number', width: 160 },
 ]
 
 // 화면 데이터는 늘 서버가 맞다: 창으로 돌아와도 자동으로 다시 받지 않고, 실패 재시도도 하지 않는다.

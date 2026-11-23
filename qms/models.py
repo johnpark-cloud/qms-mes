@@ -546,8 +546,10 @@ class CustomerRule(models.Model):
     customer = models.CharField('고객사', max_length=100, unique=True)
     partner = models.ForeignKey('core.Partner', on_delete=models.PROTECT, null=True, blank=True, related_name='customer_rules',
                                 limit_choices_to={'is_customer': True}, verbose_name='거래처')
-    containment_hours = models.PositiveIntegerField('봉쇄(D3) 기한(시간)', default=24)
+    containment_hours = models.PositiveIntegerField('봉쇄(D3) 기한(시간)', default=24, help_text='D1~D3을 이 시간 안에')
+    root_cause_days = models.PositiveIntegerField('원인(D4) 기한(일)', default=5)
     corrective_days = models.PositiveIntegerField('대책(D5) 기한(일)', default=10)
+    closure_days = models.PositiveIntegerField('종결(D8) 기한(일)', default=60, help_text='D6~D8을 이 일수 안에')
     history = HistoricalRecords()
 
     class Meta:
@@ -555,6 +557,30 @@ class CustomerRule(models.Model):
 
     def __str__(self):
         return self.customer
+
+    def clean(self):
+        if self.containment_hours > self.root_cause_days * 24:
+            raise ValidationError({'containment_hours': '봉쇄(D3) 기한은 원인(D4) 기한보다 길 수 없습니다.'})
+        if self.root_cause_days > self.corrective_days:
+            raise ValidationError({'root_cause_days': '원인(D4) 기한은 대책(D5) 기한보다 길 수 없습니다.'})
+        if self.corrective_days > self.closure_days:
+            raise ValidationError({'closure_days': '종결(D8) 기한은 대책(D5) 기한보다 짧을 수 없습니다.'})
+
+    def save(self, *args, **kwargs):
+        self.clean()
+        super().save(*args, **kwargs)
+
+
+def _late(due, at):
+    """at이 due를 넘긴 만큼 'N일'(하루 미만은 'N시간'), 안 넘겼으면 ''."""
+    over = at - due
+    if over <= datetime.timedelta(0):
+        return ''
+    return f'{over.days}일' if over.days else f'{max(1, over.seconds // 3600)}시간'
+
+
+def _fmt(at):
+    return timezone.localtime(at).strftime('%m-%d %H:%M')
 
 
 class CustomerClaim(models.Model):
@@ -592,17 +618,75 @@ class CustomerClaim(models.Model):
     def _rule(self):
         return CustomerRule.objects.filter(customer=self.customer).first() or CustomerRule(customer=self.customer)
 
+    # 단계 → 따르는 기한(이름, 고객 규칙 칸, 단위). D1·D2는 D3까지, D6·D7은 D8까지 끝낸다
+    MILESTONES = {'containment': ('봉쇄', 'containment_hours', 'hours'), 'root_cause': ('원인', 'root_cause_days', 'days'),
+                  'corrective': ('대책', 'corrective_days', 'days'), 'closure': ('종결', 'closure_days', 'days')}
+    STEP_MILESTONE = {'d1_team': 'containment', 'd2_problem': 'containment', 'd3_containment': 'containment',
+                      'd4_root_cause': 'root_cause', 'd5_corrective': 'corrective', 'd6_verification': 'closure',
+                      'd7_prevention': 'closure', 'd8_closure': 'closure'}
+
+    def _due(self, milestone):
+        _, field, unit = self.MILESTONES[milestone]
+        return self.received_at + datetime.timedelta(**{unit: getattr(self._rule(), field)})
+
     @property
     def containment_due(self):
-        return self.received_at + datetime.timedelta(hours=self._rule().containment_hours)
+        return self._due('containment')
+
+    @property
+    def root_cause_due(self):
+        return self._due('root_cause')
 
     @property
     def corrective_due(self):
-        return self.received_at + datetime.timedelta(days=self._rule().corrective_days)
+        return self._due('corrective')
+
+    @property
+    def closure_due(self):
+        return self._due('closure')
+
+    def step_due(self, field):
+        return self._due(self.STEP_MILESTONE[field])
 
     @property
     def current_step(self):
         return next((label for field, label in self.STEPS if not getattr(self, field)), '완료')
+
+    @property
+    def current_due(self):
+        """지금 단계가 따르는 (기한 이름, 기한). 모두 채웠으면 None."""
+        field = next((f for f, _ in self.STEPS if not getattr(self, f)), None)
+        return field and (self.MILESTONES[self.STEP_MILESTONE[field]][0], self.step_due(field))
+
+    @property
+    def delay(self):
+        """목록 「지연」: 지금 단계가 기한을 넘겼으면 '단계 N일 지연'."""
+        field = next((f for f, _ in self.STEPS if not getattr(self, f)), None)
+        late = field and not self.closed_at and _late(self.step_due(field), timezone.now())
+        return f'{dict(self.STEPS)[field]} {late} 지연' if late else ''
+
+    @property
+    def step_status(self):
+        """기록 화면 「단계별 기한」: 단계마다 기한·완료 일시(이력에서 처음 채운 때)·지연."""
+        fields = [f for f, _ in self.STEPS]
+        done = {}
+        for row in self.history.order_by('history_date').values('history_date', *fields) if self.pk else ():
+            for f in fields:
+                if row[f] and f not in done:
+                    done[f] = row['history_date']
+        current = next((f for f in fields if not getattr(self, f)), None)
+        now, lines = timezone.now(), []
+        for field, label in self.STEPS:
+            due = self.step_due(field)
+            line = f'{label} · 기한 {_fmt(due)}'
+            if getattr(self, field):
+                at = done.get(field)
+                late = at and _late(due, at)
+                line += f' · {_fmt(at)} 완료' + (f'({late} 늦음)' if late else '') if at else ' · 완료'
+            elif field == current and not self.closed_at and _late(due, now):
+                line += f' · {_late(due, now)} 지연 중'
+            lines.append(line)
+        return '\n'.join(lines)
 
     def clean(self):
         if self.closed_at and self.current_step != '완료':

@@ -29,7 +29,9 @@ def due_items(approver=False, user=None):
     soon = now + datetime.timedelta(days=2)
     claims = []
     for c in CustomerClaim.objects.filter(closed_at__isnull=True).select_related('lot'):
-        c.due_label, c.due = ('대책', c.corrective_due) if c.d3_containment else ('봉쇄', c.containment_due)
+        if not c.current_due:
+            continue
+        c.due_label, c.due = c.current_due  # 지금 단계가 따르는 기한(봉쇄·원인·대책·종결)
         if c.due <= soon:
             c.overdue = c.due < now
             claims.append(c)

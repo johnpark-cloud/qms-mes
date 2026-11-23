@@ -58,5 +58,5 @@ class DashboardSaveView(APIView):
 
 class CustomerRuleTableView(TableView):
     model, unique, sheet, filename = CustomerRule, ('customer',), '고객사별 8D 기한', '고객사별 8D 기한.xlsx'
-    fields = {'customer': 'text', 'containment_hours': 'int', 'corrective_days': 'int'}
-    columns = ['고객사', '봉쇄(D3) 기한(시간)', '대책(D5) 기한(일)']
+    fields = {'customer': 'text', 'containment_hours': 'int', 'root_cause_days': 'int', 'corrective_days': 'int', 'closure_days': 'int'}
+    columns = ['고객사', '봉쇄(D3) 기한(시간)', '원인(D4) 기한(일)', '대책(D5) 기한(일)', '종결(D8) 기한(일)']

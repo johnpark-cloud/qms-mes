@@ -377,7 +377,7 @@ class PpapSubmissionAdmin(ApprovalAdminMixin, ReportLinksMixin, BaseAdmin):
 
 @admin.register(CustomerRule)
 class CustomerRuleAdmin(BaseAdmin):
-    list_display = ['customer', 'containment_hours', 'corrective_days']
+    list_display = ['customer', 'containment_hours', 'root_cause_days', 'corrective_days', 'closure_days']
     autocomplete_fields = ['partner']
 
 
