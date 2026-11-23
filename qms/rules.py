@@ -164,6 +164,32 @@ def upload_measurements(uploaded, user, dry_run):
     return count, errors, results
 
 
+def _upload_guide_list():
+    types = [label for _, label in InspectionSpec.TYPES]
+    return [
+        {'key': 'lot', 'label': 'lot', 'required': True, 'hint': 'LOT 번호. 같은 LOT·검사 구분의 줄들이 검사 1건이 된다', 'example': 'RAW-1'},
+        {'key': 'type', 'label': 'type', 'required': True, 'example': types[0], 'choices': types,
+         'hint': '검사 구분: ' + ' · '.join(types) + ' (영문 코드 ' + ' · '.join(c for c, _ in InspectionSpec.TYPES) + '도 된다)'},
+        {'key': 'characteristic', 'label': 'characteristic', 'required': True, 'example': '두께',
+         'hint': '그 품목·검사 구분의 승인된 검사기준서에 있는 검사항목 이름. 항목마다 한 줄씩 모두 적는다'},
+        {'key': 'value', 'label': 'value', 'required': True, 'example': '10',
+         'hint': '측정값. 계량형은 숫자, 계수형은 OK·NG(1·0, 합격·불합격)'},
+        {'key': 'gauge', 'label': 'gauge', 'required': False, 'example': '',
+         'hint': '계측기 관리번호(교정 기한 안). 비우면 검사항목의 계측기 종류로 맞는 계측기를 고른다. 계수형은 비운다'},
+    ]
+
+
+UPLOAD_GUIDE = _upload_guide_list()
+
+
+def upload_template_xlsx():
+    """측정 원자료 엑셀 빈 양식: 입력 시트(검사 구분·계측기 목록) + 작성 안내."""
+    from core.importer import GUIDE_NOTES, guide_workbook
+    columns = [dict(c) for c in UPLOAD_GUIDE]
+    columns[4].update(choices=[g.number for g in usable_gauges()], strict=False)
+    return guide_workbook('측정 원자료', columns, GUIDE_NOTES)
+
+
 def upload_template():
     """측정 원자료 빈 양식: 1행 열 제목만. 한국어 엑셀이 바로 열도록 UTF-8 BOM."""
     return (','.join(UPLOAD_COLUMNS) + '\r\n').encode('utf-8-sig')

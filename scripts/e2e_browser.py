@@ -633,7 +633,7 @@ try:
             page.keyboard.type('품목')
             page.locator('.ant-select-item-option[title="품목"]').click()
             with page.expect_download() as dl:
-                page.get_by_text('빈 양식 받기').click()
+                page.get_by_text('CSV', exact=True).click()  # 엑셀 양식 옆 CSV 단추
             with open(dl.value.path(), encoding='utf-8-sig') as f:
                 head = f.read().strip()
             csv_path = os.path.join(env['QMS_DATA_DIR'], 'template.csv')

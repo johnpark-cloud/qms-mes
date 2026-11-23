@@ -1,5 +1,6 @@
 """3단계 ③ 측정 원자료 화면 업로드(docs/data-flow.md 5·7절): 검사 입력 화면과 같은 submit_inspection 경로로 판정한다."""
 import codecs
+import io
 from datetime import date, timedelta
 from decimal import Decimal
 
@@ -7,6 +8,7 @@ from django.contrib.auth.models import Group, User
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase
 from django.utils import timezone
+from openpyxl import load_workbook
 from rest_framework.test import APIClient
 
 from core.models import Item, Lot
@@ -117,3 +119,24 @@ class MeasurementUploadTest(TestCase):
         force_off('qms_inspection')
         self.assertIn(self.post('RAW-1,수입검사,두께,10,\n').status_code, (403, 404))
         self.assertFalse(Inspection.objects.exists())
+
+    def test_guide_and_xlsx_template(self):
+        g = {c['key']: c for c in self.client.get(URL).data['guide']}
+        self.assertEqual(list(g), ['lot', 'type', 'characteristic', 'value', 'gauge'])
+        self.assertEqual((g['lot']['required'], g['gauge']['required']), (True, False))
+        self.assertIn('OK', g['value']['hint'])
+        Gauge.objects.create(number='MC-03', name='외측', kind='마이크로미터', last_calibrated=timezone.localdate())
+        r = self.client.get(URL + 'template/', {'kind': 'xlsx'})
+        wb = load_workbook(io.BytesIO(r.content))
+        ws = wb.active
+        self.assertEqual([c.value for c in ws[1]], ['lot', 'type', 'characteristic', 'value', 'gauge'])
+        listed = {str(c.value) for col in wb['목록'].iter_cols() for c in col}
+        self.assertTrue({'수입검사', 'MC-03'} <= listed)
+        for i, row in enumerate((('RAW-1', '수입검사', '두께', 10, 'MC-03'), ('RAW-1', '수입검사', '외관', 'OK', None)), start=2):
+            for col, v in enumerate(row, start=1):
+                ws.cell(i, col, v)
+        buf = io.BytesIO()
+        wb.save(buf)
+        r = self.client.post(URL, {'file': SimpleUploadedFile('m.xlsx', buf.getvalue()), 'commit': '1'}, format='multipart')
+        self.assertEqual(r.data['errors'], [])
+        self.assertEqual(Inspection.objects.get().result, Inspection.PASS)

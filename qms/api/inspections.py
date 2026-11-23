@@ -13,12 +13,12 @@ from rest_framework.views import APIView
 
 from core.api import listing
 from core.api.permissions import require_perm
-from core.export import document_xlsx, table_xlsx, xlsx_response
+from core.export import XLSX, document_xlsx, table_xlsx, xlsx_response
 from core.models import Hold, Item, Lot, Nonconformance
 from core.relations import record_url, trace_url
 from qms.models import Capa, ExcelTemplate, Gauge, Inspection, InspectionSpec
-from qms.rules import (RECEIVE_MSG, UPLOAD_RESULT, gauge_kind, measurement, pick_gauge, receive_lot, submit_inspection,
-                       upload_measurements, upload_template, usable_gauges)
+from qms.rules import (RECEIVE_MSG, UPLOAD_GUIDE, UPLOAD_RESULT, gauge_kind, measurement, pick_gauge, receive_lot, submit_inspection,
+                       upload_measurements, upload_template, upload_template_xlsx, usable_gauges)
 
 from .specs import BAD_BODY, PAGE_SIZE, _bad
 
@@ -236,7 +236,7 @@ class UploadView(APIView):
 
     def get(self, request):
         require_perm(request.user, PERM)
-        return Response({'label': '측정 원자료(검사 판정)', 'columns': UPLOAD_RESULT})
+        return Response({'label': '측정 원자료(검사 판정)', 'columns': UPLOAD_RESULT, 'guide': UPLOAD_GUIDE})
 
     def post(self, request):
         require_perm(request.user, PERM)
@@ -253,9 +253,15 @@ class UploadTemplateView(APIView):
     schema = None
 
     def get(self, request):
+        fmt = request.query_params.get('kind', 'csv')
+        if fmt not in ('csv', 'xlsx'):
+            return _bad('양식 형식은 csv 또는 xlsx입니다.', 'kind')
         require_perm(request.user, PERM)
-        r = HttpResponse(upload_template(), content_type='text/csv; charset=utf-8')
-        r['Content-Disposition'] = content_disposition_header(True, '측정 원자료 양식.csv')
+        if fmt == 'xlsx':
+            r = HttpResponse(upload_template_xlsx(), content_type=XLSX)
+        else:
+            r = HttpResponse(upload_template(), content_type='text/csv; charset=utf-8')
+        r['Content-Disposition'] = content_disposition_header(True, f'측정 원자료 양식.{fmt}')
         return r
 
 

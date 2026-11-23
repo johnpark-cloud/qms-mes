@@ -9,8 +9,9 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from core.api.permissions import require_perm
-from core.export import table_xlsx, xlsx_response
-from core.importer import headers, preview_import, run_import, standard_profile, target_of, targets, template_csv
+from core.export import XLSX, table_xlsx, xlsx_response
+from core.importer import (guide, headers, preview_import, run_import, standard_profile, target_of, targets, template_csv,
+                           template_xlsx)
 from core.modules import active, module_of_model
 from core.models import CodeValue, ImportProfile, Item, NumberRule, Process
 from core.numbering import (NumberingError, candidates, codebook, default_item_type, describe_text, fields,
@@ -281,23 +282,29 @@ class ImportTargetListView(APIView):
     schema = None
 
     def get(self, request):
-        return Response([{'key': t.key, 'label': t.label, 'headers': headers(t)}
+        return Response([{'key': t.key, 'label': t.label, 'headers': headers(t), 'guide': guide(t)}
                          for t in sorted(targets().values(), key=lambda t: t.label)
                          if request.user.has_perms(_import_perms(t)) and active(module_of_model(t.model._meta.label_lower))])
 
 
 class ImportTemplateView(APIView):
-    """종류별 빈 양식 CSV(docs/data-flow.md 5절 표준 열 제목)."""
+    """종류별 빈 양식(docs/data-flow.md 5절 표준 열 제목). kind=xlsx면 드롭다운·작성 안내가 붙은 엑셀, 아니면 CSV."""
     schema = None
 
     def get(self, request):
         target = targets().get(request.query_params.get('target', ''))
         if target is None:
             return _bad('들여올 수 없는 종류입니다.', 'target')
+        fmt = request.query_params.get('kind', 'csv')
+        if fmt not in ('csv', 'xlsx'):
+            return _bad('양식 형식은 csv 또는 xlsx입니다.', 'kind')
         for p in _import_perms(target):
             require_perm(request.user, p)
-        resp = HttpResponse(template_csv(target), content_type='text/csv; charset=utf-8')
-        resp['Content-Disposition'] = content_disposition_header(True, f'{target.label} 양식.csv')
+        if fmt == 'xlsx':
+            resp = HttpResponse(template_xlsx(target), content_type=XLSX)
+        else:
+            resp = HttpResponse(template_csv(target), content_type='text/csv; charset=utf-8')
+        resp['Content-Disposition'] = content_disposition_header(True, f'{target.label} 양식.{fmt}')
         return resp
 
 

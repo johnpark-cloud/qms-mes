@@ -15,7 +15,11 @@ from typing import NamedTuple
 from django.apps import apps
 from django.core.exceptions import NON_FIELD_ERRORS, ValidationError
 from django.db import models, transaction
-from openpyxl import load_workbook
+from django.utils import timezone
+from openpyxl import Workbook, load_workbook
+from openpyxl.comments import Comment
+from openpyxl.styles import Alignment, Font, PatternFill
+from openpyxl.worksheet.datavalidation import DataValidation
 
 from . import recordspec, rules
 from .modules import MODULES, active, module_of_model
@@ -154,6 +158,142 @@ def template_csv(target):
     buf = io.StringIO()
     csv.writer(buf).writerow(headers(target).values())
     return buf.getvalue().encode('utf-8-sig')
+
+
+# ---------- 작성 안내(신입이 칸마다 무엇을 적을지) ----------
+
+HINTS = {  # 찾는 방법이 특별한 외래키(RESOLVE)
+    ('core.workresult', 'step'): '공정 코드. 앞 칸 작업지시 품목의 라우팅에 있는 공정이어야 한다',
+    ('core.codevalue', 'parent'): '상위 코드. 같은 코드가 여러 곳에 있으면 1/5처럼 위에서부터 /로 이어 적는다',
+}
+
+
+def _guide_one(target, name):
+    """칸 하나의 작성 안내: 필수 여부·적는 값·예. 모델 정의에서 만든다(DB를 읽지 않는다)."""
+    model = target.model
+    f = model._meta.get_field(name)
+    example, choices = '', None
+    if (model._meta.label_lower, name) in HINTS:
+        hint = HINTS[model._meta.label_lower, name]
+    elif f.is_relation:
+        rel = f.related_model
+        key = lookup_key(rel)
+        hint = f"{rel._meta.verbose_name}의 {recordspec.label_of(rel, key) if key else '번호'}. 엑셀 양식에서는 목록에서 고른다"
+    elif f.choices:
+        choices = [str(label) for _, label in f.flatchoices]
+        hint, example = '다음 중 하나: ' + ' · '.join(choices), choices[0]
+    elif isinstance(f, models.BooleanField):
+        choices = ['예', '아니오']
+        hint, example = '예 또는 아니오', '아니오' if f.default is False else '예'
+    elif isinstance(f, models.DateTimeField):
+        hint, example = '날짜와 시각', timezone.localtime().strftime('%Y-%m-%d 09:00')
+    elif isinstance(f, models.DateField):
+        hint, example = '날짜', timezone.localdate().isoformat()
+    elif isinstance(f, models.DecimalField):
+        hint, example = f'숫자(소수 {f.decimal_places}자리까지)', '10'
+    elif isinstance(f, models.IntegerField):
+        hint, example = '정수', '1'
+    elif isinstance(f, models.TextField):
+        hint = '글(여러 줄 가능)'
+    else:
+        hint = f'글({f.max_length}자까지)' if f.max_length else '글'
+    if f.help_text:
+        hint += f'. {f.help_text}'
+    if name in target.match:
+        hint += '. 같은 값의 기록이 이미 있으면 새로 만들지 않고 그 기록을 고친다'
+    # 비어도 되는 칸·기본값이 있는 칸(save_new가 채운다)·예/아니오는 필수가 아니다
+    required = not (f.blank or f.has_default() or isinstance(f, models.BooleanField))
+    return {'key': name, 'label': recordspec.label_of(model, name), 'required': required, 'hint': hint,
+            'example': example, 'choices': choices}
+
+
+def guide(target):
+    """[{key, label, required, hint, example, choices}] 열 순서대로. 화면 안내 표와 엑셀 양식이 같이 쓴다."""
+    return [_guide_one(target, n) for n in target.columns]
+
+
+def _fk_list(target, name):
+    """외래키 칸에 고를 수 있는 키(품번·LOT 번호 등). 새로 만들기 화면과 같은 폼 선택지 앞 CHOICE_LIMIT개."""
+    from django.forms import modelform_factory
+    f = target.model._meta.get_field(name)
+    if not f.is_relation or (target.model._meta.label_lower, name) in RESOLVE:
+        return None
+    qs = modelform_factory(target.model, fields=[name])().fields[name].queryset
+    key = lookup_key(f.related_model)
+    if not key:
+        return None
+    return [str(v) for v in qs.values_list(key, flat=True)[:recordspec.CHOICE_LIMIT] if v not in (None, '')]
+
+
+GUIDE_NOTES = (
+    '「입력」 시트 1행의 열 제목은 바꾸지 않는다. 2행부터 한 줄에 한 건씩 적는다.',
+    '노란 열은 꼭 채운다. 나머지는 비워도 된다.',
+    '목록이 있는 칸은 칸을 누르면 나오는 ▼에서 고른다. 열 제목에 마우스를 올리면 적을 값이 보인다.',
+    '올린 뒤 「미리보기」로 줄마다 오류를 확인하고, 오류가 없을 때만 「확정」한다. 한 줄이라도 틀리면 하나도 등록하지 않는다.',
+)
+REQUIRED_FILL = PatternFill('solid', fgColor='FFF2CC')
+
+
+def guide_workbook(title, columns, notes=GUIDE_NOTES):
+    """작성 안내가 붙은 엑셀 빈 양식. columns = [{label, required, hint, example, choices, strict}].
+    「입력」 시트(맨 앞·활성: read_rows가 읽는다)는 1행 열 제목만 두고, 고르는 칸에 드롭다운을 단다.
+    choices 목록은 숨긴 「목록」 시트에 두어 엑셀 목록 글자 수 제한(255자)을 피한다. strict가 아니면 목록 밖 값도 받는다(경고만)."""
+    wb = Workbook()
+    ws = wb.active
+    ws.title = '입력'
+    lists = wb.create_sheet('목록')
+    lists.sheet_state = 'hidden'
+    info = wb.create_sheet('작성 안내')
+    info.append([f'{title} 빈 양식 작성 안내'])
+    info['A1'].font = Font(bold=True, size=13)
+    for n in notes:
+        info.append([n])
+    info.append([])
+    info.append(['열 제목', '필수', '적는 값', '예'])
+    head = info.max_row
+    for col, c in enumerate(columns, start=1):
+        letter = ws.cell(1, col).column_letter
+        cell = ws.cell(1, col, c['label'])
+        cell.font = Font(bold=True)
+        if c['required']:
+            cell.fill = REQUIRED_FILL
+        cell.comment = Comment(('필수. ' if c['required'] else '') + c['hint'] + (f" (예: {c['example']})" if c['example'] else ''),
+                               'QMS', width=320, height=120)
+        ws.column_dimensions[letter].width = max(12, min(40, len(c['label']) * 2 + 4))
+        if not c.get('number'):
+            ws.column_dimensions[letter].number_format = '@'  # 0010 같은 코드가 숫자로 바뀌지 않게
+        if c.get('choices'):
+            for row, v in enumerate(c['choices'], start=1):
+                lists.cell(row, col, v)
+            strict = c.get('strict', True)
+            dv = DataValidation(type='list', formula1=f"'목록'!${letter}$1:${letter}${len(c['choices'])}", allow_blank=True,
+                                showErrorMessage=True, errorStyle='stop' if strict else 'warning', errorTitle=c['label'],
+                                error='목록에서 고르세요.' if strict else '목록에 없는 값입니다. 맞는지 확인하세요.')
+            dv.add(f'{letter}2:{letter}1000')
+            ws.add_data_validation(dv)
+        info.append([c['label'], '필수' if c['required'] else '', c['hint'], c['example']])
+    for cell in info[head]:
+        cell.font = Font(bold=True)
+        cell.fill = REQUIRED_FILL
+    for letter, width in zip('ABCD', (20, 6, 80, 20)):
+        info.column_dimensions[letter].width = width
+    for row in info.iter_rows(min_row=head + 1):
+        row[2].alignment = Alignment(wrap_text=True, vertical='top')
+    ws.freeze_panes = 'A2'
+    buf = io.BytesIO()
+    wb.save(buf)
+    return buf.getvalue()
+
+
+def template_xlsx(target):
+    """종류별 엑셀 빈 양식(입력 시트 + 작성 안내). 외래키 칸은 고를 수 있는 키 목록을 단다."""
+    columns = []
+    for c in guide(target):
+        f = target.model._meta.get_field(c['key'])
+        fk = _fk_list(target, c['key'])
+        columns.append({**c, 'choices': fk if fk is not None else c['choices'], 'strict': fk is None,
+                        'number': isinstance(f, (models.IntegerField, models.DecimalField, models.DateField))})
+    return guide_workbook(target.label, columns)
 
 
 def problems():

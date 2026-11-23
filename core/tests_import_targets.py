@@ -9,6 +9,7 @@ from django.core.files.uploadedfile import SimpleUploadedFile
 from django.db import transaction
 from django.test import TestCase
 from django.utils import timezone
+from openpyxl import Workbook, load_workbook
 from rest_framework.test import APIClient
 
 from core.api.tests_master import grant
@@ -58,6 +59,12 @@ def csv_file(rows):
     for r in rows:
         w.writerow(r)
     return SimpleUploadedFile('a.csv', buf.getvalue().encode())
+
+
+def xlsx_file(wb):
+    buf = io.BytesIO()
+    wb.save(buf)
+    return SimpleUploadedFile('a.xlsx', buf.getvalue())
 
 
 class ImportTargetsTest(TestCase):
@@ -233,3 +240,59 @@ class ImportTargetsTest(TestCase):
         self.assertEqual(r.status_code, 400)
         force_off('mes')
         self.assertEqual(client.get('/api/core/import/targets/').json(), [])  # 꺼진 모듈 대상은 목록에서 뺀다
+
+    def test_guide_says_what_to_write(self):
+        """신입이 칸마다 무엇을 적을지: 필수 여부·적는 값·예를 대상 목록에 싣는다."""
+        client = APIClient()
+        client.force_login(self.root)
+        listed = {t['key']: t for t in client.get('/api/core/import/targets/').json()}
+        for key, t in listed.items():
+            with self.subTest(key):
+                self.assertEqual([g['key'] for g in t['guide']], list(t['headers']))
+                self.assertTrue(all(g['hint'] for g in t['guide']))
+        lot = {g['key']: g for g in listed['core.lot']['guide']}
+        self.assertTrue(lot['number']['required'])
+        self.assertIn('품목의 품번', lot['item']['hint'])
+        self.assertIn('같은 값', lot['number']['hint'])  # 키 열: 있으면 고친다
+        self.assertEqual((lot['is_serial']['required'], lot['is_serial']['example']), (False, '아니오'))
+        item = {g['key']: g for g in listed['item']['guide']}
+        self.assertIn('원자재', item['item_type']['hint'])
+        self.assertIn('2026-', {g['key']: g for g in listed['qms.gauge']['guide']}['last_calibrated']['example'])
+
+    def test_xlsx_template_round_trip_every_target(self):
+        """엑셀 빈 양식: 입력 시트(1행 표준 열 제목·드롭다운) + 작성 안내 시트. 채워 올리면 그대로 들어간다."""
+        client = APIClient()
+        client.force_login(self.root)
+        listed = {t['key']: t for t in client.get('/api/core/import/targets/').json()}
+        for key, row in SAMPLES.items():
+            with self.subTest(key), transaction.atomic():
+                r = client.get('/api/core/import/template/', {'target': key, 'kind': 'xlsx'})
+                self.assertEqual(r.status_code, 200)
+                self.assertIn('spreadsheetml', r['Content-Type'])
+                wb = load_workbook(io.BytesIO(r.content))
+                ws = wb.active
+                self.assertEqual(ws.title, '입력')
+                titles = listed[key]['headers']
+                self.assertEqual([c.value for c in ws[1]], list(titles.values()))
+                self.assertIn('작성 안내', wb.sheetnames)
+                for col, f in enumerate(titles, start=1):
+                    ws.cell(2, col, row.get(f) or None)
+                model = targets()[key].model
+                before = model.objects.count()
+                r = client.post('/api/core/import/', {'target': key, 'file': xlsx_file(wb), 'commit': '1'}, format='multipart')
+                self.assertEqual(r.json(), {'count': 1, 'errors': []})
+                self.assertEqual(model.objects.count(), before + 1)
+                transaction.set_rollback(True)
+
+    def test_xlsx_template_dropdowns(self):
+        client = APIClient()
+        client.force_login(self.root)
+        wb = load_workbook(io.BytesIO(client.get('/api/core/import/template/', {'target': 'core.lot', 'kind': 'xlsx'}).content))
+        ws, lists = wb['입력'], wb['목록']
+        self.assertEqual(lists.sheet_state, 'hidden')
+        listed = {str(c.value) for col in lists.iter_cols() for c in col}
+        self.assertTrue({'C1', 'C9', '예', '아니오'} <= listed)  # 품목 품번·예/아니오를 골라 넣는다
+        styles = sorted(dv.errorStyle for dv in ws.data_validations.dataValidation)
+        self.assertEqual(styles, ['stop', 'warning', 'warning', 'warning'])  # 예/아니오는 목록만, 품목·거래처·작업지시는 경고만
+        self.assertTrue(ws['A1'].comment)  # 열 제목에 마우스를 올리면 적을 값이 보인다
+        self.assertEqual(client.get('/api/core/import/template/', {'target': 'core.lot', 'kind': 'pdf'}).status_code, 400)

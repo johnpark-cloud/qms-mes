@@ -11,14 +11,24 @@ interface Profile {
   header_row: number
   mapping: Record<string, string>
 }
+// 칸마다 무엇을 적을지(서버가 모델 정의에서 만든다). 엑셀 빈 양식의 「작성 안내」 시트와 같은 내용
+interface Guide {
+  key: string
+  label: string
+  required: boolean
+  hint: string
+  example: string
+}
 interface Target {
   key: string
   label: string
   headers: Record<string, string>
+  guide: Guide[]
 }
 interface Measure {
   label: string
   columns: Record<string, string>
+  guide: Guide[]
 }
 interface Preview {
   count: number
@@ -45,6 +55,10 @@ export default function ImportPage() {
   const target = targets.data?.find((t) => `t:${t.key}` === choice)
   const isMeasure = choice === 'm' && !!measure.data
   const mapping = profile?.mapping ?? target?.headers ?? (isMeasure ? measure.data!.columns : {})
+  // 가져오기 설정은 회사 열 제목으로 받으므로 칸 이름 옆에 그 열 제목을 보여 준다
+  const guideTarget = target ?? targets.data?.find((t) => t.key === profile?.target)
+  const guide = isMeasure ? measure.data!.guide : (guideTarget?.guide ?? [])
+  const templateUrl = target ? `/api/core/import/template/?target=${encodeURIComponent(target.key)}` : isMeasure ? '/api/qms/inspect/upload/template/?' : ''
 
   const run = async (commit: '0' | '1') => {
     setErr('')
@@ -112,8 +126,12 @@ export default function ImportPage() {
             stale()
           }}
         />
-        {target && <Button href={`/api/core/import/template/?target=${encodeURIComponent(target.key)}`}>빈 양식 받기</Button>}
-        {isMeasure && <Button href="/api/qms/inspect/upload/template/">빈 양식 받기</Button>}
+        {templateUrl && (
+          <>
+            <Button href={`${templateUrl}&kind=xlsx`}>빈 양식 받기(엑셀)</Button>
+            <Button href={templateUrl}>CSV</Button>
+          </>
+        )}
         <input
           aria-label="파일 선택"
           type="file"
@@ -130,6 +148,23 @@ export default function ImportPage() {
           확정
         </Button>
       </Space>
+      {guide.length > 0 && !preview && done === null && (
+        <details open={!file} style={{ marginBottom: 16 }}>
+          <summary style={{ cursor: 'pointer', marginBottom: 8 }}>작성 안내 — 칸마다 적을 값 (필수 칸은 꼭 채웁니다)</summary>
+          <Table
+            size="small"
+            rowKey="key"
+            pagination={false}
+            dataSource={guide.filter((g) => !profile || profile.mapping[g.key])}
+            columns={[
+              { title: '열 제목', width: 200, render: (_: unknown, g: Guide) => (profile ? `${profile.mapping[g.key]} (${g.label})` : g.label) },
+              { title: '필수', width: 60, render: (_: unknown, g: Guide) => (g.required ? '필수' : '') },
+              { title: '적는 값', dataIndex: 'hint' },
+              { title: '예', dataIndex: 'example', width: 160 },
+            ]}
+          />
+        </details>
+      )}
       {profiles.error && <Alert style={{ marginBottom: 12 }} type="error" message={errText(profiles.error, '가져오기 설정을 불러오지 못했습니다.')} />}
       {err && <Alert style={{ marginBottom: 12 }} type="error" message={err} />}
       {done !== null && <Alert style={{ marginBottom: 12 }} type="success" message={`${done}건 등록했습니다.`} />}
