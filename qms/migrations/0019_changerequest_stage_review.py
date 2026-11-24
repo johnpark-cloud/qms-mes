@@ -11,6 +11,10 @@ def fill_new_columns(apps, schema_editor):
     cr.objects.filter(approved_at__isnull=False).update(stage='APPROVED')
     cr.objects.filter(customer_notice=False).update(customer_status='NA')
     cr.objects.filter(customer_notice=True).exclude(customer_approval_ref='').update(customer_status='APPROVED')
+    # PostgreSQL: 같은 행을 두 번 고치면 지연된 외래키 검사가 쌓여, 뒤이은 CREATE INDEX가
+    # 「보류 중인 트리거 이벤트」로 거부된다 → 여기서 검사를 바로 끝낸다.
+    if schema_editor.connection.vendor == 'postgresql':
+        schema_editor.execute('SET CONSTRAINTS ALL IMMEDIATE')
 
 
 class Migration(migrations.Migration):
