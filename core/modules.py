@@ -21,7 +21,7 @@ class Module(NamedTuple):
 
 
 MODULES = {
-    'mes': Module('생산관리 (작업지시·실적·출하)', ('core.workorder', 'core.workresult', 'core.shipment')),
+    'mes': Module('생산관리 (작업지시·실적·출하·설비)', ('core.workorder', 'core.workresult', 'core.shipment', 'core.equipment', 'core.pmrecord')),
     'qms_inspection': Module(
         '검사 (검사기준·관리계획서·검사·계측기·검사원 자격)',
         ('qms.inspectionspec', 'qms.characteristic', 'qms.inspection', 'qms.measurement', 'qms.gauge', 'qms.gaugecalibration', 'qms.msastudy',

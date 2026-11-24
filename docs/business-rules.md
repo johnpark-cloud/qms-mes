@@ -90,6 +90,8 @@
 | 교정 이력(`GaugeCalibration`)이 합격이면 계측기의 최근 교정일을 그 교정일로 앞당긴다(더 옛날 날짜면 그대로). 불합격이면 최근 교정일은 그대로 두고 계측기를 사용 중지해 측정을 거부한다. 교정일은 오늘 이후일 수 없고, 결과·교정일은 등록 후 기록 화면에서 고치지 않는다(새 이력으로 바로잡음). | `GaugeCalibration.clean`·`save`, `core/recordspec.py` `qms.gaugecalibration` |
 | 측정시스템 분석(`MsaStudy`) GR&R은 원자료 파일(부품·측정자·반복·측정값)을 평균·범위법(AIAG)으로 계산하거나 %GRR·ndc를 직접 받고, 판정은 숫자로만 정한다: %GRR 10 이하 적합, 30 이하 조건부, 30 초과 또는 ndc 5 미만 부적합(입력한 판정은 무시). 틀이 맞지 않는 파일은 저장하지 않는다. 그 밖의 종류는 판정을 직접 고른다. 분석일은 오늘 이후일 수 없고, 등록 후에는 비고만 고친다. | `MsaStudy.clean`, `qms/msa.py`, `core/recordspec.py` `qms.msastudy` |
 | 계측기의 최근 MSA가 부적합이면 계측기 기록 화면에 개선·재분석 안내만 띄운다(측정은 막지 않음). | `core/api/records.py` `_notices` |
+| 설비 다음 예방보전일 = 최근 예방보전일 + 예방보전 주기(일). 주기를 적으면 최근 예방보전일도 있어야 한다. 보전 이력(`PmRecord`)이 예방이면 설비의 최근 예방보전일을 그 실시일로 앞당긴다(더 옛날 날짜면 그대로, 사후·예지·개선은 바꾸지 않음). 실시일은 오늘 이후일 수 없고, 구분·실시일은 등록 후 기록 화면에서 고치지 않는다. | `Equipment.clean`·`next_pm`, `PmRecord.clean`·`save`, `core/recordspec.py` `core.pmrecord` |
+| 다음 예방보전일이 지났거나 7일 안에 오는 설비(폐기 제외)를 내 할 일·알림에 띄운다. 생산관리 모듈을 끄면 띄우지 않는다. 기한이 지나도 작업지시·실적·출하는 막지 않는다(알림만). | `qms/due.py` `equipment_pm` |
 
 측정값 입력(검사 입력 화면, `collect` 자동 수집)은 NaN·무한대 값을 거부한다. `collect`는 읽을 수 없는 CSV를 `error/` 폴더로 옮기고 다음 파일을 계속 처리한다(`qms/rules.py` `measurement`, `qms/management/commands/collect.py`).
 

@@ -1,3 +1,4 @@
+import datetime
 import os
 import re
 
@@ -162,6 +163,81 @@ class Process(models.Model):
 
     def __str__(self):
         return f'{self.code} {self.name}'
+
+
+class Equipment(models.Model):
+    """설비 대장 (IATF 8.5.1.5 TPM). 예방보전 주기가 있으면 다음 예방보전일을 계산해 내 할 일에 띄운다(생산을 막지는 않는다)."""
+    KINDS = [('PRODUCTION', '생산 설비'), ('MOLD', '금형'), ('JIG', '지그'), ('TOOL', '공구'), ('UTILITY', '유틸리티')]
+    RUN, STOP, REPAIR, SCRAPPED = 'RUN', 'STOP', 'REPAIR', 'SCRAPPED'
+    STATUSES = [(RUN, '가동'), (STOP, '정지'), (REPAIR, '수리 중'), (SCRAPPED, '폐기')]
+
+    code = models.CharField('설비 코드', max_length=50, unique=True)
+    name = models.CharField('설비명', max_length=200)
+    kind = models.CharField('구분', max_length=20, choices=KINDS, default='PRODUCTION')
+    process = models.ForeignKey(Process, on_delete=models.PROTECT, null=True, blank=True, related_name='+', verbose_name='공정')
+    location = models.CharField('설치 위치', max_length=100, blank=True)
+    maker = models.CharField('제조사', max_length=100, blank=True)
+    model_no = models.CharField('모델', max_length=100, blank=True)
+    serial_no = models.CharField('시리얼 번호', max_length=100, blank=True)
+    owner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='+',
+                              verbose_name='담당자')
+    status = models.CharField('상태', max_length=10, choices=STATUSES, default=RUN)
+    pm_interval_days = models.PositiveIntegerField('예방보전 주기(일)', null=True, blank=True, help_text='비우면 기한을 따지지 않는다')
+    last_pm_on = models.DateField('최근 예방보전일', null=True, blank=True)
+    history = HistoricalRecords()
+
+    class Meta:
+        verbose_name = verbose_name_plural = '설비'
+
+    def __str__(self):
+        return f'{self.code} {self.name}'
+
+    @property
+    def next_pm(self):
+        if self.pm_interval_days and self.last_pm_on:
+            return self.last_pm_on + datetime.timedelta(days=self.pm_interval_days)
+        return None
+
+    def clean(self):
+        if self.pm_interval_days and not self.last_pm_on:
+            raise ValidationError({'last_pm_on': '예방보전 주기를 두면 최근 예방보전일(또는 설치일)도 넣어야 합니다.'})
+
+
+class PmRecord(models.Model):
+    """설비 보전 이력. 예방보전이면 설비의 최근 예방보전일을 앞으로 옮긴다."""
+    PREVENTIVE, BREAKDOWN = 'PREVENTIVE', 'BREAKDOWN'
+    KINDS = [(PREVENTIVE, '예방'), (BREAKDOWN, '사후'), ('PREDICTIVE', '예지'), ('IMPROVEMENT', '개선')]
+
+    equipment = models.ForeignKey(Equipment, on_delete=models.PROTECT, related_name='pm_records', verbose_name='설비')
+    kind = models.CharField('보전 구분', max_length=12, choices=KINDS, default=PREVENTIVE)
+    done_on = models.DateField('실시일')
+    done_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='+',
+                                verbose_name='실시자')
+    content = models.TextField('보전 내용')
+    parts = models.CharField('교체 부품', max_length=200, blank=True)
+    downtime_min = models.PositiveIntegerField('정지 시간(분)', null=True, blank=True)
+    cost = models.PositiveIntegerField('비용(원)', null=True, blank=True)
+    history = HistoricalRecords()
+
+    class Meta:
+        verbose_name = verbose_name_plural = '설비 보전 이력'
+
+    def __str__(self):
+        return f'{self.equipment.code} {self.done_on} {self.get_kind_display()}'
+
+    def clean(self):
+        if self.done_on and self.done_on > timezone.localdate():
+            raise ValidationError({'done_on': '실시일은 오늘 이후일 수 없습니다.'})
+
+    def save(self, *args, **kwargs):
+        with transaction.atomic():
+            super().save(*args, **kwargs)
+            if self.kind != self.PREVENTIVE:
+                return
+            eq = Equipment.objects.select_for_update().get(pk=self.equipment_id)
+            if eq.last_pm_on is None or self.done_on > eq.last_pm_on:
+                eq.last_pm_on = self.done_on
+                eq.save()
 
 
 class BomLine(models.Model):

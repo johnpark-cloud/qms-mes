@@ -33,6 +33,9 @@ def mes_fixture():
     ExcelTemplate.objects.create(name='출하성적서', target=ContentType.objects.get_for_model(Shipment),
                                  file=SimpleUploadedFile('t.xlsx', b'x'), mapping={})
     ImportProfile.objects.create(name='품번 양식', target='item', mapping={'code': '코드'})
+    from core.models import Equipment, PmRecord
+    eq = Equipment.objects.create(code='EQ-1', name='프레스', process=step.process)
+    PmRecord.objects.create(equipment=eq, done_on=timezone.localdate(), content='윤활')
     return wo
 
 

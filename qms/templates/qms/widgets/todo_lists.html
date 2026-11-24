@@ -149,6 +149,16 @@
   </section>
   {% endif %}
 
+  {% if equipment_pm %}
+  <section class="card" id="equipment-pm">
+    <h2>설비 예방보전 <span class="count">7일 이내·초과</span></h2>
+    <table><tbody>
+      {% for e in equipment_pm %}<tr><td><a href="/app/r/core/equipment/{{ e.pk }}">{{ e }}</a></td>
+        <td>{{ e.next_pm|date:"Y-m-d" }} {% if e.next_pm < today %}<span class="status status--negative">초과</span>{% else %}<span class="status status--critical">임박</span>{% endif %}</td></tr>{% endfor %}
+    </tbody></table>
+  </section>
+  {% endif %}
+
   {% if unread_docs %}
   <section class="card" id="unread-docs">
     <h2>문서 열람 확인 <span class="count">최근 30일 승인 · 안 읽음</span></h2>

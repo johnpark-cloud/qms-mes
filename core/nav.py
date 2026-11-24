@@ -84,7 +84,7 @@ SUB = {'생산실적': '작업지시', 'LOT 추적': 'LOT',
        '부적합 등록': '부적합(NCR)', '보류': '부적합(NCR)',
        '체크리스트·증적': '심사 관리', '심사 자료 출력': '심사 관리',
        '고객사별 8D 기한': '고객 클레임(8D)', '공급자 시정조치(SCAR)': '공급자 평가',
-       '채번 코드값': '채번 규칙'}
+       '채번 코드값': '채번 규칙', '보전 이력': '설비·예방보전'}
 
 NAV = [
     ('통합 업무 홈', [('내 할 일', 'todo', None),
@@ -95,7 +95,9 @@ NAV = [
                    ('생산실적', 'admin:core_workresult_changelist', 'core.view_workresult'),
                    ('LOT', 'admin:core_lot_changelist', 'core.view_lot'),
                    ('LOT 추적', 'trace', 'core.view_lot'),
-                   ('출하', 'admin:core_shipment_changelist', 'core.view_shipment')]),
+                   ('출하', 'admin:core_shipment_changelist', 'core.view_shipment'),
+                   ('설비·예방보전', 'admin:core_equipment_changelist', 'core.view_equipment'),
+                   ('보전 이력', 'admin:core_pmrecord_changelist', 'core.view_pmrecord')]),
     ('품질관리 (QMS)', [('검사 입력', 'inspect', 'qms.add_inspection'),
                    ('검사 실적', 'admin:qms_inspection_changelist', 'qms.view_inspection'),
                    ('계측기 관리', 'admin:qms_gauge_changelist', 'qms.view_gauge'),

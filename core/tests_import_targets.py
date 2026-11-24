@@ -14,7 +14,7 @@ from rest_framework.test import APIClient
 
 from core.api.tests_master import grant
 from core.importer import headers, preview_import, problems, run_import, targets
-from core.models import (CodeValue, Department, ImportProfile, Item, Lot, Nonconformance, Partner, Process, RoutingStep,
+from core.models import (CodeValue, Department, Equipment, ImportProfile, Item, Lot, Nonconformance, Partner, Process, RoutingStep,
                          Shipment, WorkOrder)
 from core.rules import LOCKED_MSG
 from core.tests_import_log import temp_imports
@@ -30,6 +30,9 @@ SAMPLES = {
     'qms.msastudy': {'gauge': 'G-1', 'kind': '편의', 'performed_on': '2026-11-02', 'result': '적합'},
     'qms.gaugecalibration': {'gauge': 'G-1', 'calibrated_on': '2026-11-02', 'cal_type': '사외 교정', 'result': '합격'},
     'qms.qualification': {'user': 'kim', 'inspection_type': '수입검사', 'valid_until': '2027-12-31', 'basis': '교육 이수'},
+    'core.equipment': {'code': 'EQ-9', 'name': '프레스', 'kind': '생산 설비', 'status': '가동', 'pm_interval_days': '30',
+                       'last_pm_on': '2026-11-01'},
+    'core.pmrecord': {'equipment': 'EQ-1', 'kind': '예방', 'done_on': '2026-11-02', 'content': '윤활'},
     'core.lot': {'number': 'L-9', 'item': 'C1', 'qty': '5', 'is_serial': '아니오'},
     'qms.capa': {'title': '재발 방지', 'source': '기타', 'owner': 'kim', 'due_date': '2026-12-31', 'action': '교육'},
     'qms.customerclaim': {'number': 'CC-9', 'customer': 'H사', 'lot': 'L-1', 'description': '긁힘', 'defect_qty': '1'},
@@ -83,6 +86,7 @@ class ImportTargetsTest(TestCase):
         self.lot = Lot.objects.create(number='L-1', item=self.c1, work_order=self.wo)
         Partner.objects.create(name='H사', is_customer=True, is_supplier=True)
         Gauge.objects.create(number='G-1', name='마이크로미터', last_calibrated=timezone.localdate())
+        Equipment.objects.create(code='EQ-1', name='프레스')
         self.cl = AuditChecklist.objects.create(name='CL-A')
         InternalAudit.objects.create(name='IA-1', planned_date=timezone.localdate(), auditor='홍길동')
 

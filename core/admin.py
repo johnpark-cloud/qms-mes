@@ -12,8 +12,8 @@ from django.utils import timezone
 from django.utils.html import format_html, format_html_join
 from simple_history.admin import SimpleHistoryAdmin
 
-from .models import (Attachment, BomLine, CodeValue, Department, FieldDef, Hold, ImportProfile, Item, Lot, LotLink, Nonconformance,
-                     ModuleSwitch, NonconformancePhoto, NumberRule, Partner, PartnerCertificate, Process, Project, RevisionLog, RoutingStep, Shipment,
+from .models import (Attachment, BomLine, CodeValue, Department, Equipment, FieldDef, Hold, ImportProfile, Item, Lot, LotLink, Nonconformance,
+                     ModuleSwitch, NonconformancePhoto, NumberRule, Partner, PartnerCertificate, PmRecord, Process, Project, RevisionLog, RoutingStep, Shipment,
                      WorkOrder, WorkResult)
 from .records import blockers, can_edit_locked, delete_record, is_locked
 from .recordspec import url_for
@@ -27,6 +27,7 @@ INDEX_EXTRA = {'통합 업무 홈': ['qms.memo', 'personal.leaveprofile', 'perso
                '품질관리 (QMS)': ['qms.gaugecalibration', 'qms.msastudy'],
                '품질보증 및 개선': ['qms.documentrevision', 'qms.audititem'],
                '분석 및 보고서': ['qms.managementreviewaction'],
+               '생산관리 (MES)': ['core.pmrecord'],
                '기준정보 및 시스템 관리': ['core.importprofile', 'core.attachment', 'auth.group']}
 
 
@@ -406,6 +407,31 @@ class FieldDefAdmin(BaseAdmin):
 class ProcessAdmin(BaseAdmin):
     list_display = ['code', 'name']
     search_fields = ['code', 'name']
+
+
+class PmRecordInline(admin.TabularInline):
+    model = PmRecord
+    extra = 0
+    fields = ['kind', 'done_on', 'done_by', 'content', 'parts', 'downtime_min']
+
+
+@admin.register(Equipment)
+class EquipmentAdmin(BaseAdmin):
+    list_display = ['code', 'name', 'kind', 'status', 'last_pm_on', 'next_pm']
+    list_filter = ['kind', 'status']
+    search_fields = ['code', 'name', 'location']
+    inlines = [PmRecordInline]
+
+    @admin.display(description='다음 예방보전일')
+    def next_pm(self, obj):
+        return obj.next_pm
+
+
+@admin.register(PmRecord)
+class PmRecordAdmin(BaseAdmin):
+    list_display = ['equipment', 'kind', 'done_on', 'done_by', 'downtime_min']
+    list_filter = ['kind']
+    search_fields = ['equipment__code', 'equipment__name', 'content']
 
 
 class WorkResultInline(admin.TabularInline):

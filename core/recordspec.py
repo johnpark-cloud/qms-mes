@@ -379,6 +379,34 @@ SPECS = {
         order=('-shipped_at', '-pk'),
         edit=('customer', 'qty', 'partner', 'shipped_at'),
         create=('lot', 'partner', 'customer', 'qty')),
+    'core.equipment': Spec(
+        fields=('code', 'name', 'kind', 'process', 'location', 'maker', 'model_no', 'serial_no', 'owner', 'status',
+                'pm_interval_days', 'last_pm_on', 'next_pm'),
+        columns=('code', 'name', 'kind', 'location', 'status', 'last_pm_on', 'next_pm'),
+        search=('code', 'name', 'location', 'maker', 'model_no', 'serial_no'),
+        # shortcut: 다음 예방보전일은 계산 속성이라 파이썬으로 거른다. 설비가 수천 대가 되면 기한 칸을 저장하도록 바꾼다
+        tabs=(('active', '사용', lambda qs: qs.exclude(status='SCRAPPED')),
+              ('late', '지연', lambda qs: qs.filter(pk__in=[e.pk for e in qs.exclude(status='SCRAPPED') if e.next_pm and e.next_pm < _today()])),
+              ALL, ('scrapped', '폐기', lambda qs: qs.filter(status='SCRAPPED'))),
+        overdue='late',
+        children=(Child('pm_records', '보전 이력', ('done_on', 'kind', 'content', 'parts', 'downtime_min', 'done_by'), ('-done_on', '-pk')),),
+        side=('relations', 'files', 'history'),
+        order=('code',),
+        # 최근 예방보전일은 보전 이력(예방)으로 바뀌는 것이 원칙이나, 이력 없이 쓰던 대장을 위해 직접 고치는 칸도 둔다
+        edit=('name', 'kind', 'process', 'location', 'maker', 'model_no', 'serial_no', 'owner', 'status', 'pm_interval_days', 'last_pm_on'),
+        create=('code', 'name', 'kind', 'process', 'location', 'maker', 'model_no', 'serial_no', 'owner', 'status',
+                'pm_interval_days', 'last_pm_on')),
+    'core.pmrecord': Spec(
+        fields=('equipment', 'kind', 'done_on', 'done_by', 'content', 'parts', 'downtime_min', 'cost'),
+        columns=('equipment', 'kind', 'done_on', 'done_by', 'downtime_min'),
+        search=('equipment__code', 'equipment__name', 'content', 'parts'),
+        tabs=(ALL, ('preventive', '예방', lambda qs: qs.filter(kind='PREVENTIVE')),
+              ('breakdown', '사후', lambda qs: qs.filter(kind='BREAKDOWN'))),
+        side=('relations', 'files', 'history'),
+        order=('-done_on', '-pk'),
+        # 구분·실시일은 설비의 최근 예방보전일을 바꾸므로 등록 후 고치지 않는다(잘못 넣었으면 새 이력으로 바로잡는다)
+        edit=('done_by', 'content', 'parts', 'downtime_min', 'cost'),
+        create=('equipment', 'kind', 'done_on', 'done_by', 'content', 'parts', 'downtime_min', 'cost')),
     # 기준정보: 코드·대상처럼 다른 기록이 가리키는 칸, 외래키, JSON(선택지·매핑)은 관리 화면에서
     'core.partner': Spec(
         fields=('code', 'name', 'is_customer', 'is_supplier', 'is_outsource', 'is_calibrator', 'contacts',

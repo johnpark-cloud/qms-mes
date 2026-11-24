@@ -5,7 +5,7 @@ from django.contrib.contenttypes.models import ContentType
 from django.db.models import Exists, OuterRef
 from django.utils import timezone
 
-from core.models import EditRequest, Hold, Nonconformance, PartnerCertificate
+from core.models import EditRequest, Equipment, Hold, Nonconformance, PartnerCertificate
 from core.modules import active_set
 
 from . import spc
@@ -19,6 +19,7 @@ DUE_MODULE = {
     'ppaps': 'qms_ppap', 'pending_ppaps': 'qms_ppap', 'gauges': 'qms_inspection', 'qualifications': 'qms_inspection', 'spc_alarms': 'qms_inspection',
     'pending_specs': 'qms_inspection', 'pending_plans': 'qms_inspection', 'first_articles': 'qms_change',
     'pending_changes': 'qms_change', 'pending_docs': 'qms_document', 'unread_docs': 'qms_document', 'repeat_ncs': 'qms_capa',
+    'equipment_pm': 'mes',
 }
 UNREAD_DAYS = 30  # 문서 열람 확인: 승인 뒤 이 기간 안의 최신본만 할 일에 띄운다(오래된 문서까지 쌓이지 않게)
 REPEAT_COUNT, REPEAT_DAYS = 3, 90  # 같은 품번·같은 부적합 유형이 90일 안에 CAPA 없이 3건이면 CAPA를 제안한다
@@ -66,6 +67,7 @@ def due_items(approver=False, user=None):
         'partner_certs': list(PartnerCertificate.objects.filter(partner__active=True, valid_until__lte=today + datetime.timedelta(days=30))
                               .select_related('partner')),
         'qualifications': expiring_qualifications(today),
+        'equipment_pm': equipment_pm(today),
         'unread_docs': unread_documents(user, now) if user is not None else [],
         'first_articles': list(ChangeRequest.objects.filter(approved_at__isnull=False, effective_at__lte=now).annotate(
             fa=Exists(Inspection.objects.filter(lot__item=OuterRef('item'), result=Inspection.PASS,
@@ -133,6 +135,13 @@ def unread_documents(user, now):
                 .exclude(Exists(newer)).exclude(Exists(mine)).select_related('document').order_by('-approved_at', '-pk'))
 
 
+def equipment_pm(today):
+    """예방보전 기한이 지났거나 7일 안에 오는 설비(폐기 제외), 기한 순."""
+    rows = [e for e in Equipment.objects.exclude(status=Equipment.SCRAPPED).filter(pm_interval_days__isnull=False)
+            if e.next_pm and e.next_pm <= today + datetime.timedelta(days=7)]
+    return sorted(rows, key=lambda e: (e.next_pm, e.pk))
+
+
 def expiring_qualifications(today):
     """30일 이내·만료된 검사원 자격. 같은 검사원·구분에 더 늦게 끝나는 자격(갱신)이 있으면 뺀다."""
     limit = today + datetime.timedelta(days=30)
@@ -154,6 +163,7 @@ def digest(d):
         ('계측기 교정', [f'{g} · 교정 기한 {g.next_due}' for g in d['gauges']]),
         ('공급자 인증 만료', [f'{c.partner} · {c.get_standard_display()} · {c.valid_until}' for c in d['partner_certs']]),
         ('검사원 자격 만료', [f'{q.user} · {q.get_inspection_type_display()} · {q.valid_until}' for q in d['qualifications']]),
+        ('설비 예방보전', [f'{e} · 예방보전 기한 {e.next_pm}' for e in d['equipment_pm']]),
         ('4M 초품 미확인 (출하 차단 중)', [str(c) for c in d['first_articles']]),
         ('심사 예정', [str(a) for a in d['audits']]),
         ('CAPA 미연결 심사 발견사항', [str(f) for f in d['findings']]),

@@ -134,6 +134,7 @@ TODO_SECTIONS = [  # (todo_lists.html 구역 id, 이름, due_items 키): 보통 
     ('my-rejected', '거절된 내 요청', 'my_rejected'), ('memos-unsorted', '미분류 메모', 'memos_unsorted'),
     ('fa', '초품 미확인', 'first_articles'), ('gauges', '계측기 교정', 'gauges'), ('partner-certs', '공급자 인증 만료', 'partner_certs'),
     ('qualifications', '검사원 자격 만료', 'qualifications'), ('unread-docs', '문서 열람 확인', 'unread_docs'),
+    ('equipment-pm', '설비 예방보전', 'equipment_pm'),
     ('ppaps', 'PPAP 제출', 'ppaps'), ('repeat-ncs', '반복 부적합', 'repeat_ncs'),
 ]
 
@@ -259,6 +260,8 @@ def todo_lists_data(ctx, d, size):
         'qualifications': _lines(d['qualifications'], lambda q: f'{q.user} {q.get_inspection_type_display()}',
                                  lambda q: change('qms_qualification', q), valid_until=lambda q: q.valid_until,
                                  overdue=lambda q: q.valid_until < d['today']),
+        'equipment_pm': _lines(d['equipment_pm'], str, lambda e: change('core_equipment', e), next_pm=lambda e: e.next_pm,
+                               overdue=lambda e: e.next_pm < d['today']),
         'unread_docs': _lines(d['unread_docs'], lambda r: f'{r.document} Rev.{r.revision}', lambda r: change('qms_documentrevision', r),
                               approved_at=lambda r: _local(r.approved_at)),
         'ppaps': _lines(d['ppaps'], str, lambda p: change('qms_ppapsubmission', p), due_date=lambda p: p.due_date,
