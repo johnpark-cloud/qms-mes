@@ -11,7 +11,7 @@ COVERED = [
     'core.Shipment', 'core.Nonconformance', 'core.Hold', 'core.Partner', 'core.Department', 'core.FieldDef', 'core.NumberRule',
     'core.CodeValue', 'core.ImportProfile',
     'qms.Inspection', 'qms.Measurement', 'qms.Gauge', 'qms.GaugeCalibration', 'qms.Qualification', 'qms.Capa', 'qms.ChangeRequest',
-    'qms.Document', 'qms.InternalAudit', 'qms.AuditFinding', 'qms.AuditChecklist', 'qms.AuditItem', 'qms.Evidence',
+    'qms.Document', 'qms.DocumentRevision', 'qms.InternalAudit', 'qms.AuditFinding', 'qms.AuditChecklist', 'qms.AuditItem', 'qms.Evidence',
     'qms.CustomerClaim', 'qms.CustomerRule', 'qms.Scar', 'qms.PpapSubmission', 'qms.PpapElement', 'qms.InspectionSpec',
     'qms.Characteristic', 'qms.ControlPlan', 'qms.ControlPlanLine', 'qms.Memo',
     'personal.LeaveProfile', 'personal.LeaveUse', 'personal.Payslip',

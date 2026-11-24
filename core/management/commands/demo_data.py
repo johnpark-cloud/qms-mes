@@ -17,7 +17,7 @@ from django.utils import timezone
 from core.models import (BomLine, CodeValue, Department, FieldDef, ImportProfile, Item, Lot, LotLink, Nonconformance,
                          NumberRule, Partner, Process, RoutingStep, Shipment, WorkOrder, WorkResult)
 from qms.models import (AuditChecklist, AuditFinding, AuditItem, Capa, Characteristic, ChangeRequest, ControlPlan,
-                        ControlPlanLine, CustomerClaim, CustomerRule, Document, Evidence, Gauge, GaugeCalibration,
+                        ControlPlanLine, CustomerClaim, CustomerRule, Document, DocumentRevision, Evidence, Gauge, GaugeCalibration,
                         InternalAudit, Inspection, InspectionSpec, Memo, PpapSubmission, Qualification, Scar, add_months)
 from qms.rules import new_spec_revision, receive_lot, submit_inspection
 
@@ -27,7 +27,6 @@ D = Decimal
 SKIPPED = [
     ('내 할 일 · 공장 종합현황 · 품질 KPI · 공급자 평가 · LOT 추적 · 심사 자료 출력', '다른 기록에서 계산해 보여 주는 화면이라 넣을 행이 없다'),
     ('엑셀 보고서 양식', '엑셀 양식 파일(.xlsx)이 있어야 해서 건너뜀'),
-    ('문서 개정(문서 관리 하위)', '원본 파일 첨부가 필수라 건너뜀(문서 자체는 넣음)'),
     ('사용자 · 모듈 설정 · 관리자 화면 · 감사 추적', '보안·설정 화면이라 건너뜀(서명용 예시 사용자 3명만 사용 불가 비밀번호로 만듦)'),
 ]
 
@@ -393,6 +392,10 @@ class Command(BaseCommand):
     def documents_and_audits(self):
         docs = [self.get(Document, {'number': n}, title=t, doc_type=k) for n, t, k in (
             ('EX-DOC-001', '품질 매뉴얼', '품질매뉴얼'), ('EX-DOC-002', '수입검사 작업표준서', '작업표준서'), ('EX-DOC-003', '부적합품 관리 절차서', '절차서'))]
+        for doc in docs:  # 본문만 있는 초안 개정(승인은 서명으로만)
+            if not doc.revisions.exists():
+                DocumentRevision.objects.create(document=doc, change_note='제정',
+                                                body=f'1. 목적\n{doc.title}의 기준을 정한다.\n\n2. 적용 범위\n전 공정\n\n3. 책임과 권한\n품질팀')
         lists = (('IATF 16949 내부심사', 'IATF 16949:2016', (('8.5.1', '생산 관리계획서 운영'), ('8.7', '부적합 출력물 관리'), ('9.2.2', '내부심사 프로그램'))),
                  ('고객사 QSA 2026', 'QSA', (('4.1', '품질 방침 공유'), ('7.1.5', '측정 시스템 교정 관리'), ('8.4', '공급자 관리'))),
                  ('ISO 9001 공정심사', 'ISO 9001:2015', (('7.2', '인적 자격 관리'), ('8.5.2', '식별·추적성'), ('10.2', '부적합·시정조치'))))

@@ -84,6 +84,7 @@ export interface DocStruct {
   landscape?: boolean
   head: [string, string][]
   tables: { title: string; columns: string[]; rows: string[][] }[]
+  body?: string | null  // 문서 본문(W7, 줄바꿈 그대로)
   revisions: ({ label: string; changes: string; reason: string; requested_by: string; approved_by: string; approved_at: string }[]) | null
   signoff: { written_by: string; written_at: string; approved_by: string; approved_at: string }
   photos?: { url: string; caption: string }[]

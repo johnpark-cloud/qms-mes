@@ -299,6 +299,31 @@ class RecordsWriteApiTest(TestCase):
         self.g.save()
         self.assertEqual(self.patch('qms.gauge', self.g.pk, {'name': 'x'}, version=v).status_code, 409)
 
+    def test_document_body_compare_and_sheet(self):
+        """W7: 본문 편집 → 승인 잠금 → 새 개정이 본문 복사 → 이전 개정과 비교 → 양식지 본문·개정 이력."""
+        from core.rules import approve
+        from qms.models import DocumentRevision
+        self.assertEqual(self.patch('qms.documentrevision', self.rev.pk, {'body': '1. 목적\n2. 범위'}).status_code, 200)
+        d = self.detail('qms.documentrevision', self.rev.pk)
+        self.assertEqual((d['body']['label'], d['body']['value'], d['body']['prev']), ('본문', '1. 목적\n2. 범위', None))
+        self.assertIn('body', {e['key'] for e in d['edit']})
+        self.assertNotIn('body', {f['key'] for f in d['fields']})  # 본문은 칸 표가 아니라 아래 구역
+        self.rev.refresh_from_db()
+        approve(self.rev, self.root, 'pw')
+        self.assertEqual(self.patch('qms.documentrevision', self.rev.pk, {'body': '몰래'}).status_code, 409)
+        rev2 = DocumentRevision.objects.create(document=self.doc, change_note='범위에 협력사 추가')
+        self.assertEqual(rev2.body, '1. 목적\n2. 범위')
+        r = self.patch('qms.documentrevision', rev2.pk, {'body': '1. 목적\n2. 범위(협력사 포함)\n3. 용어'})
+        self.assertEqual(r.status_code, 200, r.content)
+        b = self.detail('qms.documentrevision', rev2.pk)['body']
+        self.assertEqual(b['prev'], str(self.rev))
+        self.assertEqual(b['diff'], [[' ', '1. 목적'], ['-', '2. 범위'], ['+', '2. 범위(협력사 포함)'], ['+', '3. 용어']])
+        doc = self.client.get(f'/api/records/qms.documentrevision/{rev2.pk}/document/').json()
+        self.assertEqual(doc['body'], '1. 목적\n2. 범위(협력사 포함)\n3. 용어')
+        self.assertEqual([(x['label'], x['changes'], x['approved_by']) for x in doc['revisions']],
+                         [(f'Rev.{self.rev.revision}', '제정', 'root'), (f'Rev.{rev2.revision}', '범위에 협력사 추가', '')])
+        self.assertTrue(doc['draft'])
+
     def test_approve_then_locked(self):
         url = f'/api/records/qms.documentrevision/{self.rev.pk}/approve/'
         self.assertEqual(self.post(url, {'password': 'pw'}).status_code, 403)  # 품질팀장만

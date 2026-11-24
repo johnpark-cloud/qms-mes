@@ -288,6 +288,22 @@ class QmsTest(TestCase):
         self.inspect('10.0')  # 초품 합격
         Shipment.objects.create(lot=self.raw, customer='A사', qty=1)
 
+    def test_document_revision_body_or_file(self):
+        """W7: 본문만으로도 개정을 만들고, 새 개정은 파일·본문이 없으면 직전 개정 본문을 복사한다."""
+        from .models import Document, DocumentRevision
+        doc = Document.objects.create(number='W7-1', title='작업표준')
+        with self.assertRaisesMessage(ValidationError, '원본 파일이나 본문'):
+            DocumentRevision(document=doc, change_note='제정').full_clean()
+        r1 = DocumentRevision(document=doc, change_note='제정', body='1. 목적')
+        r1.full_clean()
+        r1.save()
+        r2 = DocumentRevision(document=doc, change_note='개정')
+        r2.full_clean()  # 직전 본문을 복사하므로 통과
+        r2.save()
+        self.assertEqual(r2.body, '1. 목적')
+        r3 = DocumentRevision.objects.create(document=doc, change_note='파일 개정', file=SimpleUploadedFile('a.pdf', b'x'))
+        self.assertEqual(r3.body, '')  # 파일을 올린 개정은 복사하지 않는다
+
     def test_4m_stage_and_customer_status(self):
         """W6: 진행 단계·고객 승인 상태는 드롭다운, 사내 「승인 완료」는 서명으로만."""
         cr = ChangeRequest.objects.create(number='4M-S', item=self.raw_item, category='METHOD', description='용접 순서 변경')

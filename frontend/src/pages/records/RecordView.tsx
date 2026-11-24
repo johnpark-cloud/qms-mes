@@ -37,6 +37,8 @@ interface Detail {
   can_dispose: boolean; dispose: Edit[] | null; can_close: boolean; links: { label: string; url: string }[]
   notices: { message: string; label: string; url: string }[] // 기록 위 안내 띠(반복 부적합 → CAPA 제안)
   requests: { edit: boolean; delete: boolean }
+  // 문서 본문(W7): 칸 표 대신 아래 구역. diff = 직전 개정과 줄 비교 [' '|'+'|'-', 줄]
+  body: { label: string; value: string; prev: string | null; diff: [string, string][] | null } | null
 }
 interface Hist { history_id: number; kind?: string; date: string; user: string; type: string; changes: { field: string; old: string; new: string }[] }
 
@@ -101,6 +103,38 @@ export function groupProps<T extends { key: string; label: string }>(
     else if (g.keys.find((k) => items.some((y) => y.key === k)) === x.key) out.push({ label: g.label, node: many(items.filter((y) => g.keys.includes(y.key))) })
   }
   return out
+}
+
+/** 문서 본문: 고칠 때는 큰 입력 칸, 볼 때는 줄바꿈 그대로 + 직전 개정과 비교 */
+function BodySection({ body, editing }: { body: NonNullable<Detail['body']>; editing: boolean }) {
+  const [compare, setCompare] = useState(false)
+  return (
+    <section style={{ marginBottom: 24 }}>
+      <h3>
+        {body.label}
+        {body.prev && !editing && (
+          <Checkbox style={{ marginLeft: 12, fontWeight: 'normal' }} checked={compare} onChange={(e) => setCompare(e.target.checked)}>
+            이전 개정({body.prev})과 비교
+          </Checkbox>
+        )}
+      </h3>
+      {editing ? (
+        <Form.Item name="body" style={{ margin: 0 }}>
+          <Input.TextArea autoSize={{ minRows: 16 }} />
+        </Form.Item>
+      ) : compare && body.diff ? (
+        body.diff.some(([s]) => s !== ' ') ? (
+          <div className="doc-body doc-diff">
+            {body.diff.map(([s, t], i) => (
+              <div key={i} className={s === '+' ? 'diff-added' : s === '-' ? 'diff-removed' : undefined}>{s === ' ' ? ' ' : s} {t}</div>
+            ))}
+          </div>
+        ) : <Typography.Text type="secondary">이전 개정과 본문이 같습니다.</Typography.Text>
+      ) : (
+        <div className="doc-body">{body.value || '—'}</div>
+      )}
+    </section>
+  )
 }
 
 /** 묶음 체크 상자 입력: 칸마다 Form.Item, 이름은 상자 옆 글자로 */
@@ -343,6 +377,7 @@ export default function RecordView() {
           (f) => editable.get(f.key)?.type === 'rows')}
         side={d.side.filter((k) => SIDE[k]).map((k) => ({ key: k, ...SIDE[k] }))}
       >
+        {d.body && <BodySection body={d.body} editing={editing && editable.has('body')} />}
         {d.children.map((c) => (
           <section key={c.key} style={{ marginBottom: 24 }}>
             <h3>

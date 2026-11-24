@@ -99,6 +99,8 @@ a.flow-box:hover { border-color: currentColor; }
 .doc-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; margin-bottom: 8px; }
 .doc-title { font-size: 20pt; margin: 0 0 4px; }
 .doc-h2 { font-size: 12pt; margin: 12px 0 4px; }
+.doc-body { white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.6; }
+.doc-diff > div { padding: 0 4px; }
 .doc-table, .doc-sign { border-collapse: collapse; font-size: 10pt; }
 .doc-table { width: 100%; }
 .doc-table th, .doc-table td, .doc-sign th, .doc-sign td { border: 1px solid #888; padding: 2px 6px; text-align: left; }

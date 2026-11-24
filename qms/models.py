@@ -782,8 +782,10 @@ class DocumentRevision(Approvable):
     document = models.ForeignKey(Document, on_delete=models.PROTECT, related_name='revisions', verbose_name='문서')
     revision = models.CharField('개정', max_length=20, blank=True,
                                 help_text='비워 두면 마지막 숫자 개정 + 1로 채웁니다.')
-    file = models.FileField('원본 파일', upload_to='documents/%Y/')
+    file = models.FileField('원본 파일', upload_to='documents/%Y/', blank=True,
+                            help_text='본문을 앱에서 쓰면 비워도 됩니다(파일이나 본문 중 하나는 필요).')
     change_note = models.TextField('개정 내용')
+    body = models.TextField('본문', blank=True, help_text='비워 두고 파일도 없으면 직전 개정 본문을 복사합니다.')
     created_at = models.DateTimeField('등록 일시', default=timezone.now)
     history = HistoricalRecords()
 
@@ -799,12 +801,40 @@ class DocumentRevision(Approvable):
             others = self.document.revisions.exclude(pk=self.pk).values_list('revision', flat=True)
             self.revision = next_revision(others)
 
+    @property
+    def previous(self):
+        """같은 문서의 직전 개정(등록 순)."""
+        qs = self.document.revisions.order_by('-created_at', '-pk')
+        return qs.filter(models.Q(created_at__lt=self.created_at) | models.Q(created_at=self.created_at, pk__lt=self.pk)).first()             if self.pk else qs.first()
+
+    def revision_rows(self):
+        """양식지 개정 이력(W7): 이 개정까지 등록 순. 요청자 = 처음 저장한 사람."""
+        def who(u):
+            return (u.get_full_name() or u.username) if u else ''
+        prev, rows = self, []
+        while prev:
+            first = prev.history.order_by('history_date', 'history_id').first()
+            rows.append({'label': f'Rev.{prev.revision}', 'changes': prev.change_note, 'reason': '',
+                         'requested_by': who(first and first.history_user), 'approved_by': who(prev.approved_by),
+                         'approved_at': timezone.localtime(prev.approved_at).strftime('%Y-%m-%d') if prev.approved_at else ''})
+            prev = prev.previous
+        return rows[::-1]
+
+    def fill_body(self):
+        """새 개정 = 직전 본문을 복사해 고친다(W7). 파일을 올린 개정은 복사하지 않는다."""
+        if not self.pk and not self.body and not self.file and self.document_id and self.previous:
+            self.body = self.previous.body
+
     def clean(self):
         super().clean()
         self.fill_revision()  # 고유 검사(uniq_doc_rev)가 채운 값으로 돌도록 clean에서 먼저 채운다
+        self.fill_body()
+        if not self.file and not self.body.strip():
+            raise ValidationError({'body': '원본 파일이나 본문 중 하나는 있어야 합니다.'})
 
     def save(self, *args, **kwargs):
         self.fill_revision()
+        self.fill_body()
         super().save(*args, **kwargs)
 
 

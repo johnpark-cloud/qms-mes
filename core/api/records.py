@@ -3,6 +3,7 @@
 권한은 그 모델의 view_ 권한. 변경 이력도 view_ 권한이면 본다(미결 #6, 2026-11-13 사용자 결정).
 꺼진 모듈은 미들웨어가 주소의 label 인자로 막는다.
 """
+import difflib
 import json
 from datetime import datetime
 from urllib.parse import urlencode
@@ -236,6 +237,8 @@ def _detail(obj, spec, user):
     model = type(obj)
     fields = []
     for n in spec.fields:
+        if n == spec.body:  # 본문은 아래 구역(_body)
+            continue
         text, url = recordspec.value_of(obj, n)
         fields.append({'key': n, 'label': recordspec.label_of(model, n), 'value': text, 'url': url})
     meta = model._meta
@@ -249,7 +252,7 @@ def _detail(obj, spec, user):
                          'add_url': None if locked else _child_add_url(rel, obj, user)})
     return {'ct': meta.label_lower, 'id': obj.pk, 'title': str(obj), 'kind': str(meta.verbose_name),
             'status': status_of(obj), 'fields': fields, 'children': children, 'side': list(spec.side),
-            'groups': recordspec.groups_of(spec),
+            'groups': recordspec.groups_of(spec), 'body': _body(obj, spec),
             'admin_url': f'/admin/{meta.app_label}/{meta.model_name}/{obj.pk}/change/' if user.is_superuser else None,
             'list_url': f'/app/r/{meta.app_label}/{meta.model_name}',
             'version': record_version(obj, ()), 'locked': locked,
@@ -264,6 +267,18 @@ def _detail(obj, spec, user):
             'notices': _notices(obj, user),
             'requests': {'edit': _can_request(obj, EditRequest.EDIT, user),
                          'delete': _can_request(obj, EditRequest.DELETE, user)}}
+
+
+def _body(obj, spec):
+    """본문 구역(W7): 값과 직전 개정과의 줄 비교 [[' '|'-'|'+', 줄], ...]."""
+    if not spec.body:
+        return None
+    text, prev = getattr(obj, spec.body), getattr(obj, 'previous', None)
+    diff = None
+    if prev:
+        lines = list(difflib.unified_diff(getattr(prev, spec.body).splitlines(), text.splitlines(), lineterm='', n=10**6))[2:]
+        diff = [[s[0], s[1:]] for s in lines if not s.startswith('@@')]
+    return {'label': recordspec.label_of(type(obj), spec.body), 'value': text, 'prev': str(prev) if prev else None, 'diff': diff}
 
 
 def _history_table(model, pk):
@@ -321,7 +336,8 @@ def document_of(obj, spec):
     # 작성 = 부적합은 발견자, 그 밖은 처음 저장한 사람
     first = obj.history.order_by('history_date', 'history_id').first() if hasattr(obj, 'history') else None
     return {'title': title, 'number': str(obj), 'revision': '', 'draft': hasattr(obj, 'approved_at') and obj.approved_at is None,
-            'head': head, 'tables': tables, 'revisions': None,
+            'head': head, 'tables': tables, 'body': getattr(obj, spec.body) if spec.body else None,
+            'revisions': obj.revision_rows() if hasattr(obj, 'revision_rows') else None,
             'photos': [{'url': p.file.url, 'caption': p.caption} for p in obj.photos.all()] if hasattr(obj, 'photos') else [],
             'signoff': {'written_by': who(getattr(obj, 'detected_by', None) or (first and first.history_user)), 'written_at': day(first and first.history_date),
                         'approved_by': who(getattr(obj, 'approved_by', None)), 'approved_at': day(getattr(obj, 'approved_at', None))}}

@@ -40,6 +40,7 @@ class Spec(NamedTuple):
     create: tuple = ()  # 기록 화면 「새로 만들기」 칸(외래키 가능). 비면 관리 화면 추가 폼. 규칙은 모델 clean/save가 막는다
     hidden: tuple = ()  # create 중 화면에 안 보이고 주소(?키=값)로만 채우는 칸(예: CAPA 출처 기록)
     groups: tuple = ()  # (이름, 예/아니오 칸들): 한 줄에 체크 상자로 모아 보인다
+    body: str = ''  # 긴 본문 칸: 칸 표가 아니라 아래 「본문」 구역(편집·이전 개정과 비교, 모델 previous), 양식지 본문(W7)
 
 
 # 승인 서명·판정 경로로만 바뀌는 칸. 범용 저장(PATCH)은 이 칸을 받지 않는다(REC-06).
@@ -94,15 +95,16 @@ SPECS = {
         edit=('number', 'title', 'doc_type'),
         create=('number', 'title', 'doc_type')),
     'qms.documentrevision': Spec(
-        fields=('document', 'revision', 'file', 'change_note', 'created_at', 'approved_by', 'approved_at'),
+        fields=('document', 'revision', 'file', 'change_note', 'created_at', 'approved_by', 'approved_at', 'body'),
         columns=('document', 'revision', 'created_at', 'approved_at'),
         search=('document__number', 'document__title', 'revision'),
         tabs=(ALL, ('draft', '초안', lambda qs: qs.filter(approved_at__isnull=True)),
               ('approved', '승인됨', lambda qs: qs.filter(approved_at__isnull=False))),
         side=('relations', 'files', 'history'),
         order=('-created_at', '-pk'),
-        edit=('revision', 'change_note'),
-        create=('document', 'revision', 'file', 'change_note')),
+        edit=('revision', 'change_note', 'body'),
+        create=('document', 'revision', 'file', 'change_note', 'body'),
+        body='body'),
     'qms.gauge': Spec(
         fields=('number', 'name', 'kind', 'maker', 'model_no', 'serial_no', 'measuring_range', 'resolution',
                 'department', 'location', 'owner', 'cal_type', 'cal_agency', 'interval_months', 'last_calibrated', 'next_due',
@@ -382,6 +384,7 @@ SPECS = {
 # 양식지(W3): 기록 화면 「양식지」 → A4 한 장(core/api/records.py document_of). (제목, ((구역, 칸들), ...)).
 # 여기 없는 기록은 상세 칸 전부를 머리말 표로 그린다. 부적합·출하·PPAP는 모델 print_table 표(①~⑦·성적서·PSW)를 쓴다
 DOCS = {
+    'qms.documentrevision': ('문서', (('문서 정보', ('document', 'revision', 'created_at', 'change_note', 'file')),)),
     'qms.capa': ('시정조치 보고서(CAPA)', (
         ('개요', ('number', 'title', 'source', 'source_record', 'status', 'owner', 'due_date')),
         ('원인·대책', ('root_cause', 'action', 'done_at')),

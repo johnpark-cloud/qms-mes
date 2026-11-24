@@ -51,6 +51,10 @@ export default function DocumentView({ doc }: { doc: DocStruct }) {
           {doc.photos.map((p, i) => <figure key={i}><img src={p.url} alt={p.caption || `사진 ${i + 1}`} /><figcaption>{p.caption}</figcaption></figure>)}
         </div>
       </section>}
+      {doc.body != null && <section>
+        <h2 className="doc-h2">본문</h2>
+        <div className="doc-body">{doc.body || '—'}</div>
+      </section>}
       {doc.revisions && <>
       <h2 className="doc-h2">개정 이력</h2>
       <table className="doc-table">
