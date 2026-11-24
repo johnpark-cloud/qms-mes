@@ -39,6 +39,7 @@
 | 승인된 기록은 수정할 수 없다. 새 개정을 만든다. | `Approvable.save`, `Characteristic.save`, `ControlPlanLine` 저장 |
 | 검사·문서 기준은 "승인된 최신 개정"이 최신 승인본이다. | `InspectionSpec.current` |
 | 문서 개정은 원본 파일이나 본문 중 하나가 있어야 한다. 새 개정에 둘 다 없으면 직전 개정(등록 순) 본문을 복사한다. 승인된 개정은 본문도 잠긴다(`Approvable.save`). | `DocumentRevision.clean`/`save`/`fill_body` |
+| 문서 열람 확인은 승인된 개정에만 남고, 한 사람이 한 개정에 한 줄이다. 내 할 일에는 최근 30일 안에 승인된 최신 개정 중 안 읽은 것만 뜬다. | `DocumentRead.clean`, `qms/due.py` `unread_documents` |
 | 검사기준 저장은 `qms.rules.save_spec`이 한다(admin과 같은 잠금: `save_with_lock`). 기준서 속성과 검사항목 줄을 한꺼번에 저장하고 하나라도 잘못이면 아무것도 저장하지 않는다. 다른 기준서의 항목 id는 400으로 거부한다. 동시 수정은 `spec_version`(기준서·항목 이력 중 가장 큰 `history_id`)이 달라지면 409 `다른 사람이 먼저 고쳤습니다. 다시 불러오세요.`다. 항목 삭제는 `delete_characteristic` 권한이 필요하다(역할 그룹에는 없어 사실상 시스템 관리자만). | `qms/rules.py` `save_spec`·`spec_version`, `qms/api/specs.py` |
 | 4M 변경 중 고객 통보 대상은 고객 승인 문서번호가 있어야 승인할 수 있다. 진행 단계가 보류·반려이거나 고객 승인 상태가 고객 반려면 승인할 수 없다. 진행 단계 「승인 완료」는 승인 서명으로만 된다(수정 드롭다운에 없음, `recordspec.SIGN_CHOICES`). 고객 승인 상태 「고객 승인」은 고객 승인 문서번호가 있어야 한다. | `ChangeRequest.clean`/`save` |
 | PPAP: 제출(S) 요소마다 증적이 있어야 PSW를 승인할 수 있다. 승인 후에는 제출일·고객 승인일만 기록할 수 있다. | `PpapSubmission.clean`/`save`, `PpapElement` 저장 |

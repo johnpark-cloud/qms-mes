@@ -36,7 +36,7 @@ MODULES = {
     # 심사 발견사항이 CAPA를 외래키로 가리킨다
     'qms_audit': Module('심사', ('qms.internalaudit', 'qms.auditfinding', 'qms.auditchecklist', 'qms.audititem', 'qms.evidence'),
                         ('audit-pack/', 'api/qms/audit-pack/'), requires=('qms_capa',)),
-    'qms_document': Module('문서 관리', ('qms.document', 'qms.documentrevision')),
+    'qms_document': Module('문서 관리', ('qms.document', 'qms.documentrevision', 'qms.documentread')),
     'qms_kpi': Module('품질 KPI', (), ('kpi/', 'api/qms/kpi/')),
     'qms_review': Module('경영검토', ('qms.managementreview', 'qms.managementreviewaction')),
 }

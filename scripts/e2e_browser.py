@@ -783,6 +783,24 @@ try:
             ok, page_err = False, str(e)[:120]
         check('한눈에 보기 「지연 N」 → 지연 탭', ok, page.url if ok else page_err)
 
+        # 문서 열람 확인: 승인된 개정 → 「읽었음」 → 열람 확인 표에 내 이름, 버튼 사라짐
+        rev_pk = manage('shell', '-c', (
+            "from django.contrib.auth import get_user_model; from django.utils import timezone;"
+            "from qms.models import Document, DocumentRevision;"
+            "d = Document.objects.create(number='E2E-WI-01', title='E2E 작업표준');"
+            "r = DocumentRevision.objects.create(document=d, change_note='제정', body='본문',"
+            " approved_by=get_user_model().objects.get(username='boss'), approved_at=timezone.now());"
+            "print(r.pk)")).stdout.decode().split()[-1]  # shell이 앞에 자동 import 안내를 찍는다
+        try:
+            page.goto(f'/app/r/qms/documentrevision/{rev_pk}')
+            page.get_by_role('button', name='읽었음 (열람 확인)').click(timeout=8000)
+            page.locator('section', has_text='열람 확인').locator('.ant-table-tbody tr', has_text='boss').wait_for(timeout=5000)
+            ok = page.get_by_role('button', name='읽었음 (열람 확인)').count() == 0
+            page_err = '' if ok else '버튼이 남음'
+        except Exception as e:
+            ok, page_err = False, str(e)[:120]
+        check('문서 열람 확인: 「읽었음」 → 열람 확인 표', ok, page.url if ok else page_err)
+
         # 기록 화면 새로 만들기: 목록 「새로 만들기」 → 입력 → 저장 → 새 기록 화면
         try:
             page.goto('/app/r/core/department')

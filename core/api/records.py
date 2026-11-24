@@ -281,6 +281,7 @@ def _detail(obj, spec, user):
             and _perm(user, model, 'change'),
             'dispose': [recordspec.editor(obj, n) for n in rules.DISPOSE_FIELDS] if isinstance(obj, Nonconformance) else None,
             'can_close': spec.close and not obj.closed_at and _perm(user, model, 'change'),
+            'can_ack': spec.ack and bool(obj.approved_at) and not obj.reads.filter(user=user).exists(),
             'links': _links(obj, user),
             'notices': _notices(obj, user),
             'requests': {'edit': _can_request(obj, EditRequest.EDIT, user),
@@ -439,6 +440,20 @@ class RecordCloseView(APIView):
             raise Http404
         require_perm(request.user, f'{model._meta.app_label}.change_{model._meta.model_name}')
         rules.close_record(get_object_or_404(model, pk=pk), request.user)
+        return Response(_detail(model.objects.get(pk=pk), spec, request.user))
+
+
+class RecordAckView(APIView):
+    schema = None
+
+    def post(self, request, label, pk):
+        """열람 확인(4단계 #9): 설명서 ack=True인 기록만. 보기 권한이면 본인 것을 남긴다(두 번 눌러도 한 줄), 초안은 모델 clean이 막는다."""
+        model, spec = _model(request.user, label)
+        if not spec.ack:
+            raise Http404
+        obj = get_object_or_404(model, pk=pk)
+        if not obj.reads.filter(user=request.user).exists():
+            obj.reads.create(user=request.user)
         return Response(_detail(model.objects.get(pk=pk), spec, request.user))
 
 

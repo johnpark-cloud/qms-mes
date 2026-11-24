@@ -919,6 +919,30 @@ class DocumentRevision(Approvable):
         super().save(*args, **kwargs)
 
 
+class DocumentRead(models.Model):
+    """문서 열람 확인(4단계 #9): 승인된 개정을 읽었다는 본인 기록. 승인 전 초안은 받지 않는다."""
+    revision = models.ForeignKey(DocumentRevision, on_delete=models.CASCADE, related_name='reads', verbose_name='문서 개정')
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name='document_reads',
+                             verbose_name='열람자')
+    read_at = models.DateTimeField('열람 확인 일시', default=timezone.now)
+    history = HistoricalRecords()
+
+    class Meta:
+        verbose_name = verbose_name_plural = '문서 열람 확인'
+        constraints = [models.UniqueConstraint(fields=['revision', 'user'], name='uniq_doc_read')]
+
+    def __str__(self):
+        return f'{self.revision} · {self.user}'
+
+    def clean(self):
+        if not self.revision.approved_at:
+            raise ValidationError('승인 전 개정은 열람 확인할 수 없습니다.')
+
+    def save(self, *args, **kwargs):
+        self.clean()
+        super().save(*args, **kwargs)
+
+
 class AuditChecklist(models.Model):
     name = models.CharField('체크리스트', max_length=200, help_text='예: 고객사 QSA 2026, IATF 16949 내부심사')
     standard = models.CharField('규격', max_length=100, blank=True)

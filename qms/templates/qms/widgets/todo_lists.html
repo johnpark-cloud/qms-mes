@@ -149,6 +149,16 @@
   </section>
   {% endif %}
 
+  {% if unread_docs %}
+  <section class="card" id="unread-docs">
+    <h2>문서 열람 확인 <span class="count">최근 30일 승인 · 안 읽음</span></h2>
+    <table><tbody>
+      {% for r in unread_docs %}<tr><td><a href="/app/r/qms/documentrevision/{{ r.pk }}">{{ r.document }} Rev.{{ r.revision }}</a></td>
+        <td>{{ r.approved_at|date:"Y-m-d" }} 승인</td></tr>{% endfor %}
+    </tbody></table>
+  </section>
+  {% endif %}
+
   {% if repeat_ncs %}
   <section class="card" id="repeat-ncs">
     <h2>반복 부적합 <span class="count">CAPA 제안 · 같은 품번·유형 90일 3건</span></h2>

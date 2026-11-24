@@ -9,7 +9,7 @@ from core.models import EditRequest, Hold, Nonconformance, PartnerCertificate
 from core.modules import active_set
 
 from . import spc
-from .models import (AuditFinding, Capa, ChangeRequest, Characteristic, ControlPlan, CustomerClaim, DocumentRevision, Gauge,
+from .models import (AuditFinding, Capa, ChangeRequest, Characteristic, ControlPlan, CustomerClaim, DocumentRead, DocumentRevision, Gauge,
                      Inspection, InspectionSpec, InternalAudit, Memo, PpapSubmission, Qualification, Scar)
 
 
@@ -18,8 +18,9 @@ DUE_MODULE = {
     'claims': 'qms_claim', 'scars': 'qms_supplier', 'capas': 'qms_capa', 'audits': 'qms_audit', 'findings': 'qms_audit',
     'ppaps': 'qms_ppap', 'pending_ppaps': 'qms_ppap', 'gauges': 'qms_inspection', 'qualifications': 'qms_inspection', 'spc_alarms': 'qms_inspection',
     'pending_specs': 'qms_inspection', 'pending_plans': 'qms_inspection', 'first_articles': 'qms_change',
-    'pending_changes': 'qms_change', 'pending_docs': 'qms_document', 'repeat_ncs': 'qms_capa',
+    'pending_changes': 'qms_change', 'pending_docs': 'qms_document', 'unread_docs': 'qms_document', 'repeat_ncs': 'qms_capa',
 }
+UNREAD_DAYS = 30  # 문서 열람 확인: 승인 뒤 이 기간 안의 최신본만 할 일에 띄운다(오래된 문서까지 쌓이지 않게)
 REPEAT_COUNT, REPEAT_DAYS = 3, 90  # 같은 품번·같은 부적합 유형이 90일 안에 CAPA 없이 3건이면 CAPA를 제안한다
 
 
@@ -65,6 +66,7 @@ def due_items(approver=False, user=None):
         'partner_certs': list(PartnerCertificate.objects.filter(partner__active=True, valid_until__lte=today + datetime.timedelta(days=30))
                               .select_related('partner')),
         'qualifications': expiring_qualifications(today),
+        'unread_docs': unread_documents(user, now) if user is not None else [],
         'first_articles': list(ChangeRequest.objects.filter(approved_at__isnull=False, effective_at__lte=now).annotate(
             fa=Exists(Inspection.objects.filter(lot__item=OuterRef('item'), result=Inspection.PASS,
                                                 inspected_at__gte=OuterRef('effective_at')))).filter(fa=False)
@@ -121,6 +123,14 @@ def recent_spc_alarms(now):
         if last['alarms']:
             out.append({'char': c, 'lot': last['label'].lot, 'alarms': last['alarms']})
     return out
+
+
+def unread_documents(user, now):
+    """최근 UNREAD_DAYS일에 승인된 최신본(문서별 승인된 최신 개정) 중 이 사용자가 열람 확인하지 않은 것."""
+    newer = DocumentRevision.objects.filter(document=OuterRef('document'), approved_at__gt=OuterRef('approved_at'))
+    mine = DocumentRead.objects.filter(revision=OuterRef('pk'), user=user)
+    return list(DocumentRevision.objects.filter(approved_at__gte=now - datetime.timedelta(days=UNREAD_DAYS))
+                .exclude(Exists(newer)).exclude(Exists(mine)).select_related('document').order_by('-approved_at', '-pk'))
 
 
 def expiring_qualifications(today):

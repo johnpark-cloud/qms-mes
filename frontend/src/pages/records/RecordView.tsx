@@ -34,7 +34,7 @@ interface Detail {
   ct: string; id: number; title: string; kind: string; status: string | null
   fields: Field[]; children: Child[]; side: string[]; admin_url: string | null; list_url: string; groups: Group[]
   version: number; locked: boolean; edit: Edit[]; can_change: boolean; can_approve: boolean
-  can_dispose: boolean; dispose: Edit[] | null; can_close: boolean; links: { label: string; url: string }[]
+  can_dispose: boolean; dispose: Edit[] | null; can_close: boolean; can_ack?: boolean; links: { label: string; url: string }[]
   notices: { message: string; label: string; url: string }[] // 기록 위 안내 띠(반복 부적합 → CAPA 제안)
   requests: { edit: boolean; delete: boolean }
   // 문서 본문(W7): 칸 표 대신 아래 구역. diff = 직전 개정과 줄 비교 [' '|'+'|'-', 줄]
@@ -291,6 +291,11 @@ export default function RecordView() {
       }
     },
   })
+  // 열람 확인(4단계 #9): 승인된 개정을 읽었다는 본인 기록. 두 번 눌러도 한 줄
+  const ack = async () => {
+    fresh(await api<Detail>(base + 'ack/', { method: 'POST', body: '{}' }))
+    message.success('열람 확인을 남겼습니다.')
+  }
   const requestEdit = async (v: { reason: string; password: string }) => {
     const r = await api<{ error: string | null; decide_url: string | null }>(base + 'request/',
       { method: 'POST', body: JSON.stringify({ kind: 'EDIT', ...v }) })
@@ -353,6 +358,7 @@ export default function RecordView() {
               {d.can_approve && <Button onClick={() => setSigning(true)}>승인</Button>}
               {d.can_dispose && <Button onClick={() => setDisposing(true)}>처분</Button>}
               {d.can_close && <Button onClick={close}>종결</Button>}
+              {d.can_ack && <Button type="primary" onClick={ack}>읽었음 (열람 확인)</Button>}
               {d.can_change && <Button type="primary" onClick={startEdit}>수정</Button>}
             </>
           )

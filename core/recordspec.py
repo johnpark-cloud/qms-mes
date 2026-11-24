@@ -42,6 +42,7 @@ class Spec(NamedTuple):
     create: tuple = ()  # 기록 화면 「새로 만들기」 칸(외래키 가능). 비면 관리 화면 추가 폼. 규칙은 모델 clean/save가 막는다
     hidden: tuple = ()  # create 중 화면에 안 보이고 주소(?키=값)로만 채우는 칸(예: CAPA 출처 기록)
     groups: tuple = ()  # (이름, 예/아니오 칸들): 한 줄에 체크 상자로 모아 보인다
+    ack: bool = False  # 「열람 확인」 버튼(POST …/ack/): 승인된 기록을 읽었다는 본인 기록(qms.DocumentRead), 하위 표 reads
     overdue: str = ''  # 기한 지난 미완료 건의 탭 키: 목록 API가 그 건수를 「overdue」로 주고, 한눈에 보기 카드가 「지연 N」으로 먼저 보인다
     body: str = ''  # 긴 본문 칸: 칸 표가 아니라 아래 「본문」 구역(편집·이전 개정과 비교, 모델 previous), 양식지 본문(W7)
 
@@ -105,8 +106,10 @@ SPECS = {
               ('approved', '승인됨', lambda qs: qs.filter(approved_at__isnull=False))),
         side=('relations', 'files', 'history'),
         order=('-created_at', '-pk'),
+        children=(Child('reads', '열람 확인', ('user', 'read_at'), ('-read_at', '-pk')),),
         edit=('revision', 'change_note', 'body'),
         create=('document', 'revision', 'file', 'change_note', 'body'),
+        ack=True,
         body='body'),
     'qms.gauge': Spec(
         fields=('number', 'name', 'kind', 'maker', 'model_no', 'serial_no', 'measuring_range', 'resolution',
