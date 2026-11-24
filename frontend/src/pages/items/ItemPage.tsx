@@ -150,7 +150,7 @@ export default function ItemPage() {
     {
       label: '프로젝트',
       node: (
-        <Select aria-label="프로젝트" style={{ width: 280 }} allowClear showSearch={{ optionFilterProp: 'label' }} placeholder="없음" status={errors.project ? 'error' : undefined} disabled={readOnly}
+        <Select aria-label="프로젝트" style={{ width: '100%' }} allowClear showSearch={{ optionFilterProp: 'label' }} placeholder="없음" status={errors.project ? 'error' : undefined} disabled={readOnly}
           options={d.project_options} value={project ?? undefined} onChange={(v) => setProject(v ?? null)} />
       ),
     },

@@ -277,7 +277,8 @@ class Measurement(models.Model):
         verbose_name = verbose_name_plural = '측정값'
 
     def __str__(self):
-        return f'{self.characteristic.name}={self.value if self.value is not None else self.ok}'
+        shown = f'{self.value.normalize():f}' if self.value is not None else {True: '합격', False: '불합격'}.get(self.ok, '')
+        return f'{self.characteristic.name} = {shown}'
 
     @property
     def passed(self):

@@ -211,6 +211,7 @@ export default function SpecPage() {
   return (
     <>
       <RecordPage
+        wide
         title={d.title}
         status={locked ? '잠김' : (d.status as '초안' | '승인됨')}
         actions={actions}

@@ -90,7 +90,8 @@ export default function DataList<T extends object>({ columns, tabs, fetchPage, e
           if (tabProp === undefined) setTab(k) // 주소로 탭을 정하면 부모가 바꾼다
           onTab?.(k)
         }} items={tabs} />
-      <Space style={{ marginBottom: 12 }} wrap>
+      <div className="list-bar">
+      <Space wrap>
         <Input.Search allowClear placeholder="검색" value={text} onChange={(e) => setText(e.target.value)} style={{ width: 260 }} />
         {filters?.map((f) =>
           f.type === 'choice' ? (
@@ -117,12 +118,16 @@ export default function DataList<T extends object>({ columns, tabs, fetchPage, e
             />
           ),
         )}
-        <a href={exportHref(tab, q, extra)} download>
-          엑셀 받기
-        </a>
-        {toolbar}
-        <span>총 {count}건</span>
       </Space>
+      {/* 건수·내려받기·주요 버튼은 오른쪽에 모은다(검색·필터 줄과 나눠 한 눈에) */}
+      <Space wrap className="list-bar-end">
+        <span className="list-count">총 {count.toLocaleString()}건</span>
+        <Button href={exportHref(tab, q, extra)} download>
+          엑셀 받기
+        </Button>
+        {toolbar}
+      </Space>
+      </div>
       {error && (
         <Typography.Text type="danger" role="alert" style={{ display: 'block', marginBottom: 8 }}>
           {error}

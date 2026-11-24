@@ -13,9 +13,10 @@ export default function PrintPage({ docUrl, backTo, queryKey }: { docUrl: string
   return (
     <>
       <div className="print-bar">
-        <Link to={backTo}>← {q.data.title}</Link>
+        <Link to={backTo} className="print-back">← {q.data.title}</Link>
+        <span style={{ flex: 1 }} />
+        <Button href={docUrl + '?export=xlsx'} download>.xlsx 받기</Button>
         <Button type="primary" onClick={() => window.print()}>인쇄 / PDF로 저장</Button>
-        <a href={docUrl + '?export=xlsx'} download>.xlsx 받기</a>
       </div>
       <DocumentView doc={q.data} />
     </>

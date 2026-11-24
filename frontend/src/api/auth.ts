@@ -15,6 +15,7 @@ export interface Me {
   perms: string[]
   nav: NavGroup[]
   modules: Record<string, boolean> // 모듈 키 → 켜짐 (core/modules.py)
+  logo: boolean // data/brand/logo.* 가 있다
 }
 
 export const fetchMe = () => api<Me>('/api/auth/me/')

@@ -13,7 +13,7 @@ from django.urls import NoReverseMatch, reverse
 from django.utils.http import urlencode
 
 from .modules import active_set, module_of_model
-from .recordspec import url_for
+from .recordspec import label_of, url_for
 
 APPS = ('core', 'qms')
 EXCLUDE = {'core.importprofile', 'qms.dashboardlayout'}
@@ -66,7 +66,7 @@ def relations_for(model):
         other = r.related_model
         label = str(other._meta.verbose_name)
         if per_model[other] > 1:  # 같은 표에서 이 기록을 가리키는 칸이 둘 이상이면 칸 이름을 붙인다
-            label = f'{label}({r.field.verbose_name})'
+            label = f'{label}({label_of(other, r.field.name)})'
         rels.append(Relation(f'{_label(other)}:{r.field.name}', label, other, r.field.name, 'in',
                              'm2m' if r.many_to_many else 'fk'))
     for g_label, ct_field, _id, targets in GENERIC:
@@ -76,7 +76,7 @@ def relations_for(model):
     for f in model._meta.get_fields():
         if (f.is_relation and f.concrete and not f.auto_created and f.related_model is not None
                 and (f.many_to_one or f.one_to_one or f.many_to_many) and is_registered(_label(f.related_model))):
-            rels.append(Relation(f'{me}:{f.name}:out', str(f.verbose_name), f.related_model, f.name, 'out',
+            rels.append(Relation(f'{me}:{f.name}:out', label_of(model, f.name), f.related_model, f.name, 'out',
                                  'm2m' if f.many_to_many else 'fk'))
     return rels
 
@@ -88,7 +88,8 @@ def trace_url(number):
 
 def record_url(obj):
     """기록 상세 주소의 유일한 기준(REC-04): 전용 React 화면 → 기록 설명서 화면 → LOT 이력 → 관리 화면."""
-    pages = {'core.item': 'items', 'qms.inspectionspec': 'specs', 'qms.controlplan': 'plans', 'qms.inspection': 'inspections'}
+    pages = {'core.item': 'items', 'qms.inspectionspec': 'specs', 'qms.controlplan': 'plans', 'qms.inspection': 'inspections',
+             'auth.user': 'users'}
     label = _label(obj)
     if label in pages:
         return f'/app/{pages[label]}/{obj.pk}'

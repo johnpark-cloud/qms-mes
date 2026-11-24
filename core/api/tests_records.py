@@ -164,6 +164,7 @@ class RecordsApiTest(TestCase):
         hits = self.client.get('/api/search/?q=G-1').json()['results']  # 검색은 번호 기록만, 계측기는 없음
         self.assertIsInstance(hits, list)
         self.assertIsNone(recordspec.url_for(self.qual.user))
+        self.assertEqual(record_url(self.qual.user), f'/app/users/{self.qual.user.pk}')  # 사람 칸 → 사용자·조직도
 
     def test_admin_change_page_links_new_screen(self):
         r = self.client.get(f'/admin/qms/gauge/{self.g1.pk}/change/')
@@ -1138,3 +1139,49 @@ class RecordDocumentApiTest(TestCase):
         self.assertRedirects(r, f'/app/r/core/nonconformance/{self.nc.pk}/print', fetch_redirect_response=False)
         r = self.client.get('/print/qms/inspection/7/')
         self.assertEqual(r.status_code, 404)  # 없는 검사는 넘기기 전에 404
+
+
+class RecordScreenPolishTest(TestCase):
+    """W9 전수 검토: 붙일 수 없는 설정 표는 연결·메모·첨부 칸을 내지 않고, 만들 수 없는 종류는 이유를 말한다."""
+
+    def setUp(self):
+        self.root = User.objects.create_superuser('root', password='pw')
+        self.client.force_login(self.root)
+
+    def test_setting_record_has_no_relation_side(self):
+        from core.models import ImportProfile
+        p = ImportProfile.objects.create(name='A', target='work_order', mapping={'number': '지시번호'})
+        side = self.client.get(f'/api/records/core.importprofile/{p.pk}/').json()['side']
+        self.assertEqual(side, ['history'])  # 관련 기록·메모·첨부 API가 404인 표
+
+    def test_no_create_says_where_records_come_from(self):
+        r = self.client.get('/api/records/core.hold/new/')
+        self.assertEqual(r.status_code, 404)
+        self.assertIn('부적합', r.json()['detail'])
+        self.assertEqual(r.json()['list_url'], '/app/r/core/hold')
+
+    def test_numbers_and_mappings_read_like_a_form(self):
+        from decimal import Decimal
+
+        from core.models import Hold, ImportProfile, Lot, Nonconformance, WorkOrder
+        from qms.models import Characteristic, Measurement
+        wo = WorkOrder(number='WO-9', planned_qty=Decimal('2000.000'))
+        self.assertEqual(recordspec.value_of(wo, 'planned_qty')[0], '2,000')  # 0 꼬리·자리 구분
+        wo.planned_qty = Decimal('0.500')
+        self.assertEqual(recordspec.value_of(wo, 'planned_qty')[0], '0.5')
+        p = ImportProfile(name='A', target='item', mapping={'code': '코드', 'name': '품명'})
+        self.assertEqual(recordspec.value_of(p, 'mapping')[0], 'code: 코드\nname: 품명')
+        c = Characteristic(name='폭')
+        self.assertEqual(str(Measurement(characteristic=c, value=Decimal('100.00000'))), '폭 = 100')
+        self.assertEqual(str(Measurement(characteristic=c, ok=True)), '폭 = 합격')
+        lot = Lot(number='L-1')
+        self.assertEqual(str(Hold(lot=lot, nonconformance=Nonconformance(number='NC-1', lot=lot))), 'L-1 보류 (NC-1)')
+
+    def test_people_show_by_name(self):
+        from core.models import Department
+        u = User.objects.create_user('ex_lead', first_name='팀장', last_name='예시')
+        d = Department.objects.create(code='QA', name='품질', manager=u)
+        self.assertEqual(recordspec.value_of(d, 'manager')[0], '팀장 예시')  # 아이디(ex_lead)가 아니라 이름
+        form = self.client.get('/api/records/core.department/new/').json()
+        manager = next(f for f in form['fields'] if f['key'] == 'manager')
+        self.assertIn({'value': str(u.pk), 'label': '팀장 예시'}, manager['choices'])

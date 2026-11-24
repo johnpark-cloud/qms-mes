@@ -83,6 +83,7 @@ export default function Trace() {
       <AutoComplete style={{ width: '100%', maxWidth: 480 }} options={options} value={text} onChange={setText} onSelect={open} defaultActiveFirstOption={false}>
         <Input.Search size="large" placeholder="LOT 번호·품번·품명·공급자로 찾기" enterButton="조회" onSearch={open} />
       </AutoComplete>
+      {!number && <Typography.Paragraph type="secondary" style={{ marginTop: 12 }}>LOT을 고르면 투입·생산 계보와 입고부터 출하까지의 이력(검사·부적합·보류 포함)을 한 화면에 보여 줍니다.</Typography.Paragraph>}
       {q.isError && <Alert style={{ marginTop: 12 }} type="error" role="alert" message={q.error instanceof ApiError ? q.error.detail : 'LOT 이력을 불러오지 못했습니다.'} />}
       {number && q.isPending && <Spin style={{ display: 'block', marginTop: 24 }} />}
       {d && (

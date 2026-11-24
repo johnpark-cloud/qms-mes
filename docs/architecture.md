@@ -80,7 +80,7 @@ React 19·TypeScript·Vite·Ant Design 새 화면. 개발 PC에서 `npm run buil
 | `src/api/` | `client.ts`(CSRF·오류 형식·세션 만료 시 로그인 이동), `auth.ts` |
 | `src/layout/AppLayout.tsx`, `src/theme.ts` | 상단 바·사이드 메뉴, Fiori 색 토큰(라이트·다크) |
 | `src/pages/`, `src/components/` | 화면(`Login`, `Overview`, `Todo`, `specs/SpecList`·`SpecPage`·`SpecPrint`, `inspect/InspectPage`·`MeasurePage`, `inspections/InspectionList`·`InspectionPage`·`InspectionPrint`, `Trace`, `Memos`, `AuditLog`)과 공통 부품(`Tile`, `DataList`, `EditGrid`, `RecordPage`, `SaveBar`, `SignModal`, `DocumentView`, `PrintPage`, `CommandPalette`, `MemoPanel`, `RelationsPanel`(연결 탭), `AttachmentPanel`(첨부 탭), `lotOptions`) |
-| `src/api/specs.ts`, `src/api/inspect.ts`, `src/app.css`, `src/lib/` | 검사기준서·검사 입력 API 호출, 화면 스타일(`DESIGN.md`), 붙여넣기 분해(`tsv.ts`)·최근 연 기록(`recent.ts`)·샘플링 선택지(`sampling.ts`) |
+| `src/api/specs.ts`, `src/api/inspect.ts`, `src/app.css`, `src/lib/` | 검사기준서·검사 입력 API 호출, 화면 스타일(`DESIGN.md`), 붙여넣기 분해(`tsv.ts`)·최근 본 기록(`recent.ts`)·샘플링 선택지(`sampling.ts`) |
 
 전환 검토와 단계 계획은 `docs/architecture-migration-plan.md`에 있다.
 

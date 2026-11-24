@@ -15,7 +15,7 @@ interface Props {
   /** 주요 버튼 1개. 나머지 동작은 menu(「⋯」)로 보낸다. */
   actions: ReactNode
   /** wide: 한 줄 전체를 쓴다(담당자 표처럼 여러 칸 입력) */
-  props: { label: string; node: ReactNode; wide?: boolean }[]
+  props: { label: string; node: ReactNode; wide?: boolean; required?: boolean }[]
   children: ReactNode
   side: { key: string; label: string; node: ReactNode }[]
   /** 기록 종류(app.model)와 번호. 있으면 「이력」 버튼과 「⋯」 맨 아래 삭제(요청)를 붙인다. */
@@ -30,11 +30,13 @@ interface Props {
   menu?: MenuProps['items']
   /** 제목 옆 큰 글자(검사 판정 띠) */
   lead?: ReactNode
+  /** 넓은 표(검사항목·관리 항목)가 본문인 화면: 연결·메모 패널을 아래로 내려 표가 화면 폭을 다 쓴다 */
+  wide?: boolean
 }
 
 const COLOR = { 초안: 'orange', 승인됨: 'green', 잠김: 'default', 합격: 'green', 불합격: 'red', 미판정: 'orange' } as const
 
-export default function RecordPage({ title, status, actions, props, children, side, record, menu = [], lead, onDelete, editRequest, listPath = '/todo' }: Props) {
+export default function RecordPage({ title, status, actions, props, children, side, record, menu = [], lead, onDelete, editRequest, listPath = '/todo', wide }: Props) {
   const me = useQuery({ queryKey: ['me'], queryFn: fetchMe, staleTime: Infinity }).data
   const qc = useQueryClient()
   const navigate = useNavigate()
@@ -81,21 +83,23 @@ export default function RecordPage({ title, status, actions, props, children, si
           )}
         </div>
       </div>
-      <div className="record-body">
+      <div className={wide || !side.length ? 'record-body record-body-wide' : 'record-body'}>
         <div className="record-main">
           <dl className="record-props">
             {props.map((p) => (
               <div key={p.label} className={p.wide ? 'wide' : undefined}>
-                <dt>{p.label}</dt>
+                <dt className={p.required ? 'required' : undefined}>{p.label}</dt>
                 <dd>{p.node}</dd>
               </div>
             ))}
           </dl>
           {children}
         </div>
-        <aside className="record-side">
-          <Tabs items={side.map((s) => ({ key: s.key, label: s.label, children: s.node }))} />
-        </aside>
+        {side.length > 0 && (
+          <aside className="record-side">
+            <Tabs items={side.map((s) => ({ key: s.key, label: s.label, children: s.node }))} />
+          </aside>
+        )}
       </div>
     </div>
   )

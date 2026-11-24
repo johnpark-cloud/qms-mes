@@ -23,6 +23,7 @@ from core.timeline import lot_actions, lot_timeline
 
 
 def me_payload(user):
+    from core.views import find_logo
     on = active_set()
     nav = []
     for name, items in visible_nav(user):  # 사이드바(core/context_processors.py)와 같은 필터
@@ -34,7 +35,7 @@ def me_payload(user):
             'is_superuser': user.is_superuser, 'is_approver': is_approver(user),
             'groups': sorted(user.groups.values_list('name', flat=True)),
             'perms': sorted(user.get_all_permissions()), 'nav': nav,
-            'modules': {key: key in on for key in MODULES}}  # 꺼진 모듈 경로는 React가 「비활성 모듈」로 안내한다
+            'modules': {key: key in on for key in MODULES}, 'logo': find_logo() is not None}  # 꺼진 모듈 경로는 React가 「비활성 모듈」로 안내한다
 
 
 @method_decorator(ensure_csrf_cookie, name='dispatch')

@@ -21,8 +21,9 @@ export default function AppLayout() {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const me = useQuery({ queryKey: ['me'], queryFn: fetchMe })
-  // data/brand/logo.* 가 없으면 /brand/logo 가 404 라 글자로 보인다 (admin 상단 바와 같다).
-  const [logo, setLogo] = useState(true)
+  // data/brand/logo.* 가 없으면(me.logo) 글자로 보인다 (admin 상단 바와 같다). 파일이 깨졌으면 onError로 글자.
+  const [logoBroken, setLogoBroken] = useState(false)
+  const logo = me.data?.logo && !logoBroken
   const [palette, setPalette] = useState(false)
   useEffect(() => {
     const on = (e: KeyboardEvent) => {
@@ -54,7 +55,7 @@ export default function AppLayout() {
   const family = cur && pathOf(cur.href) === here ? flat.filter((i) => i.label === root || i.parent === root) : []
   const recent = getRecent()
   const items = [
-    ...(recent.length ? [{ key: 'recent', label: '최근 연 기록', children: recent.map((r) => ({ key: r.href, label: r.label })) }] : []),
+    ...(recent.length ? [{ key: 'recent', label: '최근 본 기록', children: recent.map((r) => ({ key: r.href, label: r.label })) }] : []),
     ...user.nav.map((g) => ({
       key: g.group,
       label: g.group,
@@ -71,7 +72,7 @@ export default function AppLayout() {
     <Layout style={{ minHeight: '100vh' }}>
       <Layout.Header style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '0 16px' }}>
         <Link to="/todo" style={{ display: 'flex', color: 'inherit' }}>
-          {logo ? <img className="shell-brand" src="/brand/logo" alt="QMS+MES" onError={() => setLogo(false)} />
+          {logo ? <img className="shell-brand" src="/brand/logo" alt="QMS+MES" onError={() => setLogoBroken(true)} />
             : <strong style={{ fontSize: 18 }}>QMS+MES</strong>}
         </Link>
         <span style={{ flex: 1 }} />

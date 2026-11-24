@@ -27,6 +27,7 @@ export default function NcNew() {
   const [params] = useSearchParams()
   const [form] = Form.useForm<Values>()
   const photos = useRef<HTMLInputElement>(null)
+  const [photoNames, setPhotoNames] = useState<string[]>([])
   const [lotText, setLotText] = useState(params.get('lot') ?? '')
   const lotOptions = useLotOptions(lotText)
   const [saving, setSaving] = useState(false)
@@ -49,6 +50,7 @@ export default function NcNew() {
       form.resetFields(['lot', 'description'])
       setLotText('')
       if (photos.current) photos.current.value = ''
+      setPhotoNames([])
     } catch (e) {
       if (e instanceof ApiError) {
         const names = ['lot', 'origin', 'description', 'defect_qty'] as const
@@ -94,7 +96,12 @@ export default function NcNew() {
           <InputNumber min={0} inputMode="decimal" style={{ width: 160 }} />
         </Form.Item>
         <Form.Item label="사진" extra="휴대폰에서는 카메라가 열립니다. 여러 장, 한 장 10MB까지.">
-          <input ref={photos} aria-label="사진" type="file" accept="image/*" capture="environment" multiple />
+          <Space wrap>
+            <Button onClick={() => photos.current?.click()}>사진 찍기·고르기</Button>
+            <span>{photoNames.length ? photoNames.join(', ') : '사진 없음'}</span>
+          </Space>
+          <input ref={photos} style={{ display: 'none' }} aria-label="사진" type="file" accept="image/*" capture="environment" multiple
+            onChange={(e) => setPhotoNames(Array.from(e.target.files ?? []).map((f) => f.name))} />
         </Form.Item>
         {err && <Alert style={{ marginBottom: 12 }} type="error" message={err} role="alert" />}
         <Button type="primary" htmlType="submit" size="large" loading={saving}>

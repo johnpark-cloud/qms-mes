@@ -70,6 +70,11 @@ class RelationsApiTest(TestCase):
         self.assertEqual(partner['label'], '거래처')
         self.assertEqual(partner['items'][0]['text'], str(self.partner))
 
+    def test_group_names_use_screen_labels(self):
+        from core.models import Hold
+        labels = {r.field: r.label for r in relations.relations_for(Hold) if r.direction == 'out'}
+        self.assertEqual(labels, {'lot': 'LOT', 'nonconformance': '부적합'})  # 칸 이름 없는 모델도 영문 키가 아니다
+
     def test_registry_excludes_personal(self):
         self._get('/api/relations/personal.leaveprofile/1/', status=404)
         self._get('/api/relations/core.nosuch/1/', status=404)

@@ -124,7 +124,7 @@ interface SpcData {
 }
 
 function Chart({ pts, lim }: { pts: SpcPoint[]; lim: Record<string, number> }) {
-  const W = 720, H = 240, P = 30
+  const W = 1080, H = 260, P = 30
   const vals = [lim.lcl, lim.ucl, ...pts.map((p) => p.xbar)]
   const lo = Math.min(...vals), hi = Math.max(...vals), span = hi - lo || 1
   const y = (v: number) => P + ((hi - v) / span) * (H - 2 * P)

@@ -64,7 +64,7 @@ export default function CommandPalette({ open, onClose }: { open: boolean; onClo
         }}
       />
       {mode === 'tree' ? <MenuTree filter={typed} go={go} /> : <div role="listbox" style={{ marginTop: 8 }}>
-        {empty && hits.length > 0 && <div className="palette-sub">최근 연 기록</div>}
+        {empty && hits.length > 0 && <div className="palette-sub">최근 본 기록</div>}
         {hits.map((h, i) => (
           <div key={h.url} role="option" aria-selected={i === idx} data-palette-item className="palette-item"
             onMouseEnter={() => setIdx(i)} onClick={() => go(h)}>

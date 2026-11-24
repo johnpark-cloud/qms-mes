@@ -56,6 +56,7 @@ class AuthApiTest(TestCase):
         self.assertIn('내 할 일', labels)
         self.assertNotIn('LOT 추적', labels)  # core.view_lot이 없다
         self.assertFalse(body['is_approver'])
+        self.assertFalse(body['logo'])  # data/brand/logo.* 가 없으면 화면이 /brand/logo 를 부르지 않는다(404 없음)
 
     def test_login_without_csrf_rejected(self):
         r = self.client.post('/api/auth/login/', {'username': 'qe', 'password': 'pw-qe-123'}, format='json')

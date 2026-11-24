@@ -1,5 +1,5 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { Alert, Button, Form, Spin } from 'antd'
+import { Alert, Button, Form, Result, Spin } from 'antd'
 import { useState } from 'react'
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import { ApiError, api } from '../../api/client'
@@ -46,7 +46,17 @@ export default function RecordNew() {
   const [saving, setSaving] = useState(false)
   const q = useQuery({ queryKey: ['record-new', label, search], queryFn: () => api<NewForm>(`/api/records/${label}/new/${search}`) })
   if (q.isLoading) return <Spin />
-  if (q.error) return <Alert type="error" title={(q.error as Error).message} showIcon />
+  if (q.error) {
+    // 새로 만들기가 없는 종류(부적합·보류·PPAP 요소): 서버가 어디서 생기는지와 갈 곳을 준다
+    const b = q.error instanceof ApiError ? (q.error.body as { list_url?: string; new_url?: string | null }) : {}
+    return (
+      <Result status="info" title="여기서는 새로 만들 수 없습니다" subTitle={(q.error as Error).message}
+        extra={[
+          b.new_url && <Button key="new" type="primary" onClick={() => nav(b.new_url!.slice(4))}>부적합 등록으로</Button>,
+          b.list_url && <Button key="list" onClick={() => nav(b.list_url!.slice(4))}>목록으로</Button>,
+        ]} />
+    )
+  }
   const d = q.data!
   const shown = d.fields.filter((e) => !e.hidden)
   const hidden = Object.fromEntries(d.fields.filter((e) => e.hidden && e.value != null).map((e) => [e.key, e.value]))
@@ -81,7 +91,7 @@ export default function RecordNew() {
             </Form.Item>
           ),
           (es) => <CheckGroup edits={es} />,
-          (e) => e.type === 'rows')}
+          (e) => ['rows', 'text', 'json'].includes(e.type))}
         side={[]}
       >
         {null}

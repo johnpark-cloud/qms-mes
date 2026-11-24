@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
-import { Spin } from 'antd'
+import { Button, Spin } from 'antd'
 import { useCallback } from 'react'
-import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { api } from '../../api/client'
 import DataList, { type ListFilter } from '../../components/DataList'
 
@@ -41,7 +41,11 @@ export default function RecordList() {
         exportHref={(tab, q, extra) => `${base}?tab=${tab}&q=${encodeURIComponent(q)}${extra}&export=xlsx`}
         onOpen={(r) => nav(`/r/${app}/${model}/${r.id}`)}
         rowKey={(r) => r.id}
-        toolbar={h.can_add && h.new_url ? (h.new_url.startsWith('/app/') ? <Link to={h.new_url.slice(4)}>새로 만들기</Link> : <a href={h.new_url}>새로 만들기</a>) : undefined}
+        toolbar={h.can_add && h.new_url ? (
+          <Button type="primary" href={h.new_url} onClick={(e) => {
+            if (h.new_url!.startsWith('/app/')) { e.preventDefault(); nav(h.new_url!.slice(4)) }
+          }}>새로 만들기</Button>
+        ) : undefined}
       />
     </div>
   )

@@ -575,7 +575,7 @@ class Hold(models.Model):
         verbose_name = verbose_name_plural = '보류'
 
     def __str__(self):
-        return f'{self.lot} ({self.nonconformance})'
+        return f'{self.lot} 보류 ({self.nonconformance.number})'  # 부적합 글자에 LOT이 또 들어 있어 번호만
 
 
 class Shipment(models.Model):

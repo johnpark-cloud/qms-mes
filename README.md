@@ -358,6 +358,7 @@ RAW-1,수입검사,외관,OK
 .\.venv\Scripts\python manage.py test             # 단위 테스트 (core·qms·personal)
 .\.venv\Scripts\python scripts\e2e_check.py      # 실제 서버를 띄워 화면 흐름 76개 점검 (임시 DB 사용)
 python scripts\e2e_browser.py                    # 시스템 Python의 Playwright로 /app/ 화면을 브라우저로 점검 (임시 DB 사용)
+python scripts\screen_tour.py [캡처 폴더]         # 새 화면 전부를 예시 데이터로 열어 캡처 (임시 DB, 화면 전수 검토용)
 ```
 
 검증 절차와 완료 기준은 `docs/testing.md`에 있습니다.

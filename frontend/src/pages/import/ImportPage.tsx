@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
 import { Alert, Button, Select, Space, Table } from 'antd'
 import dayjs from 'dayjs'
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { api } from '../../api/client'
 
 interface Profile {
@@ -59,6 +59,7 @@ export default function ImportPage() {
   // 'p:3'은 가져오기 설정, 't:qms.gauge'는 빈 양식(표준 열 제목), 'm'은 측정 원자료(검사 판정)
   const [choice, setChoice] = useState<string>()
   const [file, setFile] = useState<File | null>(null)
+  const picker = useRef<HTMLInputElement>(null)
   const [preview, setPreview] = useState<Preview | null>(null)
   const [done, setDone] = useState<number | null>(null)
   const [commitErrors, setCommitErrors] = useState<string[]>([])
@@ -146,7 +147,12 @@ export default function ImportPage() {
             <Button href={templateUrl}>CSV</Button>
           </>
         )}
+        {/* 브라우저 기본 파일 칸(영문 "Choose File") 대신 한글 버튼 + 파일 이름 */}
+        <Button onClick={() => picker.current?.click()}>파일 고르기</Button>
+        <span>{file?.name ?? '고른 파일 없음'}</span>
         <input
+          ref={picker}
+          hidden
           aria-label="파일 선택"
           type="file"
           accept=".xlsx,.csv"

@@ -25,7 +25,7 @@ from core.export import document_xlsx, table_xlsx, xlsx_response
 from core.grid import record_version
 from core.models import Approvable, EditRequest, Lot, Nonconformance, is_approver
 from core.records import can_edit_locked, is_locked
-from core.relations import record_url, sheet_url, status_of, trace_url
+from core.relations import is_registered, record_url, sheet_url, status_of, trace_url
 
 from . import listing
 from .permissions import require_perm
@@ -119,6 +119,10 @@ class RecordListView(APIView):
 
 
 NO_ADD = {'core.hold', 'qms.ppapelement'}  # 보류는 부적합 등록으로, PPAP 요소는 제출마다 저절로 생긴다
+# 새로 만들기가 없는 종류: 주소로 들어오면 어디서 생기는지 알려 준다
+NO_CREATE = {'core.nonconformance': '부적합은 부적합 등록 화면에서 등록합니다. 등록하면 LOT이 바로 보류됩니다.',
+             'core.hold': '보류는 부적합을 등록하면 저절로 걸리고, 부적합 처분으로만 풀립니다.',
+             'qms.ppapelement': 'PPAP 요소는 PPAP 제출을 만들면 저절로 생깁니다.'}
 
 
 def _new_url(model, spec):
@@ -142,6 +146,10 @@ class RecordNewView(APIView):
     schema = None
 
     def get(self, request, label):
+        if label.lower() in NO_CREATE:
+            app_label, name = label.lower().split('.')
+            return Response({'detail': NO_CREATE[label.lower()], 'list_url': f'/app/r/{app_label}/{name}',
+                             'new_url': '/app/nc-new' if label.lower() == 'core.nonconformance' else None}, status=404)
         model, spec = _create_spec(request.user, label)
         form = modelform_factory(model, fields=spec.create)()
         # 처음 값: 담당자는 나, 그 밖은 주소 ?칸=값(예: CAPA 만들기 → 출처·제목). create에 없는 칸은 버린다
@@ -251,7 +259,7 @@ def _detail(obj, spec, user):
                          'rows': [_row(o, c.fields) for o in rel.all().order_by(*c.order)],
                          'add_url': None if locked else _child_add_url(rel, obj, user)})
     return {'ct': meta.label_lower, 'id': obj.pk, 'title': str(obj), 'kind': str(meta.verbose_name),
-            'status': status_of(obj), 'fields': fields, 'children': children, 'side': list(spec.side),
+            'status': status_of(obj), 'fields': fields, 'children': children, 'side': [s for s in spec.side if s == 'history' or is_registered(meta.label_lower)],
             'groups': recordspec.groups_of(spec), 'body': _body(obj, spec),
             'admin_url': f'/admin/{meta.app_label}/{meta.model_name}/{obj.pk}/change/' if user.is_superuser else None,
             'list_url': f'/app/r/{meta.app_label}/{meta.model_name}',

@@ -4,10 +4,12 @@
 core는 qms 모델을 import하지 않는다('app.model' 라벨만). 삭제·잠금 규칙은 core/records.py에 있다(건드리지 않는다).
 """
 import datetime
+import decimal
 import json
 from typing import Callable, NamedTuple
 
 from django.apps import apps
+from django.contrib.auth.base_user import AbstractBaseUser
 from django.contrib.contenttypes.fields import GenericForeignKey
 from django.core.exceptions import ValidationError
 from django.db import models
@@ -438,6 +440,13 @@ def label_of(model, name):
         return {'next_due': '다음 교정 기한', 'current_revision': '최신 승인본'}.get(name, name)
 
 
+def shown(o):
+    """기록 글자. 사람은 아이디가 아니라 이름(다른 화면·API와 같은 표기)."""
+    if isinstance(o, AbstractBaseUser):
+        return o.get_full_name() or o.get_username()
+    return str(o)
+
+
 def value_of(obj, name):
     """화면용 (글자, 링크). 선택지는 표시 이름, 외래키는 그 기록 주소, 파일은 내려받기 주소."""
     from .relations import record_url
@@ -455,7 +464,7 @@ def value_of(obj, name):
         return '\n'.join(' · '.join(x for x in (f"{r.get('role', '')} {r.get('name', '')}".strip(),
                                                 *(r.get(k, '') for k, _ in cols[2:])) if x) for r in v), None
     if isinstance(v, models.Model):
-        return str(v), record_url(v)
+        return shown(v), record_url(v)
     if isinstance(v, list) and all(isinstance(x, str) for x in v):  # 선택지 목록
         return ', '.join(v), None
     if isinstance(field, models.FileField):
@@ -466,6 +475,10 @@ def value_of(obj, name):
         return timezone.localtime(v).strftime('%Y-%m-%d %H:%M'), None
     if isinstance(v, datetime.date):
         return v.isoformat(), None
+    if isinstance(v, decimal.Decimal):  # 2000.000 → 2,000 (0 꼬리를 떼고 천 단위 쉼표)
+        return f'{v.normalize():,f}', None
+    if isinstance(v, dict):  # 열 매핑 같은 JSON: 한 줄에 한 쌍
+        return '\n'.join(f'{k}: {x}' for k, x in v.items()), None
     return str(v), None
 
 
@@ -511,7 +524,7 @@ def editor(obj, name):
         if v is not None and v not in objs:
             objs.insert(0, v)
         return {'key': name, 'label': str(f.verbose_name), 'type': 'choice', 'value': str(v.pk) if v else None,
-                'required': not f.blank, 'choices': [{'value': str(o.pk), 'label': str(o)} for o in objs]}
+                'required': not f.blank, 'choices': [{'value': str(o.pk), 'label': shown(o)} for o in objs]}
     cols = ROWS.get(obj._meta.label_lower, {}).get(name)
     if cols:
         return {'key': name, 'label': str(f.verbose_name), 'type': 'rows', 'value': v or [], 'required': False,
@@ -552,7 +565,7 @@ def creator(model, name, form):
         return editor(model(), name)
     qs = form.fields[name].queryset[:CHOICE_LIMIT]
     return {'key': name, 'label': str(f.verbose_name), 'type': 'choice', 'value': None, 'required': not f.blank,
-            'choices': [{'value': str(o.pk), 'label': str(o)} for o in qs]}
+            'choices': [{'value': str(o.pk), 'label': shown(o)} for o in qs]}
 
 
 def cells(obj, names):

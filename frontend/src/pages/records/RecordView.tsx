@@ -93,13 +93,13 @@ function RowsEditor({ e, value, onChange }: { e: Edit; value?: Record<string, st
 }
 
 /** groups에 든 예/아니오 칸은 처음 나온 자리에 한 칸으로 모은다. rows 칸은 한 줄 전체를 쓴다. */
-export function groupProps<T extends { key: string; label: string }>(
+export function groupProps<T extends { key: string; label: string; required?: boolean; type?: string }>(
   items: T[], groups: Group[], one: (x: T) => ReactNode, many: (xs: T[]) => ReactNode, wide: (x: T) => boolean,
 ) {
-  const out: { label: string; node: ReactNode; wide?: boolean }[] = []
+  const out: { label: string; node: ReactNode; wide?: boolean; required?: boolean }[] = []
   for (const x of items) {
     const g = groups.find((g) => g.keys.includes(x.key))
-    if (!g) out.push({ label: x.label, node: one(x), wide: wide(x) })
+    if (!g) out.push({ label: x.label, node: one(x), wide: wide(x), required: x.required && x.type !== 'bool' })
     else if (g.keys.find((k) => items.some((y) => y.key === k)) === x.key) out.push({ label: g.label, node: many(items.filter((y) => g.keys.includes(y.key))) })
   }
   return out
@@ -374,7 +374,11 @@ export default function RecordView() {
             if (editing && es.length) return <CheckGroup edits={es} />
             return fs.filter((f) => f.value === '예').map((f) => f.label).join(', ') || '—'
           },
-          (f) => editable.get(f.key)?.type === 'rows')}
+          // 표·긴 글·여러 줄 값(단계별 기한, 열 매핑)은 한 줄 전체를 쓴다
+          (f) => {
+            const t = editable.get(f.key)?.type
+            return t === 'rows' || (editing && (t === 'text' || t === 'json')) || f.value.includes('\n') || f.value.length > 60
+          })}
         side={d.side.filter((k) => SIDE[k]).map((k) => ({ key: k, ...SIDE[k] }))}
       >
         {d.body && <BodySection body={d.body} editing={editing && editable.has('body')} />}
