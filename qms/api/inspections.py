@@ -161,6 +161,7 @@ class FormView(APIView):
             'gauges': [{'value': g.pk, 'label': str(g)} for g in usable],
             'defect_types': DEFECT_TYPES,
             'done': Inspection.objects.filter(lot=lot, spec__inspection_type=spec.inspection_type).exists(),  # 재검사 확인용
+            'watch': lot.supplier_watch() if spec.inspection_type == InspectionSpec.INCOMING else '',
         })
 
 

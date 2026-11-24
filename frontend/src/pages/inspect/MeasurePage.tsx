@@ -146,6 +146,7 @@ export default function MeasurePage() {
         <b>{f.lot.number}</b> · {f.lot.item_code} {f.lot.item_name} · {f.spec.title} · 샘플링 {f.spec.sampling}
         {f.lot.on_hold && <Tag color="red" style={{ marginLeft: 8 }}>보류</Tag>}
       </p>
+      {f.watch && <Alert type="warning" showIcon style={{ marginBottom: 12 }} message={f.watch} />}
       {f.done ? (
         <Alert type="warning" style={{ marginBottom: 12 }} message="처분 전 부적합이 있는 LOT입니다. 판정하면 재검사로 1건 더 등록됩니다." />
       ) : (

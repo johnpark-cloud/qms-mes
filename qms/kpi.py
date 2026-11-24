@@ -6,7 +6,7 @@ from decimal import Decimal
 from django.db.models import Count, Sum
 from django.utils import timezone
 
-from core.models import Lot, Nonconformance, Shipment, WorkResult, is_approver
+from core.models import Lot, Nonconformance, Partner, Shipment, WorkResult, is_approver
 
 from .models import CustomerClaim, Inspection, InspectionSpec, Scar
 
@@ -114,6 +114,22 @@ def process_yield(months=6):
             for d in data]
 
 
+# 제안 등급: 위에서부터 모든 조건을 만족하는 첫 등급(값이 없는 지표는 통과로 본다), 아무것도 못 맞추면 D.
+# (등급, 수입검사 불합격률 % 이하, PPM 이하, SCAR 기한 내 회신율 % 이상)
+GRADE_BANDS = (('A', 1, 100, 90), ('B', 3, 500, 80), ('C', 10, 2000, 0))
+
+
+def suggest_grade(row):
+    """공급자 성적표 한 줄 → 제안 등급(A~D). 수입검사·PPM·SCAR 자료가 하나도 없으면 None."""
+    fail, ppm, on_time = row['fail_rate'], row['ppm'], row['scar_on_time']
+    if not row['inspections'] and ppm is None and on_time is None:
+        return None
+    for grade, max_fail, max_ppm, min_on_time in GRADE_BANDS:
+        if (fail is None or fail <= max_fail) and (ppm is None or ppm <= max_ppm) and (on_time is None or on_time >= min_on_time):
+            return grade
+    return 'D'
+
+
 def suppliers(months=6):
     since = _aware(month_starts(months)[0])
     names = set(Lot.objects.exclude(supplier='').values_list('supplier', flat=True))
@@ -136,4 +152,7 @@ def suppliers(months=6):
             'ppm': _ppm(bad, received), 'scars': scars.count(),
             'scar_on_time': 100 * len(on_time) / len(judged) if judged else None,
         })
+        partner = Partner.objects.filter(name=name, is_supplier=True).first()
+        out[-1].update(partner=partner and partner.pk, grade=partner.grade if partner else '',
+                       status=partner.get_status_display() if partner else '', suggested=suggest_grade(out[-1]))
     return out

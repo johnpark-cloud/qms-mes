@@ -196,7 +196,10 @@ def repeat_title(group):
 
 
 def _notices(obj, user):
-    """기록 위 안내 띠. 반복 부적합이면 CAPA를 제안한다(CAPA 모듈이 켜져 있을 때만)."""
+    """기록 위 안내 띠. 강화 검사 대상 공급자의 LOT, 반복 부적합이면 CAPA 제안(CAPA 모듈이 켜져 있을 때만)."""
+    if isinstance(obj, Lot):
+        watch = obj.supplier_watch()
+        return [{'message': watch, 'label': '', 'url': ''}] if watch else []
     if not isinstance(obj, Nonconformance) or not modules.active('qms_capa'):
         return []
     from qms.due import REPEAT_DAYS, repeat_group_of
@@ -508,7 +511,7 @@ class RecordHistoryView(APIView):
         for side, name, perm in ((Attachment, '첨부', 'core.view_attachment'), (Memo, '메모', 'qms.view_memo')):
             if not request.user.has_perm(perm):
                 continue
-            qs = side.history.filter(content_type_id=ct.pk, object_id=pk).select_related('history_user').order_by('-history_date')
+            qs = side.history.filter(content_type_id=ct.pk, object_id=pk).select_related('history_user').order_by('-history_date', '-history_id')  # 같은 시각이면 나중 줄이 위
             for h in qs[:PAGE_SIZE]:
                 r = audit.row_payload(h)
                 r.update(kind=name, type=f"{name} {SIDE_TYPES[r['type']]}: {r['object_repr']}")

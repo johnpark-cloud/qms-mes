@@ -33,6 +33,7 @@ urlpatterns = [
     path('inspect/upload/template/', inspections.UploadTemplateView.as_view()),
     path('kpi/', analysis.KpiView.as_view()),
     path('suppliers/', analysis.SuppliersView.as_view()),
+    path('suppliers/grade/', analysis.SupplierGradeView.as_view()),
     path('spc/<int:pk>/', analysis.SpcView.as_view()),
     path('memos/', memos.MemoListView.as_view()),
     path('audit-pack/', audit.AuditPackView.as_view()),

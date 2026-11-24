@@ -321,6 +321,11 @@ class Lot(models.Model):
     def on_hold(self):
         return self.holds.filter(released_at__isnull=True).exists()
 
+    def supplier_watch(self):
+        """강화 검사 대상 공급자면 안내 문구(아니면 ''). 거래처 연결이 먼저, 없으면 공급자 이름이 같은 거래처."""
+        partner = self.partner or (Partner.objects.filter(name=self.supplier, is_supplier=True).first() if self.supplier else None)
+        return partner.watch_message() if partner else ''
+
     @property
     def lineage_gap(self):
         """원자재가 아닌데 투입 LOT이 없으면 계보 미등록 구간이다."""
@@ -853,6 +858,17 @@ class Partner(MasterModel):
 
     def __str__(self):
         return self.name
+
+    WATCH_GRADES = ('C', 'D')
+    WATCH_STATUS = (CONDITIONAL, SUSPENDED)
+
+    def watch_message(self):
+        """평가 등급 C·D 또는 조건부 승인·거래 중지면 강화 검사 안내 (경고만 — 입고·검사를 막지 않는다)."""
+        why = ([f'평가 등급 {self.grade}'] if self.grade in self.WATCH_GRADES else []) + \
+              ([f'거래 상태 「{self.get_status_display()}」'] if self.status in self.WATCH_STATUS else [])
+        if not why:
+            return ''
+        return f'강화 검사 대상 공급자입니다({self.name}: {", ".join(why)}). 검사기준의 샘플링보다 시료를 늘려 검사하세요.'
 
     def clean(self):
         super().clean()

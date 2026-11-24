@@ -43,6 +43,7 @@ export interface FormData {
   gauges: Opt[]
   defect_types: string[]
   done: boolean // 이 LOT을 같은 검사 구분으로 이미 검사했다(판정하면 재검사로 1건 더 생긴다)
+  watch: string // 강화 검사 대상 공급자 안내(수입검사만, 아니면 '')
 }
 
 export interface SubmitResult {

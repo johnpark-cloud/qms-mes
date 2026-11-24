@@ -2,10 +2,12 @@
 from urllib.parse import urlencode
 
 from django.shortcuts import get_object_or_404
+from django.utils import timezone
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from core.api.permissions import require_perm
+from core.models import Partner
 from qms import kpi, spc
 from qms.models import Characteristic
 
@@ -45,7 +47,26 @@ class SuppliersView(APIView):
     def get(self, request):
         require_perm(request.user, 'qms.view_scar')
         months = _months(request)
-        return Response({'months': months, 'rows': [{**r, 'received': _num(r['received'])} for r in kpi.suppliers(months)]})
+        return Response({'months': months, 'rows': [{**r, 'received': _num(r['received'])} for r in kpi.suppliers(months)],
+                         'can_grade': request.user.has_perm('core.change_partner')})
+
+
+class SupplierGradeView(APIView):
+    """공급자 성적표의 「등급 반영」: 거래처 평가 등급·평가일을 고친다(변경 이력은 거래처 이력에 남는다)."""
+    schema = None
+
+    def post(self, request):
+        require_perm(request.user, 'core.change_partner')
+        grade = str(request.data.get('grade') or '')
+        if grade not in dict(Partner.GRADE_CHOICES):
+            return Response({'detail': '등급은 A·B·C·D 중 하나입니다.'}, status=400)
+        partner = get_object_or_404(Partner, pk=request.data.get('partner'))
+        if not partner.is_supplier:
+            return Response({'detail': '공급자(자재·부품)인 거래처만 등급을 반영합니다.'}, status=400)
+        partner.grade, partner.evaluated_on = grade, timezone.localdate()
+        partner.full_clean()
+        partner.save()
+        return Response({'partner': partner.pk, 'grade': partner.grade, 'evaluated_on': partner.evaluated_on.isoformat()})
 
 
 class SpcView(APIView):

@@ -1,5 +1,5 @@
-import { useQuery } from '@tanstack/react-query'
-import { Alert, Button, Card, Select, Space, Spin, Table, Tag } from 'antd'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { Alert, Button, Card, Popconfirm, Select, Space, Spin, Table, Tag, message } from 'antd'
 import type { ColumnsType } from 'antd/es/table'
 import { Link, useParams, useSearchParams } from 'react-router-dom'
 import { ApiError, api } from '../api/client'
@@ -90,11 +90,24 @@ export function Kpi() {
   )
 }
 
-interface SupRow { name: string; lots: number; received: number | null; inspections: number; fail_rate: number | null; ppm: number | null; scars: number; scar_on_time: number | null }
+interface SupRow {
+  name: string; lots: number; received: number | null; inspections: number; fail_rate: number | null; ppm: number | null; scars: number; scar_on_time: number | null
+  partner: number | null; grade: string; status: string; suggested: string | null // 거래처 등급·상태, 성적으로 낸 제안 등급
+}
 
 export function Suppliers() {
   const [months, setMonths] = useMonths()
-  const q = useQuery({ queryKey: ['suppliers', months], queryFn: () => api<{ rows: SupRow[] }>(`/api/qms/suppliers/?months=${months}`) })
+  const q = useQuery({ queryKey: ['suppliers', months], queryFn: () => api<{ rows: SupRow[]; can_grade: boolean }>(`/api/qms/suppliers/?months=${months}`) })
+  const qc = useQueryClient()
+  const apply = async (r: SupRow) => {
+    try {
+      await api(`/api/qms/suppliers/grade/`, { method: 'POST', body: JSON.stringify({ partner: r.partner, grade: r.suggested }) })
+      message.success(`${r.name} 등급을 ${r.suggested}(으)로 반영했습니다.`)
+      await qc.invalidateQueries({ queryKey: ['suppliers'] })
+    } catch (e) {
+      message.error(e instanceof ApiError ? e.detail : '등급을 반영하지 못했습니다.')
+    }
+  }
   return (
     <>
       <h1 className="page-title">공급자 평가</h1>
@@ -112,7 +125,21 @@ export function Suppliers() {
         { title: '부적합 PPM', dataIndex: 'ppm', align: 'right', render: (v) => n(v, 0) },
         { title: 'SCAR', dataIndex: 'scars', align: 'right' },
         { title: 'SCAR 회신 준수(%)', dataIndex: 'scar_on_time', align: 'right', render: (v) => n(v) },
+        { title: '거래처 등급', dataIndex: 'grade', align: 'center', render: (v, r) => r.partner ? <>{v || '-'}{r.status && <Tag style={{ marginLeft: 6 }}>{r.status}</Tag>}</> : <Tag>거래처 미등록</Tag> },
+        { title: '제안 등급', dataIndex: 'suggested', align: 'center', render: (v, r) => !v ? '-' : (
+          <Space size={6}>
+            {v}
+            {q.data?.can_grade && r.partner && v !== r.grade && (
+              <Popconfirm title={`${r.name} 등급을 ${v}(으)로 바꿀까요?`} okText="반영" cancelText="취소" onConfirm={() => apply(r)}>
+                <Button size="small">등급 반영</Button>
+              </Popconfirm>
+            )}
+          </Space>
+        ) },
       ]} />
+      <p style={{ marginTop: 8, color: 'var(--sapContent_LabelColor, #556b82)' }}>
+        제안 등급: A 불합격률 1% 이하·PPM 100 이하·SCAR 회신 90% 이상, B 3%·500·80%, C 10%·2000, 그 밖은 D. 등급 C·D나 조건부 승인·거래 중지 공급자의 LOT은 수입검사 화면에 강화 검사 안내가 뜹니다.
+      </p>
     </>
   )
 }
