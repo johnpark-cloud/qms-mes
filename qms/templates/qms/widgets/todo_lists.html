@@ -139,6 +139,16 @@
   </section>
   {% endif %}
 
+  {% if qualifications %}
+  <section class="card" id="qualifications">
+    <h2>검사원 자격 만료 <span class="count">30일 이내·만료</span></h2>
+    <table><tbody>
+      {% for q in qualifications %}<tr><td><a href="{% url 'admin:qms_qualification_change' q.pk %}">{{ q.user }} {{ q.get_inspection_type_display }}</a></td>
+        <td>{{ q.valid_until|date:"Y-m-d" }} {% if q.valid_until < today %}<span class="status status--negative">만료</span>{% else %}<span class="status status--critical">임박</span>{% endif %}</td></tr>{% endfor %}
+    </tbody></table>
+  </section>
+  {% endif %}
+
   {% if repeat_ncs %}
   <section class="card" id="repeat-ncs">
     <h2>반복 부적합 <span class="count">CAPA 제안 · 같은 품번·유형 90일 3건</span></h2>

@@ -1563,3 +1563,24 @@ class DocumentNumberingTest(TestCase):
         Document.objects.create(number='KEN-PQ-01', title='표준')
         r = self.client.get('/admin/qms/document/')
         self.assertContains(r, 'title="P 절차서 · Q 품질 · 01 일련번호"')
+
+
+class QualificationDueTest(TestCase):
+    """검사원 자격 만료: 30일 이내·만료된 자격을 할 일·알림에 띄우고, 같은 검사원·구분에 새 자격이 있으면 뺀다."""
+
+    def test_expiring_qualification_in_due_items(self):
+        from .due import digest, due_items
+        today = timezone.localdate()
+        kim, lee = User.objects.create(username='kim'), User.objects.create(username='lee')
+        gone = User.objects.create(username='gone', is_active=False)
+        near = Qualification.objects.create(user=kim, inspection_type=InspectionSpec.INCOMING,
+                                            valid_until=today + datetime.timedelta(days=29), basis='교육')
+        Qualification.objects.create(user=kim, inspection_type=InspectionSpec.PROCESS,
+                                     valid_until=today + datetime.timedelta(days=31), basis='교육')
+        Qualification.objects.create(user=lee, inspection_type=InspectionSpec.INCOMING, valid_until=today, basis='교육')
+        Qualification.objects.create(user=lee, inspection_type=InspectionSpec.INCOMING,  # 갱신했으면 옛 자격은 뺀다
+                                     valid_until=today + datetime.timedelta(days=365), basis='재교육')
+        Qualification.objects.create(user=gone, inspection_type=InspectionSpec.INCOMING, valid_until=today, basis='교육')
+        d = due_items()
+        self.assertEqual(d['qualifications'], [near])
+        self.assertIn('검사원 자격 만료', [t for t, _ in digest(d)])

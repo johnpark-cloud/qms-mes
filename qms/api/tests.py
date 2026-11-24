@@ -142,7 +142,12 @@ class TodoApiTest(TestCase):
     def test_dedicated_widget_data(self):
         self.client.force_login(self.qe)
         self.client.post('/api/qms/dashboard/', [{'key': 'todo_lists', 'size': 'wide'}, {'key': 'audits', 'size': 'wide'}], format='json')
+        from qms.models import Qualification
+        q = Qualification.objects.create(user=self.qe, inspection_type=InspectionSpec.INCOMING, valid_until=timezone.localdate(), basis='교육')
         data = {w['key']: w['data'] for w in self.client.get('/api/qms/todo/').json()['widgets']}
+        self.assertEqual(data['todo_lists']['qualifications'],
+                         [{'label': f'{self.qe} 수입검사', 'href': f'/app/r/qms/qualification/{q.pk}',
+                           'valid_until': str(q.valid_until), 'overdue': False}])
         self.assertEqual(data['todo_lists']['scars'][0]['label'], 'S-1')
         self.assertTrue(data['todo_lists']['scars'][0]['overdue'])
         self.assertEqual(data['todo_lists']['gauges'][0]['label'], 'G-1 마이크로미터')

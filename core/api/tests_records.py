@@ -80,6 +80,12 @@ class RecordsApiTest(TestCase):
         self.assertIn('spreadsheetml', r['Content-Type'])
         d = self.client.get('/api/records/qms.qualification/?tab=expired').json()
         self.assertEqual(d['count'], 1)
+        soon = type(self.qual).objects.create(user=self.root, inspection_type='PROCESS', basis='교육',
+                                              valid_until=timezone.localdate() + datetime.timedelta(days=10))
+        type(self.qual).objects.create(user=self.root, inspection_type='OUTGOING', basis='교육',
+                                       valid_until=timezone.localdate() + datetime.timedelta(days=365))
+        d = self.client.get('/api/records/qms.qualification/?tab=soon').json()  # 30일 안에 끝나는 유효 자격
+        self.assertEqual([r['url'] for r in d['results']], [f'/app/r/qms/qualification/{soon.pk}'])
 
     def test_list_sort_and_filter(self):  # 열 머리 정렬, 선택지·참/거짓·외래키·날짜 필터, 엑셀도 같은 조건
         from qms.models import Gauge

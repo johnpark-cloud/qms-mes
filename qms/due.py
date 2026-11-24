@@ -10,13 +10,13 @@ from core.modules import active_set
 
 from . import spc
 from .models import (AuditFinding, Capa, ChangeRequest, Characteristic, ControlPlan, CustomerClaim, DocumentRevision, Gauge,
-                     Inspection, InspectionSpec, InternalAudit, Memo, PpapSubmission, Scar)
+                     Inspection, InspectionSpec, InternalAudit, Memo, PpapSubmission, Qualification, Scar)
 
 
 # due_items 키 → 모듈. 꺼진 모듈의 묶음은 할 일·위젯·알림 메일에서 빈 목록이 된다(MOD-10). 나머지 키는 기본 플랫폼
 DUE_MODULE = {
     'claims': 'qms_claim', 'scars': 'qms_supplier', 'capas': 'qms_capa', 'audits': 'qms_audit', 'findings': 'qms_audit',
-    'ppaps': 'qms_ppap', 'pending_ppaps': 'qms_ppap', 'gauges': 'qms_inspection', 'spc_alarms': 'qms_inspection',
+    'ppaps': 'qms_ppap', 'pending_ppaps': 'qms_ppap', 'gauges': 'qms_inspection', 'qualifications': 'qms_inspection', 'spc_alarms': 'qms_inspection',
     'pending_specs': 'qms_inspection', 'pending_plans': 'qms_inspection', 'first_articles': 'qms_change',
     'pending_changes': 'qms_change', 'pending_docs': 'qms_document', 'repeat_ncs': 'qms_capa',
 }
@@ -64,6 +64,7 @@ def due_items(approver=False, user=None):
         'gauges': [g for g in Gauge.objects.filter(active=True) if g.next_due <= today + datetime.timedelta(days=14)],
         'partner_certs': list(PartnerCertificate.objects.filter(partner__active=True, valid_until__lte=today + datetime.timedelta(days=30))
                               .select_related('partner')),
+        'qualifications': expiring_qualifications(today),
         'first_articles': list(ChangeRequest.objects.filter(approved_at__isnull=False, effective_at__lte=now).annotate(
             fa=Exists(Inspection.objects.filter(lot__item=OuterRef('item'), result=Inspection.PASS,
                                                 inspected_at__gte=OuterRef('effective_at')))).filter(fa=False)
@@ -122,6 +123,15 @@ def recent_spc_alarms(now):
     return out
 
 
+def expiring_qualifications(today):
+    """30일 이내·만료된 검사원 자격. 같은 검사원·구분에 더 늦게 끝나는 자격(갱신)이 있으면 뺀다."""
+    limit = today + datetime.timedelta(days=30)
+    renewed = Qualification.objects.filter(user=OuterRef('user'), inspection_type=OuterRef('inspection_type'),
+                                           valid_until__gt=limit)
+    return list(Qualification.objects.filter(user__is_active=True, valid_until__lte=limit).exclude(Exists(renewed))
+                .select_related('user').order_by('valid_until', 'pk'))
+
+
 def digest(d):
     """알림용 요약: [(제목, [줄...])]. 비어 있는 묶음은 뺀다."""
     def when(x):
@@ -133,6 +143,7 @@ def digest(d):
         ('CAPA', [f'{c} · {c.owner} · {c.status} · 기한 {c.due_date}' for c in d['capas']]),
         ('계측기 교정', [f'{g} · 교정 기한 {g.next_due}' for g in d['gauges']]),
         ('공급자 인증 만료', [f'{c.partner} · {c.get_standard_display()} · {c.valid_until}' for c in d['partner_certs']]),
+        ('검사원 자격 만료', [f'{q.user} · {q.get_inspection_type_display()} · {q.valid_until}' for q in d['qualifications']]),
         ('4M 초품 미확인 (출하 차단 중)', [str(c) for c in d['first_articles']]),
         ('심사 예정', [str(a) for a in d['audits']]),
         ('CAPA 미연결 심사 발견사항', [str(f) for f in d['findings']]),
