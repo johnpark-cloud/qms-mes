@@ -15,7 +15,7 @@ from django.test import TestCase, override_settings
 from django.utils import timezone
 
 from .models import (Attachment, Department, FieldDef, Item, Lot, Nonconformance, Partner, PartnerCertificate,
-                     Shipment)
+                     Project, Shipment)
 
 
 def staff(name, group):
@@ -114,6 +114,35 @@ class PartnerTest(TestCase):
         d = due_items()
         self.assertEqual(d['partner_certs'], [near])
         self.assertIn('공급자 인증 만료', [t for t, _ in digest(d)])
+
+
+class ProjectTest(TestCase):
+    def setUp(self):
+        self.cust = Partner.objects.create(name='현대', is_customer=True)
+
+    def test_code_numbered_and_items_linked(self):
+        a = Project(name='NE 배터리팩', customer=self.cust, program='NE1')
+        a.full_clean()
+        a.save()
+        b = Project.objects.create(name='MX 모듈', customer=self.cust)
+        self.assertEqual((a.code, b.code), ('PJ0001', 'PJ0002'))
+        item = Item.objects.create(code='F1', name='셀', item_type=Item.FINISHED, project=a)
+        self.assertEqual(list(a.items.all()), [item])
+        from django.db.models import ProtectedError
+        with self.assertRaises(ProtectedError):
+            a.delete()
+
+    def test_customer_must_be_customer(self):
+        sup = Partner.objects.create(name='소재사', is_supplier=True)
+        p = Project(name='X', customer=sup)
+        with self.assertRaises(ValidationError) as e:
+            p.full_clean()
+        self.assertIn('customer', e.exception.message_dict)
+
+    def test_end_not_before_start(self):
+        p = Project(name='X', customer=self.cust, start_date=datetime.date(2026, 5, 1), end_date=datetime.date(2026, 4, 1))
+        with self.assertRaisesMessage(ValidationError, '종료일이 시작일보다 빠를 수 없습니다.'):
+            p.full_clean()
 
 
 class FieldDefTest(TestCase):

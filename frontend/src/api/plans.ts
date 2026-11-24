@@ -5,6 +5,7 @@ export interface PlanRow {
   id: number
   item_code: string
   item_name: string
+  project: string
   stage: string
   stage_display: string
   revision: number

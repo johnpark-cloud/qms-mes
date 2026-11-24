@@ -16,6 +16,7 @@ urlpatterns = [
     path('core/nc-quick/', views.NcQuickView.as_view()),
     path('core/items/', master.ItemListView.as_view()),
     path('core/items/<int:pk>/', master.ItemDetailView.as_view()),
+    path('core/items/projects/', master.ProjectOptionsView.as_view()),
     path('core/numbering/item-options/', master.ItemOptionsView.as_view(), name='numbering-item-options'),
     path('core/numbering/item-preview/', master.ItemPreviewView.as_view(), name='numbering-item-preview'),
     path('core/processes/', master.ProcessTableView.as_view()),

@@ -4,6 +4,7 @@ from django.shortcuts import get_object_or_404
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from core.api.master import by_project, project_name
 from core.api.permissions import require_perm
 from core.export import document_xlsx, table_xlsx, xlsx_response
 from core.models import Item, Process, is_approver
@@ -21,7 +22,7 @@ def _filtered(request):
     tab, q = request.query_params.get('tab', 'all'), request.query_params.get('q', '').strip()
     higher = ControlPlan.objects.filter(item=OuterRef('item'), stage=OuterRef('stage'), revision__gt=OuterRef('revision'),
                                         approved_at__isnull=False)
-    qs = (ControlPlan.objects.select_related('item', 'approved_by').annotate(line_count=Count('lines'))
+    qs = (ControlPlan.objects.select_related('item__project', 'approved_by').annotate(line_count=Count('lines'))
           .annotate(is_current=Q(approved_at__isnull=False) & ~Exists(higher))
           .order_by('item__code', 'stage', '-revision'))
     if tab == 'draft':
@@ -32,11 +33,12 @@ def _filtered(request):
         qs = qs.filter(approved_at__isnull=False).filter(~Exists(higher))
     if q:
         qs = qs.filter(Q(item__code__icontains=q) | Q(item__name__icontains=q))
-    return qs
+    return by_project(qs, request, 'item__project')
 
 
 def _row(p):
-    return {'id': p.pk, 'item_code': p.item.code, 'item_name': p.item.name, 'stage': p.stage, 'stage_display': p.get_stage_display(),
+    return {'id': p.pk, 'item_code': p.item.code, 'item_name': p.item.name, 'project': project_name(p.item),
+            'stage': p.stage, 'stage_display': p.get_stage_display(),
             'revision': p.revision, 'status': _status(p), 'is_current': p.is_current, 'line_count': p.line_count,
             'approved_by': _who(p.approved_by), 'approved_at': _day(p.approved_at)}
 

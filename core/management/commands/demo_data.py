@@ -15,7 +15,7 @@ from django.db import transaction
 from django.utils import timezone
 
 from core.models import (BomLine, CodeValue, Department, FieldDef, ImportProfile, Item, Lot, LotLink, Nonconformance,
-                         NumberRule, Partner, Process, RoutingStep, Shipment, WorkOrder, WorkResult)
+                         NumberRule, Partner, Process, Project, RoutingStep, Shipment, WorkOrder, WorkResult)
 from qms.models import (AuditChecklist, AuditFinding, AuditItem, Capa, Characteristic, ChangeRequest, ControlPlan,
                         ControlPlanLine, CustomerClaim, CustomerRule, Document, DocumentRevision, Evidence, Gauge, GaugeCalibration,
                         InternalAudit, Inspection, InspectionSpec, Memo, PpapSubmission, Qualification, Scar, add_months)
@@ -135,6 +135,14 @@ class Command(BaseCommand):
         I = lambda code, name, t: self.get(Item, {'code': code}, name=name, item_type=t)
         self.r100, self.s200 = I('EX-R100', 'SPCC 강판 1.2t', 'RAW'), I('EX-S200', '브래킷 프레스 성형품', 'SEMI')
         self.f300, self.f310 = I('EX-F300', '시트 레일 어셈블리', 'FIN'), I('EX-F310', '도어 힌지 어셈블리', 'FIN')
+        # 프로젝트: 고객사 아래 차종별로 품목을 묶는다 (이미 있는 예시 품목도 비어 있으면 잇는다)
+        c1, c2 = list(self.cust.values())[:2]
+        for code, name, cust, prog, status, items in (
+                ('EX-PJ1', '시트 레일 신규 개발', c1, 'GM-SUV 2027', 'mass', (self.f300, self.s200)),
+                ('EX-PJ2', '도어 힌지 원가 절감', c2, 'HB-세단 F/L', 'dev', (self.f310,))):
+            pj = self.get(Project, {'code': code}, name=name, customer=cust, program=prog, status=status,
+                          start_date=self.today - datetime.timedelta(days=200))
+            Item.objects.filter(pk__in=[i.pk for i in items], project__isnull=True).update(project=pj)
         self.p = {c: self.get(Process, {'code': c}, name=n) for c, n in
                   (('EX-P10', '프레스'), ('EX-P20', '용접'), ('EX-P30', '조립'), ('EX-P40', '최종검사'))}
         for parent, comp, qty in ((self.s200, self.r100, '1.5'), (self.f300, self.s200, '2'), (self.f310, self.s200, '1')):

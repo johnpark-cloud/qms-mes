@@ -9,7 +9,7 @@ from django.test import TestCase
 COVERED = [
     'core.Item', 'core.Process', 'core.BomLine', 'core.RoutingStep', 'core.WorkOrder', 'core.WorkResult', 'core.Lot', 'core.LotLink',
     'core.Shipment', 'core.Nonconformance', 'core.Hold', 'core.Partner', 'core.Department', 'core.FieldDef', 'core.NumberRule',
-    'core.CodeValue', 'core.ImportProfile',
+    'core.CodeValue', 'core.ImportProfile', 'core.Project',
     'qms.Inspection', 'qms.Measurement', 'qms.Gauge', 'qms.GaugeCalibration', 'qms.Qualification', 'qms.Capa', 'qms.ChangeRequest',
     'qms.Document', 'qms.DocumentRevision', 'qms.InternalAudit', 'qms.AuditFinding', 'qms.AuditChecklist', 'qms.AuditItem', 'qms.Evidence',
     'qms.CustomerClaim', 'qms.CustomerRule', 'qms.Scar', 'qms.PpapSubmission', 'qms.PpapElement', 'qms.InspectionSpec',

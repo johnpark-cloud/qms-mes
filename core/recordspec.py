@@ -323,12 +323,23 @@ SPECS = {
         search=('code', 'name', 'contacts'),
         tabs=(ALL, ('customer', '고객', lambda qs: qs.filter(is_customer=True)),
               ('supplier', '공급', lambda qs: qs.filter(is_supplier=True))),
-        children=(Child('certificates', '인증', ('standard', 'cert_no', 'valid_until', 'file'), ('valid_until',)),),
+        children=(Child('certificates', '인증', ('standard', 'cert_no', 'valid_until', 'file'), ('valid_until',)),
+                  Child('projects', '프로젝트', ('code', 'name', 'program', 'status'), ('code',))),
         order=('code',),
         edit=('name', 'is_customer', 'is_supplier', 'is_outsource', 'is_calibrator', 'contacts',
               'status', 'grade', 'evaluated_on', 'active', 'note'),
         create=('name', 'is_customer', 'is_supplier', 'is_outsource', 'is_calibrator', 'contacts', 'note'),  # 코드는 모델이 매긴다
         groups=(('구분', ('is_customer', 'is_supplier', 'is_outsource', 'is_calibrator')),)),
+    'core.project': Spec(
+        fields=('code', 'name', 'customer', 'program', 'status', 'start_date', 'end_date', 'active', 'note'),
+        columns=('code', 'name', 'customer', 'program', 'status', 'start_date', 'end_date'),
+        search=('code', 'name', 'program', 'customer__name'),
+        tabs=(('open', '진행 중', lambda qs: qs.exclude(status='closed').filter(active=True)), ALL,
+              ('closed', '종료', lambda qs: qs.filter(status='closed'))),
+        children=(Child('items', '품목', ('code', 'name', 'item_type'), ('code',)),),
+        order=('code',),
+        edit=('name', 'customer', 'program', 'status', 'start_date', 'end_date', 'active', 'note'),
+        create=('name', 'customer', 'program', 'status', 'start_date', 'end_date', 'note')),  # 코드는 모델이 매긴다
     'core.department': Spec(
         fields=('code', 'name', 'parent', 'manager', 'sort', 'active', 'note'),
         columns=('code', 'name', 'parent', 'manager', 'active'),

@@ -111,6 +111,7 @@ NAV = [
                     ('체크리스트·증적', 'admin:qms_auditchecklist_changelist', 'qms.view_auditchecklist'),
                     ('심사 자료 출력', 'audit_pack', 'core.view_nonconformance')]),
     ('고객 및 공급자', [('거래처', 'admin:core_partner_changelist', 'core.view_partner'),
+                  ('프로젝트', 'admin:core_project_changelist', 'core.view_project'),
                   ('고객 클레임(8D)', 'admin:qms_customerclaim_changelist', 'qms.view_customerclaim'),
                   ('고객사별 8D 기한', 'admin:qms_customerrule_changelist', 'qms.view_customerrule'),
                   ('공급자 평가', 'suppliers', 'qms.view_scar'),

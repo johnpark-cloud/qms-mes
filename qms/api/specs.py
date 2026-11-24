@@ -6,6 +6,7 @@ from django.urls import reverse
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from core.api.master import by_project, project_name
 from core.api.permissions import require_perm
 from core.export import document_xlsx, table_xlsx, xlsx_response
 from core.nav import app_href
@@ -47,7 +48,7 @@ def _filtered(request):
     tab, q = request.query_params.get('tab', 'all'), request.query_params.get('q', '').strip()
     higher = InspectionSpec.objects.filter(item=OuterRef('item'), inspection_type=OuterRef('inspection_type'),
                                            revision__gt=OuterRef('revision'), approved_at__isnull=False)
-    qs = (InspectionSpec.objects.select_related('item', 'approved_by').annotate(char_count=Count('characteristics'))
+    qs = (InspectionSpec.objects.select_related('item__project', 'approved_by').annotate(char_count=Count('characteristics'))
           .annotate(is_current=Q(approved_at__isnull=False) & ~Exists(higher))
           .order_by('item__code', 'inspection_type', '-revision'))
     if tab == 'draft':
@@ -58,11 +59,12 @@ def _filtered(request):
         qs = qs.filter(approved_at__isnull=False).filter(~Exists(higher))
     if q:
         qs = qs.filter(Q(item__code__icontains=q) | Q(item__name__icontains=q))
-    return qs
+    return by_project(qs, request, 'item__project')
 
 
 def _row(s):
-    return {'id': s.pk, 'item_code': s.item.code, 'item_name': s.item.name, 'inspection_type': s.inspection_type,
+    return {'id': s.pk, 'item_code': s.item.code, 'item_name': s.item.name, 'project': project_name(s.item),
+            'inspection_type': s.inspection_type,
             'inspection_type_display': s.get_inspection_type_display(), 'revision': s.revision, 'status': _status(s),
             'is_current': s.is_current, 'char_count': s.char_count, 'approved_by': _who(s.approved_by),
             'approved_at': _day(s.approved_at)}

@@ -43,7 +43,7 @@ MODULES = {
 BASE_MODELS = (
     'core.item', 'core.codevalue', 'core.numberrule', 'core.process', 'core.bomline', 'core.routingstep',
     'core.importprofile', 'core.lot', 'core.lotlink', 'core.nonconformance', 'core.nonconformancephoto', 'core.hold',
-    'core.editrequest', 'core.revisionlog', 'core.department', 'core.partner', 'core.partnercertificate',
+    'core.editrequest', 'core.revisionlog', 'core.department', 'core.partner', 'core.partnercertificate', 'core.project',
     'core.fielddef', 'core.attachment', 'core.moduleswitch', 'core.importlog', 'core.member',
     'qms.exceltemplate', 'qms.memo', 'qms.memophoto', 'qms.dashboardlayout',
 )

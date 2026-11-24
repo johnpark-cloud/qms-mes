@@ -9,7 +9,7 @@ from openpyxl.utils import get_column_letter
 from rest_framework.test import APIClient
 
 from core.export import DRAFT_MARK
-from core.models import Item, Process
+from core.models import Item, Partner, Process, Project
 from qms.models import ControlPlan, ControlPlanLine, InspectionSpec
 from qms.rules import compare_plans, plan_diff_text, prev_plan
 
@@ -55,6 +55,15 @@ class PlanApiTest(TestCase):
         r = self.c(self.eng).post('/api/qms/plans/', {'item': self.item.pk, 'stage': 'PRODUCTION'}, format='json')
         self.assertEqual((r.status_code, r.json()['existing']), (409, a.pk))
         self.assertTrue(b.pk)
+
+    def test_list_project_filter(self):
+        a, b = self.mkplan(), self.mkplan(item=self.item2)
+        pj = Project.objects.create(name='NE', customer=Partner.objects.create(name='현대', is_customer=True))
+        Item.objects.filter(pk=self.item2.pk).update(project=pj)
+        r = self.c(self.eng).get(f'/api/qms/plans/?f_project={pj.pk}').json()
+        self.assertEqual([x['id'] for x in r['results']], [b.pk])
+        self.assertEqual(r['results'][0]['project'], 'NE')
+        self.assertEqual([x['id'] for x in self.c(self.eng).get('/api/qms/plans/?f_project=none').json()['results']], [a.pk])
 
     def test_save_lines_and_errors(self):
         plan = ControlPlan.objects.create(item=self.item)

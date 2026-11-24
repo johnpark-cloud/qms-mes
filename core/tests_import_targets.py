@@ -51,6 +51,7 @@ SAMPLES = {
                      'is_calibrator': '아니오'},
     'core.department': {'code': 'PR', 'name': '생산', 'parent': 'QA', 'manager': 'kim', 'sort': '1'},
     'core.codevalue': {'group': '설계자료분류', 'code': 'ZZ', 'name': '기타 자료', 'sort': '1'},
+    'core.project': {'name': 'NE 배터리팩', 'customer': 'P0001', 'program': 'NE1', 'status': '양산'},
 }
 
 

@@ -7,6 +7,7 @@ export interface ItemRow {
   name: string
   item_type: string
   item_type_display: string
+  project: string
   bom_count: number
   routing_count: number
   code_parts: string
@@ -19,6 +20,8 @@ export interface ItemDetail {
   code_parts: string
   name: string
   item_type: string
+  project: number | null
+  project_options: Option[]
   version: string | number
   editable: boolean
   can_delete_rows: { bom: boolean; routing: boolean }

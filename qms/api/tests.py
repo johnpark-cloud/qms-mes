@@ -13,7 +13,7 @@ from openpyxl import load_workbook
 from rest_framework.test import APIClient
 
 from core.export import XLSX
-from core.models import EditRequest, Hold, Item, Lot, Nonconformance, WorkOrder
+from core.models import EditRequest, Hold, Item, Lot, Nonconformance, Partner, Project, WorkOrder
 from qms.models import (AuditFinding, Capa, ChangeRequest, Characteristic, CustomerClaim, CustomerRule, Gauge, Inspection, InspectionSpec,
                         InternalAudit, Measurement, PpapSubmission, Scar)
 from qms.overview import sections
@@ -208,6 +208,14 @@ class SpecApiTest(TestCase):
         r = self.c(self.eng).get('/api/qms/specs/?tab=current')
         self.assertEqual([x['id'] for x in r.json()['results']], [self.spec.pk])
         self.assertEqual(self.c(self.eng).get('/api/qms/specs/?tab=draft').json()['count'], 1)
+
+    def test_list_project_filter(self):
+        pj = Project.objects.create(name='NE', customer=Partner.objects.create(name='현대', is_customer=True))
+        Item.objects.filter(pk=self.item.pk).update(project=pj)
+        r = self.c(self.eng).get(f'/api/qms/specs/?f_project={pj.pk}').json()
+        self.assertEqual([x['id'] for x in r['results']], [self.spec.pk])
+        self.assertEqual(r['results'][0]['project'], 'NE')
+        self.assertEqual(self.c(self.eng).get('/api/qms/specs/?f_project=none').json()['count'], 1)
 
     def test_list_export_xlsx(self):
         r = self.c(self.eng).get('/api/qms/specs/?tab=all&export=xlsx')

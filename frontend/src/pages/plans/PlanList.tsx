@@ -7,6 +7,7 @@ import { ApiError, api } from '../../api/client'
 import { PLAN_STAGES, type PlanDetail, type PlanRow } from '../../api/plans'
 import type { Page } from '../../api/specs'
 import DataList from '../../components/DataList'
+import useProjectFilter from '../../components/useProjectFilter'
 import { addRecent } from '../../lib/recent'
 
 const TABS = [
@@ -19,6 +20,7 @@ const TABS = [
 const COLUMNS: ColumnsType<PlanRow> = [
   { title: '품번', dataIndex: 'item_code' },
   { title: '품명', dataIndex: 'item_name' },
+  { title: '프로젝트', dataIndex: 'project' },
   { title: '단계', dataIndex: 'stage_display' },
   { title: '개정', dataIndex: 'revision', render: (v: number) => `Rev.${v}` },
   {
@@ -35,10 +37,10 @@ const COLUMNS: ColumnsType<PlanRow> = [
   { title: '승인자·승인일', render: (_, r) => (r.approved_by ? `${r.approved_by} · ${r.approved_at?.slice(0, 10) ?? ''}` : '') },
 ]
 
-const fetchPage = (tab: string, q: string, page: number) =>
-  api<Page<PlanRow>>(`/api/qms/plans/?tab=${tab}&q=${encodeURIComponent(q)}&page=${page}`)
+const fetchPage = (tab: string, q: string, page: number, extra: string) =>
+  api<Page<PlanRow>>(`/api/qms/plans/?tab=${tab}&q=${encodeURIComponent(q)}&page=${page}${extra}`)
 
-const exportHref = (tab: string, q: string) => `/api/qms/plans/?tab=${tab}&q=${encodeURIComponent(q)}&export=xlsx`
+const exportHref = (tab: string, q: string, extra: string) => `/api/qms/plans/?tab=${tab}&q=${encodeURIComponent(q)}&export=xlsx${extra}`
 
 function Peek({ row }: { row: PlanRow }) {
   const { data, error } = useQuery({ queryKey: ['plan', row.id], queryFn: () => api<PlanDetail>(`/api/qms/plans/${row.id}/`) })
@@ -151,6 +153,7 @@ function NewPlan({ open, onClose }: { open: boolean; onClose: () => void }) {
 export default function PlanList() {
   const nav = useNavigate()
   const [creating, setCreating] = useState(false)
+  const filters = useProjectFilter()
   const open = (r: PlanRow) => {
     addRecent({ label: `${r.item_code} ${r.stage_display} 관리계획서 Rev.${r.revision}`, href: `/app/plans/${r.id}` })
     nav(`/plans/${r.id}`)
@@ -163,6 +166,7 @@ export default function PlanList() {
         tabs={TABS}
         fetchPage={fetchPage}
         exportHref={exportHref}
+        filters={filters}
         peek={(r) => <Peek row={r} />}
         onOpen={open}
         rowKey={(r) => r.id}

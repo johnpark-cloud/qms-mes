@@ -51,6 +51,9 @@ class Item(models.Model):
     code = models.CharField('품번', max_length=50, unique=True)
     name = models.CharField('품명', max_length=200)
     item_type = models.CharField('구분', max_length=4, choices=TYPES)
+    # 고객사 프로젝트(차종·프로그램). 공정·검사기준서·관리계획서는 품목에 붙으므로 품목 → 프로젝트로 묶어 본다
+    project = models.ForeignKey('Project', on_delete=models.PROTECT, null=True, blank=True, related_name='items',
+                                verbose_name='프로젝트')
     history = HistoricalRecords()
 
     class Meta:
@@ -911,6 +914,44 @@ class PartnerCertificate(models.Model):
 
     def __str__(self):
         return f'{self.partner} {self.get_standard_display()}'
+
+
+class Project(MasterModel):
+    """고객사 아래 개발·양산 프로젝트(차종·프로그램). 품목이 프로젝트를 가리킨다."""
+    PLAN, DEV, MASS, CLOSED = 'plan', 'dev', 'mass', 'closed'
+    STATUS_CHOICES = [(PLAN, '계획'), (DEV, '개발'), (MASS, '양산'), (CLOSED, '종료')]
+    CODE_PREFIX = 'PJ'
+
+    code = models.CharField('프로젝트 코드', max_length=20, unique=True, blank=True,
+                            help_text='비우면 PJ0001처럼 다음 번호를 매긴다.')
+    name = models.CharField('프로젝트 이름', max_length=100)
+    customer = models.ForeignKey(Partner, on_delete=models.PROTECT, related_name='projects', verbose_name='고객사',
+                                 limit_choices_to={'is_customer': True})
+    program = models.CharField('차종·프로그램', max_length=60, blank=True)
+    start_date = models.DateField('시작일', null=True, blank=True)
+    end_date = models.DateField('종료일', null=True, blank=True)
+    status = models.CharField('진행 상태', max_length=8, choices=STATUS_CHOICES, default=PLAN)
+
+    class Meta:
+        verbose_name = verbose_name_plural = '프로젝트'
+        ordering = ['code']
+
+    def __str__(self):
+        return self.name
+
+    def clean(self):
+        super().clean()
+        if self.start_date and self.end_date and self.end_date < self.start_date:
+            raise ValidationError({'end_date': '종료일이 시작일보다 빠를 수 없습니다.'})
+        if not self.code:
+            self.code = self.next_code()
+
+    def save(self, *args, **kwargs):
+        if not self.code:
+            self.code = self.next_code()
+        super().save(*args, **kwargs)
+
+    next_code = classmethod(Partner.next_code.__func__)  # 같은 방식, 머리글자만 PJ
 
 
 def extra_targets():

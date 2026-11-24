@@ -16,7 +16,7 @@ def mes_fixture():
     """Phase 10 설명서마다 기록 하나씩: 작업지시·실적·출하·기준정보."""
     from django.contrib.contenttypes.models import ContentType
     from core.models import (CodeValue, Department, FieldDef, ImportProfile, Item, Lot, NumberRule, Partner, Process,
-                             RoutingStep, Shipment, WorkOrder, WorkResult)
+                             Project, RoutingStep, Shipment, WorkOrder, WorkResult)
     from qms.models import ExcelTemplate
     item = Item.objects.create(code='F1', name='셀', item_type=Item.FINISHED)
     step = RoutingStep.objects.create(item=item, seq=10, process=Process.objects.create(code='P10', name='조립'))
@@ -24,7 +24,8 @@ def mes_fixture():
     lot = Lot.objects.create(number='FL-1', item=item, work_order=wo)
     WorkResult.objects.create(work_order=wo, step=step, lot=lot, input_qty=10, good_qty=9, defect_qty=1)
     Shipment.objects.create(lot=lot, customer='H사', qty=5)
-    Partner.objects.create(code='H', name='H사', is_customer=True)
+    pj = Project.objects.create(name='NE 배터리팩', program='NE1', customer=Partner.objects.create(code='H', name='H사', is_customer=True))
+    Item.objects.filter(pk=item.pk).update(project=pj)
     Department.objects.create(code='QA', name='품질')
     CodeValue.objects.create(group=CodeValue.CATEGORY, code='CL', name='셀')
     NumberRule.objects.create(name='품번', target='ITEM', pattern='{일련3}', sort=90)
@@ -784,7 +785,8 @@ class RecordsMesMasterApiTest(TestCase):
     def test_links_open_new_record_screen(self):
         from django.apps import apps
         for label in ('core.workorder', 'core.workresult', 'core.shipment', 'core.partner', 'core.department',
-                      'core.codevalue', 'core.numberrule', 'core.fielddef', 'qms.exceltemplate', 'core.importprofile'):
+                      'core.codevalue', 'core.numberrule', 'core.fielddef', 'qms.exceltemplate', 'core.importprofile',
+                      'core.project'):
             obj = apps.get_model(label).objects.first()
             self.assertEqual(record_url(obj), f'/app/r/{label.replace(".", "/")}/{obj.pk}')
             self.detail(label, obj.pk)
@@ -793,6 +795,24 @@ class RecordsMesMasterApiTest(TestCase):
         kids = {c['key']: c for c in d['children']}
         self.assertEqual(kids['results']['rows'][0]['url'], record_url(self.result))
         self.assertEqual(kids['lots']['rows'][0]['url'], record_url(self.lot))
+
+    def test_project_screen(self):
+        from core.models import Partner, Project
+        pj = Project.objects.get()
+        kids = {c['key']: c for c in self.detail('core.project', pj.pk)['children']}
+        self.assertEqual(kids['items']['rows'][0]['url'], f'/app/items/{self.wo.item_id}')
+        kids = {c['key']: c for c in self.detail('core.partner', pj.customer_id)['children']}
+        self.assertEqual(kids['projects']['rows'][0]['url'], record_url(pj))
+        self.assertEqual(self.client.get('/api/records/core.project/?tab=open').json()['count'], 1)
+        self.assertEqual(self.client.get('/api/records/core.project/?tab=closed').json()['count'], 0)
+        r = self.client.post('/api/records/core.project/', {'values': {'name': 'MX', 'customer': pj.customer_id}},
+                             content_type='application/json')
+        self.assertEqual(r.status_code, 201, r.content)
+        self.assertEqual(Project.objects.get(name='MX').code, 'PJ0002')
+        sup = Partner.objects.create(name='소재', is_supplier=True)
+        r = self.client.post('/api/records/core.project/', {'values': {'name': 'Y', 'customer': sup.pk}},
+                             content_type='application/json')
+        self.assertEqual(r.status_code, 400, r.content)
 
     def test_quantity_fix_keeps_model_rules(self):
         r = self.patch('core.workresult', self.result.pk, {'good_qty': '20'})

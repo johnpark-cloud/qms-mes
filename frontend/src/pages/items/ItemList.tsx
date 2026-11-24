@@ -6,6 +6,7 @@ import { api } from '../../api/client'
 import type { ItemDetail, ItemNumberOptions, ItemRow, NumberOption, NumberRuleOptions } from '../../api/master'
 import type { Page } from '../../api/specs'
 import DataList from '../../components/DataList'
+import useProjectFilter, { useProjectOptions } from '../../components/useProjectFilter'
 import { addRecent } from '../../lib/recent'
 
 // core/models.py Item.TYPES 와 같은 값이다.
@@ -20,14 +21,15 @@ const COLUMNS: ColumnsType<ItemRow> = [
   { title: '품번', dataIndex: 'code', render: (c: string, r) => (r.code_parts ? <Tooltip title={r.code_parts}>{c}</Tooltip> : c) },
   { title: '품명', dataIndex: 'name' },
   { title: '구분', dataIndex: 'item_type_display' },
+  { title: '프로젝트', dataIndex: 'project' },
   { title: 'BOM 수', dataIndex: 'bom_count', align: 'right' },
   { title: '라우팅 수', dataIndex: 'routing_count', align: 'right' },
 ]
 
-const fetchPage = (tab: string, q: string, page: number) =>
-  api<Page<ItemRow>>(`/api/core/items/?tab=${tab}&q=${encodeURIComponent(q)}&page=${page}`)
+const fetchPage = (tab: string, q: string, page: number, extra: string) =>
+  api<Page<ItemRow>>(`/api/core/items/?tab=${tab}&q=${encodeURIComponent(q)}&page=${page}${extra}`)
 
-const exportHref = (tab: string, q: string) => `/api/core/items/?tab=${tab}&q=${encodeURIComponent(q)}&export=xlsx`
+const exportHref = (tab: string, q: string, extra: string) => `/api/core/items/?tab=${tab}&q=${encodeURIComponent(q)}&export=xlsx${extra}`
 
 function NewItem({ open, onClose }: { open: boolean; onClose: () => void }) {
   const nav = useNavigate()
@@ -40,6 +42,7 @@ function NewItem({ open, onClose }: { open: boolean; onClose: () => void }) {
   const [values, setValues] = useState<(string | undefined)[]>([])
   const [preview, setPreview] = useState('')
   const [previewErr, setPreviewErr] = useState('')
+  const projects = useProjectOptions().filter((o) => o.value !== 'none')
 
   useEffect(() => {
     if (!open) return
@@ -97,11 +100,12 @@ function NewItem({ open, onClose }: { open: boolean; onClose: () => void }) {
     setAuto(false)
   }
 
-  const submit = async (v: { code?: string; name: string; item_type: string }) => {
+  const submit = async (v: { code?: string; name: string; item_type: string; project?: string }) => {
     setErr('')
     setSaving(true)
     try {
-      const body = auto ? { name: v.name, item_type: v.item_type, auto: { rule: ruleId, values } } : v
+      const project = v.project ? Number(v.project) : null
+      const body = auto ? { name: v.name, item_type: v.item_type, project, auto: { rule: ruleId, values } } : { ...v, project }
       const d = await api<ItemDetail>('/api/core/items/', { method: 'POST', body: JSON.stringify(body) })
       nav(`/items/${d.id}`)
     } catch (e) {
@@ -168,6 +172,11 @@ function NewItem({ open, onClose }: { open: boolean; onClose: () => void }) {
         <Form.Item label="구분" name="item_type" rules={[{ required: true, message: '구분을 고르세요.' }]}>
           <Select options={TYPES} placeholder="구분 선택" />
         </Form.Item>
+        {projects.length > 0 && (
+          <Form.Item label="프로젝트" name="project">
+            <Select allowClear showSearch={{ optionFilterProp: 'label' }} options={projects} placeholder="프로젝트 선택(없으면 비움)" />
+          </Form.Item>
+        )}
         {err && <Alert style={{ marginBottom: 12 }} type="error" message={err} />}
         <Space>
           <Button type="primary" htmlType="submit" loading={saving} disabled={auto && !preview}>
@@ -183,6 +192,7 @@ function NewItem({ open, onClose }: { open: boolean; onClose: () => void }) {
 export default function ItemList() {
   const nav = useNavigate()
   const [creating, setCreating] = useState(false)
+  const filters = useProjectFilter()
   const open = (r: ItemRow) => {
     addRecent({ label: `${r.code} ${r.name}`, href: `/app/items/${r.id}` })
     nav(`/items/${r.id}`)
@@ -195,6 +205,7 @@ export default function ItemList() {
         tabs={TABS}
         fetchPage={fetchPage}
         exportHref={exportHref}
+        filters={filters}
         onOpen={open}
         rowKey={(r) => r.id}
         toolbar={

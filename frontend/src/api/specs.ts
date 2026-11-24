@@ -3,6 +3,7 @@ export interface SpecRow {
   id: number
   item_code: string
   item_name: string
+  project: string
   inspection_type: string
   inspection_type_display: string
   revision: number

@@ -13,7 +13,7 @@ from django.utils.html import format_html, format_html_join
 from simple_history.admin import SimpleHistoryAdmin
 
 from .models import (Attachment, BomLine, CodeValue, Department, FieldDef, Hold, ImportProfile, Item, Lot, LotLink, Nonconformance,
-                     ModuleSwitch, NonconformancePhoto, NumberRule, Partner, PartnerCertificate, Process, RevisionLog, RoutingStep, Shipment,
+                     ModuleSwitch, NonconformancePhoto, NumberRule, Partner, PartnerCertificate, Process, Project, RevisionLog, RoutingStep, Shipment,
                      WorkOrder, WorkResult)
 from .records import blockers, can_edit_locked, delete_record, is_locked
 from .recordspec import url_for
@@ -234,9 +234,9 @@ class RoutingInline(admin.TabularInline):
 
 @admin.register(Item)
 class ItemAdmin(BaseAdmin):
-    list_display = ['code', 'name', 'item_type']
+    list_display = ['code', 'name', 'item_type', 'project']
     search_fields = ['code', 'name']
-    list_filter = ['item_type']
+    list_filter = ['item_type', 'project']
     inlines = [BomInline, RoutingInline]
 
 
@@ -364,6 +364,13 @@ class PartnerAdmin(MasterAdmin):
     search_fields = ['code', 'name', 'contacts']
     exclude = MasterAdmin.exclude + ['qc_name', 'qc_phone', 'qc_email']  # 담당자(contacts)로 옮긴 옛 칸
     inlines = [PartnerCertificateInline]
+
+
+@admin.register(Project)
+class ProjectAdmin(MasterAdmin):
+    list_display = ['code', 'name', 'customer', 'program', 'status', 'start_date', 'end_date', 'active']
+    list_filter = ['status', 'customer', 'active']
+    search_fields = ['code', 'name', 'program']
 
 
 @admin.register(Attachment)

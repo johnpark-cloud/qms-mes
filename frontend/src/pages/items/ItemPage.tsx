@@ -55,6 +55,7 @@ export default function ItemPage() {
   const [code, setCode] = useState('')
   const [name, setName] = useState('')
   const [type, setType] = useState('')
+  const [project, setProject] = useState<number | null>(null)
   const [bom, setBom] = useState<GridRow[]>([])
   const [routing, setRouting] = useState<GridRow[]>([])
   const [errors, setErrors] = useState<Record<string, string[]>>({})
@@ -68,6 +69,7 @@ export default function ItemPage() {
     setCode(x.code)
     setName(x.name)
     setType(x.item_type)
+    setProject(x.project)
     setBom(withTail(bomRows(x), bomColumns(x), !x.editable))
     setRouting(withTail(routingRows(x), routingColumns(x), !x.editable))
     setErrors({})
@@ -85,7 +87,7 @@ export default function ItemPage() {
   const routingBase = useMemo(() => new Map((d?.routing ?? []).map((r) => [r.id, r as unknown as Record<string, unknown>])), [d])
   const bt = useTable(bc, BOM_FIELDS, bomBase)
   const rt = useTable(rc, ROUTING_FIELDS, routingBase)
-  const propsChanged = d ? [code !== d.code, name !== d.name, type !== d.item_type].filter(Boolean).length : 0
+  const propsChanged = d ? [code !== d.code, name !== d.name, type !== d.item_type, project !== d.project].filter(Boolean).length : 0
   const count = bom.filter(bt.touched).length + routing.filter(rt.touched).length + propsChanged
 
   const save = useMutation({
@@ -95,7 +97,7 @@ export default function ItemPage() {
       try {
         return await api<ItemDetail>(`/api/core/items/${id}/`, {
           method: 'PUT',
-          body: JSON.stringify({ code, name, item_type: type, bom: b.payload, routing: r.payload, version: d!.version }),
+          body: JSON.stringify({ code, name, item_type: type, project, bom: b.payload, routing: r.payload, version: d!.version }),
         })
       } catch (e) {
         if (e instanceof ApiError && e.status === 400) {
@@ -145,6 +147,13 @@ export default function ItemPage() {
     },
     { label: '품명', node: <Input aria-label="품명" status={errors.name ? 'error' : undefined} value={name} readOnly={readOnly} onChange={(e) => setName(e.target.value)} /> },
     { label: '구분', node: <Select aria-label="구분" style={{ width: 160 }} status={errors.item_type ? 'error' : undefined} disabled={readOnly} options={d.type_options} value={type} onChange={setType} /> },
+    {
+      label: '프로젝트',
+      node: (
+        <Select aria-label="프로젝트" style={{ width: 280 }} allowClear showSearch={{ optionFilterProp: 'label' }} placeholder="없음" status={errors.project ? 'error' : undefined} disabled={readOnly}
+          options={d.project_options} value={project ?? undefined} onChange={(v) => setProject(v ?? null)} />
+      ),
+    },
   ]
 
   return (

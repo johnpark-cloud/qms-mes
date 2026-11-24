@@ -8,7 +8,7 @@ from openpyxl import load_workbook
 from rest_framework.test import APIClient
 
 from core.tests_import_log import temp_imports
-from core.models import BomLine, CodeValue, ImportProfile, Item, NumberRule, Process, RoutingStep
+from core.models import BomLine, CodeValue, ImportProfile, Item, NumberRule, Partner, Process, Project, RoutingStep
 
 
 def grant(user, *codes):
@@ -42,7 +42,7 @@ class ItemApiTest(TestCase):
         self.assertEqual(self.client.get('/api/core/items/?q=셀').json()['count'], 1)
         r = self.client.get('/api/core/items/?export=xlsx')
         ws = load_workbook(io.BytesIO(r.content)).active
-        self.assertEqual([c.value for c in ws[1]], ['품번', '품명', '구분', 'BOM 수', '라우팅 수'])
+        self.assertEqual([c.value for c in ws[1]], ['품번', '품명', '구분', '프로젝트', 'BOM 수', '라우팅 수'])
 
     def test_create_and_duplicate(self):
         body = {'code': 'N1', 'name': '새것', 'item_type': 'SEMI'}
@@ -99,6 +99,39 @@ class ItemApiTest(TestCase):
         r = self.put(self.fin, bom=[{'component': self.raw.pk, 'qty': '1'}])
         self.assertEqual(r.status_code, 403)
         self.assertEqual(BomLine.objects.count(), 0)
+
+    def test_project(self):
+        cust = Partner.objects.create(name='현대', is_customer=True)
+        pj = Project.objects.create(name='NE 배터리팩', customer=cust)
+        Project.objects.create(name='끝난 것', customer=cust, active=False)
+        r = self.client.post('/api/core/items/', {'code': 'N1', 'name': '팩', 'item_type': 'FIN', 'project': pj.pk},
+                             format='json')
+        self.assertEqual(r.status_code, 201, r.content)
+        self.assertEqual(r.json()['project'], pj.pk)
+        self.assertEqual([o['label'] for o in r.json()['project_options']], [f'{pj.code} NE 배터리팩 (현대)'])
+        n1 = Item.objects.get(code='N1')
+        self.assertEqual(self.put(self.fin, project=pj.pk).status_code, 200)
+        d = self.client.get(f'/api/core/items/?f_project={pj.pk}').json()
+        self.assertEqual([x['code'] for x in d['results']], ['F1', 'N1'])
+        self.assertEqual(d['results'][0]['project'], 'NE 배터리팩')
+        self.assertEqual(self.client.get('/api/core/items/?f_project=none').json()['count'], 2)
+        self.assertEqual(self.client.get('/api/core/items/?f_project=abc').json()['count'], 4)
+        self.assertEqual(self.put(n1, project=None).status_code, 200)
+        n1.refresh_from_db()
+        self.assertIsNone(n1.project)
+        r = self.put(n1, project=99999)
+        self.assertEqual(r.status_code, 400)
+        self.assertIn('project', r.json()['fields'])
+        r = self.put(n1, project='x')
+        self.assertEqual(r.status_code, 400)
+        # 목록 거르기 선택지: 품번을 볼 수 있으면 된다
+        u = User.objects.create_user('v', password='x', is_staff=True)
+        self.client.force_login(u)
+        self.assertEqual(self.client.get('/api/core/items/projects/').status_code, 403)
+        grant(u, 'view_item')
+        opts = self.client.get('/api/core/items/projects/').json()
+        self.assertEqual(opts[0], {'value': 'none', 'label': '프로젝트 없음'})
+        self.assertEqual([o['value'] for o in opts[1:]], [str(pj.pk)])
 
     # ---- 규칙 기반 품번 자동 번호 ----
     def rule(self, name):

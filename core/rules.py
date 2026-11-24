@@ -283,7 +283,12 @@ def save_item(item, user, data, bom, routing, version):
                     errors[f] = ['글이어야 합니다.']
                 else:
                     setattr(item, f, data[f].strip())
-        if not any(k in errors for k in ('code', 'name', 'item_type')):
+        if 'project' in data:
+            if data['project'] is not None and type(data['project']) is not int:
+                errors['project'] = ['프로젝트를 고르세요.']
+            else:
+                item.project_id = data['project']
+        if not any(k in errors for k in ('code', 'name', 'item_type', 'project')):
             try:
                 item.full_clean()
             except ValidationError as e:

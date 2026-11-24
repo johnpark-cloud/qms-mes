@@ -6,6 +6,7 @@ import { useNavigate } from 'react-router-dom'
 import { ApiError, api } from '../../api/client'
 import { INSPECTION_TYPES, type Page, type SpecDetail, type SpecRow } from '../../api/specs'
 import DataList from '../../components/DataList'
+import useProjectFilter from '../../components/useProjectFilter'
 import { addRecent } from '../../lib/recent'
 
 const TABS = [
@@ -18,6 +19,7 @@ const TABS = [
 const COLUMNS: ColumnsType<SpecRow> = [
   { title: '품번', dataIndex: 'item_code' },
   { title: '품명', dataIndex: 'item_name' },
+  { title: '프로젝트', dataIndex: 'project' },
   { title: '검사 구분', dataIndex: 'inspection_type_display' },
   { title: '개정', dataIndex: 'revision', render: (v: number) => `Rev.${v}` },
   {
@@ -34,10 +36,10 @@ const COLUMNS: ColumnsType<SpecRow> = [
   { title: '승인자·승인일', render: (_, r) => (r.approved_by ? `${r.approved_by} · ${r.approved_at?.slice(0, 10) ?? ''}` : '') },
 ]
 
-const fetchPage = (tab: string, q: string, page: number) =>
-  api<Page<SpecRow>>(`/api/qms/specs/?tab=${tab}&q=${encodeURIComponent(q)}&page=${page}`)
+const fetchPage = (tab: string, q: string, page: number, extra: string) =>
+  api<Page<SpecRow>>(`/api/qms/specs/?tab=${tab}&q=${encodeURIComponent(q)}&page=${page}${extra}`)
 
-const exportHref = (tab: string, q: string) => `/api/qms/specs/?tab=${tab}&q=${encodeURIComponent(q)}&export=xlsx`
+const exportHref = (tab: string, q: string, extra: string) => `/api/qms/specs/?tab=${tab}&q=${encodeURIComponent(q)}&export=xlsx${extra}`
 
 function Peek({ row }: { row: SpecRow }) {
   const { data, error } = useQuery({ queryKey: ['spec', row.id], queryFn: () => api<SpecDetail>(`/api/qms/specs/${row.id}/`) })
@@ -150,6 +152,7 @@ function NewSpec({ open, onClose }: { open: boolean; onClose: () => void }) {
 export default function SpecList() {
   const nav = useNavigate()
   const [creating, setCreating] = useState(false)
+  const filters = useProjectFilter()
   const open = (r: SpecRow) => {
     addRecent({ label: `${r.item_code} ${r.inspection_type_display} Rev.${r.revision}`, href: `/app/specs/${r.id}` })
     nav(`/specs/${r.id}`)
@@ -162,6 +165,7 @@ export default function SpecList() {
         tabs={TABS}
         fetchPage={fetchPage}
         exportHref={exportHref}
+        filters={filters}
         peek={(r) => <Peek row={r} />}
         onOpen={open}
         rowKey={(r) => r.id}

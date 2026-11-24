@@ -13,14 +13,14 @@ from core.export import XLSX, table_xlsx, xlsx_response
 from core.importer import (guide, headers, preview_import, run_import, standard_profile, target_of, targets, template_csv,
                            template_xlsx)
 from core.modules import active, module_of_model
-from core.models import CodeValue, ImportLog, ImportProfile, Item, NumberRule, Process
+from core.models import CodeValue, ImportLog, ImportProfile, Item, NumberRule, Process, Project
 from core.numbering import (NumberingError, candidates, codebook, default_item_type, describe_text, fields,
                             next_number, parse_pattern, rulebook, _table)
 from core.grid import table_version
 from core.rules import Stale, item_version, save_item, save_table
 
 PAGE_SIZE = 50
-LIST_COLUMNS = ['품번', '품명', '구분', 'BOM 수', '라우팅 수']
+LIST_COLUMNS = ['품번', '품명', '구분', '프로젝트', 'BOM 수', '라우팅 수']
 BAD_BODY = '요청 형식이 올바르지 않습니다.'
 
 
@@ -35,23 +35,37 @@ def _num(d):
 def _filtered(request):
     tab, q = request.query_params.get('tab', 'all'), request.query_params.get('q', '').strip()
     qs = Item.objects.annotate(bom_count=Count('bom_lines', distinct=True),
-                               routing_count=Count('routing', distinct=True)).order_by('code')
+                               routing_count=Count('routing', distinct=True)).select_related('project').order_by('code')
     if tab in dict(Item.TYPES):
         qs = qs.filter(item_type=tab)
     if q:
         qs = qs.filter(Q(code__icontains=q) | Q(name__icontains=q))
-    return qs
+    return by_project(qs, request)
+
+
+def by_project(qs, request, field='project'):
+    """목록 거르기 ?f_project=번호|none. 품목에 딸린 기록(검사기준서·관리계획서)은 field='item__project'."""
+    v = request.query_params.get('f_project', '')
+    if v == 'none':
+        return qs.filter(**{f'{field}__isnull': True})
+    return qs.filter(**{field: int(v)}) if v.isdecimal() else qs
+
+
+def project_name(item):
+    return item.project.name if item.project_id else ''
 
 
 def _row(i, book, rules):
     return {'id': i.pk, 'code': i.code, 'name': i.name, 'item_type': i.item_type,
-            'item_type_display': i.get_item_type_display(), 'bom_count': i.bom_count, 'routing_count': i.routing_count,
+            'item_type_display': i.get_item_type_display(), 'project': project_name(i),
+            'bom_count': i.bom_count, 'routing_count': i.routing_count,
             'code_parts': describe_text(i.code, NumberRule.ITEM, book, rules)}
 
 
 def _detail(item, user):
     return {
         'id': item.pk, 'title': str(item), 'code': item.code, 'name': item.name, 'item_type': item.item_type,
+        'project': item.project_id,
         'code_parts': describe_text(item.code, NumberRule.ITEM),
         'version': item_version(item),
         'editable': user.has_perm('core.change_item'),
@@ -61,6 +75,9 @@ def _detail(item, user):
         'item_options': [{'value': i.pk, 'label': str(i)} for i in Item.objects.exclude(pk=item.pk).order_by('code')],
         'process_options': [{'value': p.pk, 'label': str(p)} for p in Process.objects.order_by('code')],
         'type_options': [{'value': v, 'label': label} for v, label in Item.TYPES],
+        # 고를 수 있는 것은 사용 중인 프로젝트, 이미 고른 것은 꺼졌어도 보인다
+        'project_options': [{'value': p.pk, 'label': f'{p.code} {p.name} ({p.customer})'} for p in
+                            Project.objects.filter(Q(active=True) | Q(pk=item.project_id)).select_related('customer')],
     }
 
 
@@ -71,7 +88,7 @@ class ItemListView(APIView):
         require_perm(request.user, 'core.view_item')
         qs = _filtered(request)
         if request.query_params.get('export') == 'xlsx':
-            rows = [[i.code, i.name, i.get_item_type_display(), i.bom_count, i.routing_count] for i in qs]
+            rows = [[i.code, i.name, i.get_item_type_display(), project_name(i), i.bom_count, i.routing_count] for i in qs]
             return xlsx_response(table_xlsx('품번', LIST_COLUMNS, rows), '품번.xlsx')
         try:
             page = min(max(int(request.query_params.get('page', 1)), 1), 10**6)
@@ -98,7 +115,10 @@ class ItemListView(APIView):
             vals['item_type'] = d.get('item_type') or ''
         if not all(isinstance(v, str) for v in vals.values()):
             return _bad('품번·품명·구분을 입력하세요.')
-        item = Item(**{k: v.strip() for k, v in vals.items()})
+        project = d.get('project')
+        if project is not None and type(project) is not int:
+            return _bad('프로젝트를 고르세요.', 'project')
+        item = Item(**{k: v.strip() for k, v in vals.items()}, project_id=project)
         if auto is None:
             item.full_clean()  # 검증 오류는 API 예외 처리가 400 fields로 바꾼다
             item.save()
@@ -193,6 +213,17 @@ class ItemPreviewView(APIView):
             return Response({'number': next_number(rule, values), 'item_type': default_item_type(rule, values)})
         except NumberingError as e:
             return _bad(str(e))
+
+
+class ProjectOptionsView(APIView):
+    """품번·검사기준서·관리계획서 목록의 프로젝트 거르기 선택지."""
+    schema = None
+
+    def get(self, request):
+        require_perm(request.user, 'core.view_item')
+        return Response([{'value': 'none', 'label': '프로젝트 없음'}] +
+                        [{'value': str(p.pk), 'label': f'{p.name} ({p.customer})'}
+                         for p in Project.objects.filter(active=True).select_related('customer')])
 
 
 class ItemDetailView(APIView):
