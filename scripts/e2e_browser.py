@@ -766,6 +766,23 @@ try:
             ok, page_err = False, str(e)[:120]
         check('PPAP 요소: 문서·증적 기록 잇기 → 요소 표에서 양식지 열기', ok, page.url if ok else page_err)
 
+        # 한눈에 보기: 기한 지난 CAPA → 카드 제목 앞 「지연 N」 → 누르면 지연 탭
+        manage('shell', '-c', (
+            "import datetime; from django.contrib.auth import get_user_model; from django.utils import timezone;"
+            "from qms.models import Capa;"
+            "Capa.objects.create(title='E2E 늦은 대책', source='OTHER', action='x', owner=get_user_model().objects.get(username='boss'),"
+            " due_date=timezone.localdate() - datetime.timedelta(days=5))"))
+        try:
+            page.goto('/app/hub/품질보증 및 개선')
+            card = page.locator('.ant-card', has_text='시정조치(CAPA)')
+            card.locator('.ant-tag', has_text=re.compile(r'지연 [1-9]')).click(timeout=8000)
+            page.wait_for_url('**/app/r/qms/capa?tab=late')
+            page.locator('.ant-table-tbody tr', has_text='E2E 늦은 대책').wait_for(timeout=5000)
+            ok, page_err = True, ''
+        except Exception as e:
+            ok, page_err = False, str(e)[:120]
+        check('한눈에 보기 「지연 N」 → 지연 탭', ok, page.url if ok else page_err)
+
         # 기록 화면 새로 만들기: 목록 「새로 만들기」 → 입력 → 저장 → 새 기록 화면
         try:
             page.goto('/app/r/core/department')

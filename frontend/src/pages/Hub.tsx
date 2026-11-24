@@ -1,5 +1,5 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { Alert, Button, Card, Form, Modal, Space, Spin, Table } from 'antd'
+import { Alert, Button, Card, Form, Modal, Space, Spin, Table, Tag } from 'antd'
 import { useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { fetchMe } from '../api/auth'
@@ -42,8 +42,12 @@ function Widget({ label, href }: { label: string; href: string }) {
   const [adding, setAdding] = useState(false)
   const q = useQuery({ queryKey: ['hub', href], queryFn: () => api<ListPage>(`/api/records/${ct}/${query ? '?' + query : ''}`) })
   const d = q.data
+  const late = d?.overdue?.count ? d.overdue : null // 관리자가 먼저 볼 것: 기한 지난 건수를 제목 앞에 빨갛게, 누르면 지연 탭
   return (
-    <Card size="small" title={`${label}${d ? ` (${d.count})` : ''}`}
+    <Card size="small" title={<Space size={6}>
+      {late && <Link to={`${path}?tab=${late.tab}`}><Tag color="red" style={{ margin: 0 }}>지연 {late.count}</Tag></Link>}
+      <span>{`${label}${d ? ` (${d.count})` : ''}`}</span>
+    </Space>}
       extra={<Space>
         {d?.can_add && d.new_url?.startsWith('/app/r/') && <Button size="small" type="primary" onClick={() => setAdding(true)}>추가</Button>}
         {d?.can_add && d.new_url && !d.new_url.startsWith('/app/r/') && (d.new_url.startsWith('/app/')

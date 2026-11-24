@@ -10,6 +10,7 @@ export interface Row { id: number; url: string | null; status: string | null; ce
 export interface ListPage {
   title: string; tabs: { key: string; label: string }[]; columns: { key: string; label: string; sortable: boolean }[]; filters: ListFilter[]
   count: number; page: number; has_more: boolean; results: Row[]; can_add: boolean; new_url: string | null
+  overdue?: { tab: string; count: number } // 기한 지난 미완료 건(설명서 overdue가 있는 기록만)
 }
 
 export default function RecordList() {

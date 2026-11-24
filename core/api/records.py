@@ -92,7 +92,8 @@ class RecordListView(APIView):
             page = 1
         count = qs.count()
         start = (page - 1) * PAGE_SIZE
-        return Response({'title': title, 'tabs': [{'key': k, 'label': n} for k, n, _ in spec.tabs],
+        extra = {'overdue': {'tab': spec.overdue, 'count': tabs[spec.overdue](model.objects.all()).count()}} if spec.overdue else {}
+        return Response(extra | {'title': title, 'tabs': [{'key': k, 'label': n} for k, n, _ in spec.tabs],
                          'columns': _columns(model, spec.columns, sorts), 'filters': listing.public(filters),
                          'count': count, 'page': page,
                          'has_more': start + PAGE_SIZE < count,

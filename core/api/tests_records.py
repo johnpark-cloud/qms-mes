@@ -72,7 +72,7 @@ class RecordsApiTest(TestCase):
 
     def test_list_tabs_search_export(self):
         d = self.client.get('/api/records/qms.gauge/').json()
-        self.assertEqual([t['key'] for t in d['tabs']], ['active', 'all', 'inactive'])
+        self.assertEqual([t['key'] for t in d['tabs']], ['active', 'late', 'all', 'inactive'])
         self.assertEqual([r['cells']['number'] for r in d['results']], ['G-1'])  # 첫 탭 = 사용
         self.assertEqual(d['results'][0]['url'], f'/app/r/qms/gauge/{self.g1.pk}')
         d = self.client.get('/api/records/qms.gauge/?tab=all&q=캘리').json()
@@ -89,6 +89,27 @@ class RecordsApiTest(TestCase):
                                        valid_until=timezone.localdate() + datetime.timedelta(days=365))
         d = self.client.get('/api/records/qms.qualification/?tab=soon').json()  # 30일 안에 끝나는 유효 자격
         self.assertEqual([r['url'] for r in d['results']], [f'/app/r/qms/qualification/{soon.pk}'])
+
+    def test_overdue_count(self):  # 한눈에 보기 「지연 N」: 설명서 overdue 탭의 건수. 지금 탭·검색과 상관없이 센다
+        from qms.models import Capa, CustomerClaim, Gauge
+        today, now = timezone.localdate(), timezone.now()
+        past = today - datetime.timedelta(days=3)
+        Capa.objects.create(title='늦은 대책', source='OTHER', action='x', owner=self.root, due_date=past)
+        Capa.objects.create(title='조치 끝남', source='OTHER', action='x', owner=self.root, due_date=past, done_at=past)  # 유효성 확인 대기
+        d = self.client.get('/api/records/qms.capa/?tab=closed').json()
+        self.assertEqual(d['overdue'], {'tab': 'late', 'count': 1})
+        self.assertEqual(self.client.get('/api/records/qms.capa/?tab=late').json()['count'], 1)
+        CustomerClaim.objects.create(number='CL-2', customer='H사', lot=self.lot, description='x',
+                                     received_at=now - datetime.timedelta(days=30))  # 봉쇄 기한 지남
+        self.assertEqual(self.client.get('/api/records/qms.customerclaim/').json()['overdue']['count'], 1)
+        Gauge.objects.create(number='G-3', name='게이지', last_calibrated=today - datetime.timedelta(days=800))
+        self.assertEqual(self.client.get('/api/records/qms.gauge/').json()['overdue']['count'], 1)
+        self.assertEqual(self.client.get('/api/records/qms.qualification/').json()['overdue'], {'tab': 'expired', 'count': 1})
+        self.assertNotIn('overdue', self.client.get('/api/records/qms.document/').json())
+        for label, spec in recordspec.SPECS.items():  # 지연 탭이 실제 탭이고 쿼리가 돈다
+            if spec.overdue:
+                self.assertIn(spec.overdue, [k for k, _, _ in spec.tabs], label)
+                self.assertIsInstance(self.client.get(f'/api/records/{label}/').json()['overdue']['count'], int, label)
 
     def test_list_sort_and_filter(self):  # 열 머리 정렬, 선택지·참/거짓·외래키·날짜 필터, 엑셀도 같은 조건
         from qms.models import Gauge
