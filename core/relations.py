@@ -106,6 +106,12 @@ def record_url(obj):
         return None
 
 
+def sheet_url(obj):
+    """양식지(A4 한 장) 주소: 기록 설명서 화면과 검사·검사기준·관리계획서 화면에만 있다."""
+    url = record_url(obj)
+    return f'{url}/print' if url and url.startswith(('/app/r/', '/app/inspections/', '/app/specs/', '/app/plans/')) else None
+
+
 def status_of(obj):
     names = {f.name for f in obj._meta.concrete_fields}
     if 'closed_at' in names:  # 부적합은 처분 승인과 종결이 함께라 종결·진행으로 보인다

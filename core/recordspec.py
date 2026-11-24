@@ -7,6 +7,9 @@ import datetime
 import json
 from typing import Callable, NamedTuple
 
+from django.apps import apps
+from django.contrib.contenttypes.fields import GenericForeignKey
+from django.core.exceptions import ValidationError
 from django.db import models
 from django.utils import timezone
 
@@ -56,6 +59,11 @@ LABELS = {'core.hold': {'lot': 'LOT', 'nonconformance': '부적합', 'created_at
 
 
 # 여러 줄 표 칸(JSON 목록): 열 (키, 이름). 기록 화면에서 줄을 더하고 뺀다. 검사는 모델 clean이 한다
+# 증적 기록으로 고를 수 있는 기록(W4) → 품목을 가리키는 경로. 개인·인증 기록은 넣지 않는다.
+EVIDENCE_RECORDS = {'qms.controlplan': 'item', 'qms.inspectionspec': 'item', 'qms.inspection': 'lot__item',
+                    'qms.changerequest': 'item'}
+EVIDENCE_LIMIT = 50  # 종류마다 최근 기록만 고를 수 있게 보인다
+
 ROWS = {'core.partner': {'contacts': (('role', '업무'), ('name', '이름'), ('phone', '전화'), ('email', '이메일'))}}
 
 
@@ -262,13 +270,13 @@ SPECS = {
         children=(Child('elements', 'PPAP 요소', ('number', 'name', 'requirement', 'document', 'record', 'note'), ('number',)),),
         edit=('customer', 'reason', 'due_date', 'submitted_at', 'customer_approved_at', 'item', 'partner', 'level'),
         create=('item', 'customer', 'partner', 'level', 'reason', 'due_date')),
-    'qms.ppapelement': Spec(  # 문서·증적 기록 연결(외래키)은 관리 화면
+    'qms.ppapelement': Spec(  # 증적 기록(일반 연결)은 EVIDENCE_RECORDS 안에서 고른다(W4)
         fields=('submission', 'number', 'name', 'requirement', 'document', 'record', 'note'),
         columns=('submission', 'number', 'name', 'requirement'),
         search=('name', 'submission__customer', 'submission__item__code'),
         side=('relations', 'history'),
         order=('submission', 'number'),
-        edit=('requirement', 'note', 'document'),
+        edit=('requirement', 'note', 'document', 'record'),
         lock_parent='submission'),
     # 작업지시·실적·출하(REC-11): LOT·작업지시·공정 같은 외래키는 관리 화면에서만 — 보류·4M 인터록(모델 clean/save)이 그대로 막는다.
     # 새 등록도 관리 화면 추가 폼. 기록 화면은 수량·납기 정정만(모델 clean: 양품+불량 ≤ 투입, 이전 공정 실적)
@@ -437,10 +445,42 @@ def value_of(obj, name):
     return str(v), None
 
 
+def generic_value(v):
+    return f'{v._meta.label_lower}:{v.pk}' if v is not None else None
+
+
+def evidence_choices(obj, label):
+    """증적 후보 한 종류. PPAP 요소는 그 제출 품목의 기록만."""
+    qs = apps.get_model(label).objects.order_by('-pk')
+    sub = getattr(obj, 'submission', None)
+    return qs.filter(**{EVIDENCE_RECORDS[label]: sub.item_id}) if sub else qs
+
+
+def generic_target(obj, name, value):
+    """editor가 낸 'app.model:pk'를 기록으로. 빈 값은 None, 지금 값은 그대로, 그 밖은 후보 안에서만."""
+    current = getattr(obj, name)
+    if not value:
+        return None
+    if value == generic_value(current):
+        return current
+    label, _, pk = str(value).partition(':')
+    found = label in EVIDENCE_RECORDS and pk.isdigit() and evidence_choices(obj, label).filter(pk=pk).first()
+    if not found:
+        raise ValidationError({name: ['고를 수 없는 기록입니다.']})
+    return found
+
+
 def editor(obj, name):
     """수정 칸 하나의 입력 종류와 원래 값. 외래키는 폼 queryset(limit_choices_to 반영) 앞 CHOICE_LIMIT개 + 지금 값."""
     f = obj._meta.get_field(name)
     v = getattr(obj, name)
+    if isinstance(f, GenericForeignKey):  # 증적 기록: 'app.model:pk'
+        objs = [o for label in EVIDENCE_RECORDS for o in evidence_choices(obj, label)[:EVIDENCE_LIMIT]]
+        if v is not None and v not in objs:
+            objs.insert(0, v)
+        return {'key': name, 'label': label_of(type(obj), name), 'type': 'choice', 'value': generic_value(v),
+                'required': False, 'choices': [{'value': generic_value(o), 'label': f'{o._meta.verbose_name} · {o}'}
+                                               for o in objs]}
     if f.is_relation:
         from django.forms import modelform_factory
         objs = list(modelform_factory(type(obj), fields=[name])().fields[name].queryset[:CHOICE_LIMIT])

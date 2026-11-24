@@ -731,6 +731,41 @@ try:
             page.screenshot(path=os.path.join(os.environ['E2E_SHOTS'], 'nc-sheet.png'), full_page=True)
         check('기록 양식지: 부적합 보고서(구역 표) · 옛 인쇄 주소 → 새 양식지', ok, page.url if ok else page_err)
 
+        # W4: PPAP 요소에 문서·증적 기록을 새 화면에서 잇고, 요소 표에서 양식지로 연다
+        out = manage('shell', '-c', (
+            "from django.contrib.auth import get_user_model; from django.utils import timezone;"
+            "from core.models import Item; from qms.models import ControlPlan, Document, PpapSubmission;"
+            "i=Item.objects.create(code='E2E-PP', name='E2E PPAP 품번', item_type='FIN');"
+            "ControlPlan.objects.create(item=i, stage='PRODUCTION', revision=1);"
+            "Document.objects.create(number='E2E-DOC', title='E2E 외관 승인 보고서', doc_type='보고서');"
+            "s=PpapSubmission.objects.create(item=i, customer='E2E 고객', reason='신규', level=1);"
+            "print(s.pk, s.elements.get(number=13).pk)")).stdout.decode().split()
+        try:
+            sub_pk, el_pk = out[-2], out[-1]
+            page.goto(f'/app/r/qms/ppapelement/{el_pk}')
+            page.get_by_role('button', name='수정').click()
+            page.locator('#document').click()
+            page.locator('.ant-select-item-option', has_text='E2E-DOC').click()
+            page.locator('#record').click()
+            page.locator('.ant-select-item-option', has_text='관리계획서 · E2E-PP').click()
+            page.get_by_role('button', name='저장').click()
+            page.locator('.record-props', has_text='E2E-DOC').wait_for(timeout=5000)
+            page.goto(f'/app/r/qms/ppapsubmission/{sub_pk}')
+            row = page.locator('.ant-table-tbody tr', has_text='외관 승인 보고서(AAR)')
+            row.get_by_role('link', name='기록').wait_for(timeout=5000)
+            with page.expect_popup() as pop:
+                row.get_by_role('link', name='문서').click()
+            sheet = pop.value
+            sheet.wait_for_url('**/app/r/qms/document/*/print')
+            sheet.locator('.doc-page', has_text='E2E 외관 승인 보고서').wait_for(timeout=5000)
+            if os.environ.get('E2E_SHOTS'):
+                page.screenshot(path=os.path.join(os.environ['E2E_SHOTS'], 'ppap-elements.png'), full_page=True)
+            sheet.close()
+            ok, page_err = True, ''
+        except Exception as e:
+            ok, page_err = False, str(e)[:120]
+        check('PPAP 요소: 문서·증적 기록 잇기 → 요소 표에서 양식지 열기', ok, page.url if ok else page_err)
+
         # 기록 화면 새로 만들기: 목록 「새로 만들기」 → 입력 → 저장 → 새 기록 화면
         try:
             page.goto('/app/r/core/department')

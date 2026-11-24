@@ -1,5 +1,6 @@
 """admin·기존 뷰·API가 함께 쓰는 업무 규칙. 본문은 기존 admin·뷰 코드를 옮긴 것이다(docs/architecture-migration-plan.md 3.2)."""
 from django.core.exceptions import PermissionDenied, ValidationError
+from django.contrib.contenttypes.fields import GenericForeignKey
 from django.contrib.contenttypes.models import ContentType
 from django.db import IntegrityError, models, transaction
 from django.forms import modelform_factory
@@ -7,6 +8,7 @@ from django.forms.models import model_to_dict
 from django.http import Http404
 from django.utils import timezone
 
+from . import recordspec
 from .grid import collect_rows, record_version, table_version
 from .models import BomLine, EditRequest, Hold, Nonconformance, RevisionLog, RoutingStep, is_approver
 from .records import can_edit_locked, delete_record, edit_unlocked, is_locked
@@ -79,6 +81,10 @@ def assert_editable(obj, user, lock_parent=''):
 def save_edit(obj, fields, user, values):
     """고치기 공용(기록 화면 PATCH·들여오기): 지금 값에 values를 덮어 fields 칸만 폼 검증 → 잠금 규칙 저장. 먼저 assert_editable."""
     model = type(obj)
+    generic = {n for n in fields if isinstance(model._meta.get_field(n), GenericForeignKey)}  # 증적 기록(W4)
+    for n in generic & set(values):
+        setattr(obj, n, recordspec.generic_target(obj, n, values[n]))
+    fields = [n for n in fields if n not in generic]
     form = modelform_factory(model, fields=fields)({**model_to_dict(obj, fields=fields), **values}, instance=obj)
     if not form.is_valid():
         raise ValidationError({k: list(v) for k, v in form.errors.items()})

@@ -8,7 +8,7 @@ from django.utils import timezone
 from openpyxl import load_workbook
 
 from core import recordspec
-from core.models import ModuleSwitch
+from core.models import Item, ModuleSwitch
 from core.relations import record_url
 
 
@@ -668,6 +668,38 @@ class RecordsAuditPpapApiTest(TestCase):
         self.assertEqual(r.status_code, 409, r.content)
         el.refresh_from_db()
         self.assertEqual(el.note, '고객 지정 양식')
+
+    def test_ppap_element_links_record_and_opens_sheets(self):
+        """W4: 요소에 문서·증적 기록을 새 화면에서 잇고, 요소 표·「⋯」에서 양식지로 연다."""
+        from qms.models import ControlPlan
+        plan = ControlPlan.objects.create(item=self.item)
+        other = ControlPlan.objects.create(item=Item.objects.create(code='X9', name='남의 품목', item_type=Item.FINISHED))
+        el = self.ppap.elements.get(number=7)
+        edit = {e['key']: e for e in self.detail('qms.ppapelement', el.pk)['edit']}
+        values = [c['value'] for c in edit['record']['choices']]
+        self.assertIn(f'qms.controlplan:{plan.pk}', values)
+        self.assertNotIn(f'qms.controlplan:{other.pk}', values)  # 이 제출 품목의 기록만
+        r = self.patch('qms.ppapelement', el.pk, {'record': f'qms.controlplan:{plan.pk}', 'document': str(self.doc.pk)})
+        self.assertEqual(r.status_code, 200, r.content)
+        el.refresh_from_db()
+        self.assertEqual((el.record, el.document), (plan, self.doc))
+        sheets = [{'label': '문서 양식지', 'url': f'/app/r/qms/document/{self.doc.pk}/print'},
+                  {'label': '기록 양식지', 'url': f'/app/plans/{plan.pk}/print'}]
+        rows = next(c for c in self.detail('qms.ppapsubmission', self.ppap.pk)['children'] if c['key'] == 'elements')['rows']
+        self.assertEqual(next(x for x in rows if x['id'] == el.pk)['sheets'], sheets)
+        links = self.detail('qms.ppapelement', el.pk)['links']
+        self.assertEqual([x for x in links if x in sheets], sheets)
+        for bad in (f'auth.user:{self.root.pk}', 'qms.controlplan:99999', 'x'):  # 개인·인증 기록, 없는 기록, 틀린 값
+            self.assertEqual(self.patch('qms.ppapelement', el.pk, {'record': bad}).status_code, 400, bad)
+        self.assertEqual(self.patch('qms.ppapelement', el.pk, {'record': ''}).status_code, 200)
+        el.refresh_from_db()
+        self.assertIsNone(el.record)
+
+    def test_audit_evidence_rows_open_sheets(self):
+        from qms.models import Evidence
+        Evidence.objects.create(item=self.ai, document=self.doc)
+        row = self.detail('qms.audititem', self.ai.pk)['children'][0]['rows'][0]
+        self.assertEqual(row['sheets'], [{'label': '문서 양식지', 'url': f'/app/r/qms/document/{self.doc.pk}/print'}])
 
     def test_audit_closing_allowed_when_module_off(self):
         self.finding.grade = 'OBS'

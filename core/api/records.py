@@ -24,7 +24,7 @@ from core.export import document_xlsx, table_xlsx, xlsx_response
 from core.grid import record_version
 from core.models import Approvable, EditRequest, Lot, Nonconformance, is_approver
 from core.records import can_edit_locked, is_locked
-from core.relations import record_url, status_of, trace_url
+from core.relations import record_url, sheet_url, status_of, trace_url
 
 from . import listing
 from .permissions import require_perm
@@ -46,8 +46,19 @@ def _columns(model, names, sorts=()):
     return [{'key': n, 'label': recordspec.label_of(model, n), 'sortable': n in sorts} for n in names]
 
 
+def _sheets(obj):
+    """증적(PPAP 요소·심사 증적)에 이어진 문서·기록을 양식지로 연다(W4)."""
+    if obj._meta.label_lower not in ('qms.ppapelement', 'qms.evidence'):
+        return []
+    pairs = (('문서 양식지', obj.document), ('기록 양식지', obj.record))
+    return [{'label': label, 'url': url} for label, o in pairs if o is not None and (url := sheet_url(o))]
+
+
 def _row(obj, names):
-    return {'id': obj.pk, 'url': record_url(obj), 'status': status_of(obj), 'cells': recordspec.cells(obj, names)}
+    row = {'id': obj.pk, 'url': record_url(obj), 'status': status_of(obj), 'cells': recordspec.cells(obj, names)}
+    if sheets := _sheets(obj):
+        row['sheets'] = sheets
+    return row
 
 
 class RecordListView(APIView):
@@ -201,7 +212,7 @@ def _links(obj, user):
         links.append({'label': 'CAPA 만들기', 'url': capa_new_url(obj)})
     if label == 'core.nonconformance' and obj.is_approved:
         links.append({'label': '메일 보내기', 'url': f'/app/nc-mail/{obj.pk}'})
-    return links
+    return links + _sheets(obj)
 
 
 def _child_add_url(rel, parent, user):

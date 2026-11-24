@@ -1,5 +1,5 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { Alert, Button, Checkbox, Empty, Form, Input, InputNumber, Modal, Select, Spin, Table, Typography, Upload, message } from 'antd'
+import { Alert, Button, Checkbox, Empty, Form, Input, InputNumber, Modal, Select, Space, Spin, Table, Typography, Upload, message } from 'antd'
 import { useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
@@ -15,7 +15,10 @@ import { addRecent } from '../../lib/recent'
 
 // core/api/records.py RecordDetailView 응답
 interface Field { key: string; label: string; value: string; url: string | null }
-interface Row { id: number; url: string | null; status: string | null; cells: Record<string, string> }
+interface Row {
+  id: number; url: string | null; status: string | null; cells: Record<string, string>
+  sheets?: { label: string; url: string }[] // 증적(PPAP 요소·심사 증적)에 이어진 문서·기록 양식지
+}
 interface Child { key: string; label: string; columns: { key: string; label: string }[]; rows: Row[]; add_url: string | null }
 type Value = string | number | boolean | null | Record<string, string>[] | string[]
 export interface Edit {
@@ -214,7 +217,8 @@ export default function RecordView() {
     setEditing(true)
   }
   const save = async () => {
-    const values = await form.validateFields()
+    // 지운 칸(undefined)은 JSON에서 빠지므로 null로 보내 비운다
+    const values = Object.fromEntries(Object.entries(await form.validateFields()).map(([k, v]) => [k, v ?? null]))
     setSaving(true)
     setErr('')
     try {
@@ -350,15 +354,31 @@ export default function RecordView() {
               )}
             </h3>
             <Table<Row>
+              className="child-table"
               size="small"
               pagination={false}
               rowKey="id"
               dataSource={c.rows}
-              columns={c.columns.map((col, i) => ({
-                title: col.label,
-                key: col.key,
-                render: (_: unknown, r: Row) => (i === 0 ? <Go url={r.url}>{r.cells[col.key] || '—'}</Go> : r.cells[col.key]),
-              }))}
+              columns={[
+                ...c.columns.map((col, i) => ({
+                  title: col.label,
+                  key: col.key,
+                  render: (_: unknown, r: Row) => (i === 0 ? <Go url={r.url}>{r.cells[col.key] || '—'}</Go> : r.cells[col.key]),
+                })),
+                ...(c.rows.some((r) => r.sheets?.length)
+                  ? [{
+                      title: '양식지',
+                      key: 'sheets',
+                      render: (_: unknown, r: Row) => (
+                        <Space size={12} style={{ whiteSpace: 'nowrap' }}>
+                          {r.sheets?.map((s) => (
+                            <a key={s.url} href={s.url} target="_blank" rel="noreferrer">{s.label.replace(' 양식지', '')}</a>
+                          ))}
+                        </Space>
+                      ),
+                    }]
+                  : []),
+              ]}
             />
           </section>
         ))}

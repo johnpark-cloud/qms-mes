@@ -133,7 +133,7 @@
 | 연결 패널(`/api/relations/<app.model>/<id>/`)은 그 기록 보기 권한이 있어야 열리고, 사용자가 볼 권한이 없는 표의 묶음은 개수도 알리지 않는다. 개인 앱·이력 표·사용자 계정은 연결 대상이 아니다. | `core/api/views.py` `RelationsView`, `core/relations.py` |
 | 엑셀 일괄 등록은 대상(품번·작업지시)의 추가·변경 권한이 모두 있어야 올릴 수 있다(기존 행을 덮어쓰므로). 각 행은 모델 검증(`full_clean`)을 거치고, 한 행이라도 틀리면 전체를 되돌린다. | `core/views.py` `import_view`, `core/importer.py` |
 | 인쇄·승인·삭제 요청 경로는 개인 자료와 계정·세션 등 시스템 기록(`personal`, `auth`, `admin`, `sessions`, `contenttypes`)을 열지 않는다. | `core/views.py` `_get_record` |
-| 엑셀 양식 출력은 읽기 전용 메서드만 호출한다. 개인·인증 앱(`PRIVATE_APPS`)은 양식 대상과 심사 증적·PPAP 요소의 기록 종류에서 제외하고, 값을 따라가다 그 앱 기록에 닿으면 칸을 비운다. | `qms/models.py` `PRIVATE_APPS`, `ExcelTemplate.fill`, `report_safe` |
+| 엑셀 양식 출력은 읽기 전용 메서드만 호출한다. 개인·인증 앱(`PRIVATE_APPS`)은 양식 대상과 심사 증적·PPAP 요소의 기록 종류에서 제외하고, 값을 따라가다 그 앱 기록에 닿으면 칸을 비운다. 기록 화면에서 PPAP 요소의 증적 기록은 `EVIDENCE_RECORDS`(관리계획서·검사기준·검사·4M 변경) 가운데 그 제출 품목의 기록만 서버가 받는다(그 밖은 400). | `qms/models.py` `PRIVATE_APPS`, `ExcelTemplate.fill`, `report_safe`, `core/recordspec.py` `generic_target` |
 | 품질 KPI(실패비용 포함)는 `qms.view_customerclaim`, 공급자 성적표는 `qms.view_scar`, SPC 관리도는 `qms.view_measurement`, 내 할 일 목록 위젯은 `core.view_nonconformance` 권한이 있어야 본다. 검사원은 KPI·공급자 화면을 볼 수 없다. | `qms/views.py`, `qms/widgets.py`, `core/nav.py` |
 | KPI는 소속 부서 것만 본다(`/kpi/` 화면과 내 할 일 KPI 위젯 모두). 부서는 역할 그룹 묶음이고 지금은 `품질`(품질엔지니어·품질팀장·검사원)뿐이다. PPM·직행률·8D·실패비용·부적합 유형 파레토는 품질, 공정 수율은 품질·생산 부서 KPI다. 품질팀장·시스템 관리자는 모든 부서 KPI를 본다. KPI 위젯은 `/kpi/`와 같은 `qms.view_customerclaim` 권한도 있어야 보인다. 부서를 늘리려면 `DEPARTMENTS`에 그룹을 더한다. | `qms/kpi.py` `DEPARTMENTS`·`KPI_DEPARTMENTS`·`can_see`, `qms/views.py` `kpi_view`, `qms/widgets.py` `kpi_allowed` |
 
