@@ -35,7 +35,7 @@
 
 | 규칙 | 위치 |
 | --- | --- |
-| 승인 대상(`Approvable`: 검사기준, 관리계획서, 4M 변경, 문서 개정, PPAP)은 승인 서명 화면에서만 승인된다. 승인자는 품질팀장 그룹이나 시스템 관리자이고, 비밀번호를 다시 입력한다. | `core/views.py` `approve`, `core/models.py` `is_approver` |
+| 승인 대상(`Approvable`: 검사기준, 관리계획서, 4M 변경, 문서 개정, PPAP, 경영검토)은 승인 서명 화면에서만 승인된다. 승인자는 품질팀장 그룹이나 시스템 관리자이고, 비밀번호를 다시 입력한다. | `core/views.py` `approve`, `core/models.py` `is_approver` |
 | 승인된 기록은 수정할 수 없다. 새 개정을 만든다. | `Approvable.save`, `Characteristic.save`, `ControlPlanLine` 저장 |
 | 검사·문서 기준은 "승인된 최신 개정"이 최신 승인본이다. | `InspectionSpec.current` |
 | 문서 개정은 원본 파일이나 본문 중 하나가 있어야 한다. 새 개정에 둘 다 없으면 직전 개정(등록 순) 본문을 복사한다. 승인된 개정은 본문도 잠긴다(`Approvable.save`). | `DocumentRevision.clean`/`save`/`fill_body` |
@@ -115,6 +115,7 @@
 | SCAR는 공급자 회신 없이 종결할 수 없다. | `Scar.clean` |
 | CAPA 유효성은 조치 완료 후 확인일·확인자와 함께 기록하고, "유효"여야 종결한다. | `Capa.clean` |
 | 내부심사는 실시일이 있어야 하고, CAPA가 연결되지 않은 중·경부적합 발견사항이 있으면 종결할 수 없다. | `InternalAudit.clean` |
+| 경영검토는 검토 기간 끝이 시작보다 앞설 수 없고, 검토 결과(9.3.3)가 있어야 승인된다. 승인 후 회의록은 잠기고(`Approvable.save`), 조치 사항은 계속 기록한다. 품질 성과·이전 조치 상태는 등록할 때 비어 있을 때만 채운다(사람이 적은 글은 덮지 않음). | `ManagementReview.clean`/`save`, `qms/review.py` |
 
 ## 10. 권한과 개인정보
 

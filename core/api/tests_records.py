@@ -64,6 +64,9 @@ class RecordsApiTest(TestCase):
         audit = InternalAudit.objects.create(name='상반기 공정심사', checklist=cl, planned_date=today, auditor='홍길동')
         AuditFinding.objects.create(audit=audit, clause='8.5.1', grade='OBS', description='작업표준 미게시')
         PpapSubmission.objects.create(item=self.lot.item, customer='H사', reason='신규')  # 요소 18개 자동 생성
+        from qms.models import ManagementReview, ManagementReviewAction
+        mr = ManagementReview.objects.create(period_start=today, period_end=today, chair=self.root, attendees='대표')
+        ManagementReviewAction.objects.create(review=mr, task='검사 인원 충원', owner=self.root, due_date=today)
         mes_fixture()
         self.client.force_login(self.root)
 

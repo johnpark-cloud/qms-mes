@@ -21,7 +21,7 @@ from core.rules import child_editable
 from .models import (AuditChecklist, AuditFinding, AuditItem, Capa, ChangeRequest, Characteristic, ControlPlan,
                      ControlPlanLine, CustomerClaim, CustomerRule, Document, DocumentRevision, Evidence, ExcelTemplate, Gauge,
                      GaugeCalibration, MsaStudy,
-                     Inspection, InspectionSpec, InternalAudit, Measurement, Memo, MemoPhoto, PpapElement, PpapSubmission, Qualification, Scar)
+                     Inspection, InspectionSpec, InternalAudit, ManagementReview, ManagementReviewAction, Measurement, Memo, MemoPhoto, PpapElement, PpapSubmission, Qualification, Scar)
 from .rules import NotApproved, make_specs_from_plan, new_spec_revision
 from .similar import similar_html
 
@@ -382,6 +382,25 @@ class PpapSubmissionAdmin(ApprovalAdminMixin, ReportLinksMixin, BaseAdmin):
             fields.append('level')  # 요소가 이미 수준에 맞춰 만들어졌다
         # 승인 후에도 제출일·고객 승인일은 기록한다
         return [f for f in fields if f not in PpapSubmission.AFTER_APPROVAL]
+
+
+class ManagementReviewActionInline(admin.TabularInline):
+    model = ManagementReviewAction
+    extra = 0
+    fields = ['task', 'owner', 'due_date', 'done_on']
+
+
+@admin.register(ManagementReview)
+class ManagementReviewAdmin(ApprovalAdminMixin, BaseAdmin):
+    list_display = ['held_on', 'period_start', 'period_end', 'chair', 'is_approved']
+    search_fields = ['attendees', 'outputs']
+    inlines = [ManagementReviewActionInline]
+
+
+@admin.register(ManagementReviewAction)
+class ManagementReviewActionAdmin(BaseAdmin):
+    list_display = ['task', 'review', 'owner', 'due_date', 'done_on']
+    search_fields = ['task']
 
 
 @admin.register(CustomerRule)

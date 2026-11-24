@@ -119,6 +119,7 @@ NAV = [
                   ('공급자 시정조치(SCAR)', 'admin:qms_scar_changelist', 'qms.view_scar'),
                   ('PPAP', 'admin:qms_ppapsubmission_changelist', 'qms.view_ppapsubmission')]),
     ('분석 및 보고서', [('품질 KPI', 'kpi', 'qms.view_customerclaim'),
+                  ('경영검토', 'admin:qms_managementreview_changelist', 'qms.view_managementreview'),
                   ('엑셀 보고서 양식', 'admin:qms_exceltemplate_changelist', 'qms.view_exceltemplate')]),
     ('기준정보 및 시스템 관리', [('품목·BOM·라우팅', 'admin:core_item_changelist', 'core.view_item'),
                        ('공정', 'admin:core_process_changelist', 'core.view_process'),

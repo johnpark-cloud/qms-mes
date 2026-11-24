@@ -38,6 +38,7 @@ MODULES = {
                         ('audit-pack/', 'api/qms/audit-pack/'), requires=('qms_capa',)),
     'qms_document': Module('문서 관리', ('qms.document', 'qms.documentrevision')),
     'qms_kpi': Module('품질 KPI', (), ('kpi/', 'api/qms/kpi/')),
+    'qms_review': Module('경영검토', ('qms.managementreview', 'qms.managementreviewaction')),
 }
 
 BASE_MODELS = (

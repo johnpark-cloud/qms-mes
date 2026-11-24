@@ -1191,6 +1191,65 @@ class PpapElement(models.Model):
         super().save(*args, **kwargs)
 
 
+# ---------- 경영검토 (ISO 9001 9.3) ----------
+
+class ManagementReview(Approvable):
+    """경영검토 회의록. 9.3.2 입력은 칸마다 적고, 품질 성과·이전 조치 상태는 등록할 때 비어 있으면 자동 요약(qms/review.py)으로 채운다.
+    승인(최고경영자 확인 서명) 뒤 잠긴다. 조치 사항은 승인 뒤에도 완료일을 기록한다."""
+    held_on = models.DateField('검토일', default=timezone.localdate)
+    period_start = models.DateField('검토 기간 시작')
+    period_end = models.DateField('검토 기간 끝')
+    chair = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name='+', verbose_name='의장')
+    attendees = models.CharField('참석자', max_length=200)
+    prev_actions = models.TextField('이전 경영검토 조치 상태', blank=True, help_text='비워 두면 이전 검토의 조치 사항으로 채웁니다.')
+    issues = models.TextField('내·외부 이슈 변화', blank=True)
+    customer_feedback = models.TextField('고객 만족·피드백', blank=True)
+    performance = models.TextField('품질 성과', blank=True,
+                                   help_text='비워 두면 검토 기간의 검사·부적합·클레임·CAPA·심사·공급자·계측기 현황으로 채웁니다.')
+    resources = models.TextField('자원의 적절성', blank=True)
+    risks = models.TextField('리스크·기회 조치의 효과성', blank=True)
+    improvements = models.TextField('개선 기회', blank=True)
+    outputs = models.TextField('검토 결과', blank=True, help_text='개선 기회, 품질경영시스템 변경 필요성, 자원 필요성에 대한 결정. 승인 전에 적어야 합니다.')
+    history = HistoricalRecords()
+
+    class Meta:
+        verbose_name = verbose_name_plural = '경영검토'
+        ordering = ['-held_on', '-pk']
+
+    def __str__(self):
+        return f'경영검토 {self.held_on}'
+
+    def clean(self):
+        if self.period_start and self.period_end and self.period_start > self.period_end:
+            raise ValidationError({'period_end': '검토 기간 끝은 시작보다 앞설 수 없습니다.'})
+        if self.approved_at and not self.outputs.strip():
+            raise ValidationError('검토 결과를 적어야 승인할 수 있습니다.')
+
+    def save(self, *args, **kwargs):
+        self.clean()
+        if self._state.adding:
+            from . import review
+            self.performance = self.performance or review.performance(self.period_start, self.period_end)
+            self.prev_actions = self.prev_actions or review.previous_actions(self.held_on)
+        super().save(*args, **kwargs)
+
+
+class ManagementReviewAction(models.Model):
+    review = models.ForeignKey(ManagementReview, on_delete=models.CASCADE, related_name='actions', verbose_name='경영검토')
+    task = models.CharField('할 일', max_length=200)
+    owner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name='+', verbose_name='담당자')
+    due_date = models.DateField('기한')
+    done_on = models.DateField('완료일', null=True, blank=True)
+    history = HistoricalRecords()
+
+    class Meta:
+        verbose_name = verbose_name_plural = '경영검토 조치'
+        ordering = ['due_date', 'pk']
+
+    def __str__(self):
+        return self.task
+
+
 # ---------- 보고서 ----------
 
 USER_FIELDS = {'username', 'first_name', 'last_name', 'get_full_name'}

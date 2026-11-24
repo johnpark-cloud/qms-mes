@@ -306,6 +306,29 @@ SPECS = {
         order=('submission', 'number'),
         edit=('requirement', 'note', 'document', 'record'),
         lock_parent='submission'),
+    # 경영검토(ISO 9001 9.3): 품질 성과·이전 조치 상태는 등록할 때 비어 있으면 자동 요약(qms/review.py). 승인 뒤 잠금, 조치 완료일은 계속 기록
+    'qms.managementreview': Spec(
+        fields=('held_on', 'period_start', 'period_end', 'chair', 'attendees', 'prev_actions', 'issues', 'customer_feedback',
+                'performance', 'resources', 'risks', 'improvements', 'outputs', 'approved_by', 'approved_at'),
+        columns=('held_on', 'period_start', 'period_end', 'chair', 'approved_at'),
+        search=('attendees', 'outputs'),
+        tabs=(ALL, ('draft', '초안', lambda qs: qs.filter(approved_at__isnull=True)),
+              ('approved', '승인됨', lambda qs: qs.filter(approved_at__isnull=False))),
+        children=(Child('actions', '조치 사항', ('task', 'owner', 'due_date', 'done_on'), ('due_date', 'pk')),),
+        order=('-held_on', '-pk'),
+        edit=('held_on', 'period_start', 'period_end', 'chair', 'attendees', 'prev_actions', 'issues', 'customer_feedback',
+              'performance', 'resources', 'risks', 'improvements', 'outputs'),
+        create=('held_on', 'period_start', 'period_end', 'chair', 'attendees', 'issues', 'customer_feedback', 'resources',
+                'risks', 'improvements', 'outputs')),
+    'qms.managementreviewaction': Spec(
+        fields=('review', 'task', 'owner', 'due_date', 'done_on'),
+        columns=('task', 'review', 'owner', 'due_date', 'done_on'),
+        search=('task',),
+        tabs=(('open', '미완료', lambda qs: qs.filter(done_on__isnull=True)), ALL),
+        side=('relations', 'history'),
+        order=('due_date', 'pk'),
+        edit=('task', 'owner', 'due_date', 'done_on'),
+        create=('review', 'task', 'owner', 'due_date')),
     # 작업지시·실적·출하(REC-11): LOT·작업지시·공정 같은 외래키는 관리 화면에서만 — 보류·4M 인터록(모델 clean/save)이 그대로 막는다.
     # 새 등록도 관리 화면 추가 폼. 기록 화면은 수량·납기 정정만(모델 clean: 양품+불량 ≤ 투입, 이전 공정 실적)
     'core.workorder': Spec(
@@ -430,6 +453,10 @@ DOCS = {
         ('고객', ('customer_notice', 'customer_status', 'customer_approval_ref')),
         ('검토', ('reviewer', 'reviewed_at', 'review_comment')),
         ('승인·초품', ('approved_by', 'approved_at', 'first_article_state')))),
+    'qms.managementreview': ('경영검토 회의록', (
+        ('회의', ('held_on', 'period_start', 'period_end', 'chair', 'attendees')),
+        ('입력 (9.3.2)', ('prev_actions', 'issues', 'customer_feedback', 'performance', 'resources', 'risks', 'improvements')),
+        ('검토 결과 (9.3.3)', ('outputs',)))),
     'qms.internalaudit': ('내부심사 보고서', (
         ('심사', ('name', 'kind', 'scope', 'checklist', 'planned_date', 'performed_at', 'closed_at')),
         ('심사원·피심사', ('auditor', 'auditor_user', 'auditee', 'auditee_dept')))),
