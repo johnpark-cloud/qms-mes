@@ -47,7 +47,7 @@ PostgreSQL `COPY`나 pgAdmin으로 CSV를 테이블에 바로 넣으면 아래�
 | --- | --- | --- |
 | 목록 「엑셀 받기」 | 기록 목록(현재 탭·검색·필터·정렬 그대로) | `core/api/records.py` (`?export=xlsx`) |
 | 전용 화면 목록 엑셀 받기 | 품목, 공정, 고객사별 8D 기한, 검사 대기, 검사 기록, 검사기준, 관리계획서 | `core/api/master.py`, `qms/api/inspections.py`·`specs.py`·`plans.py` |
-| 문서 엑셀 | 검사기준서, 관리계획서, 검사 성적서 (`document_xlsx`) | `qms/api/specs.py`·`plans.py`·`inspections.py` |
+| 문서 엑셀 | 검사기준서, 관리계획서, PFMEA(`?kind=pfmea`), 검사 성적서 (`document_xlsx`) | `qms/api/specs.py`·`plans.py`·`inspections.py` |
 | 엑셀 보고서 양식 | 성적서(COA) 등 회사 양식 | `qms/models.py` `ExcelTemplate` |
 | 첨부 받기, 백업 `backup` | 파일, DB 전체 | `core/management/commands/backup.py` |
 

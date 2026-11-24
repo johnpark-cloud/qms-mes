@@ -388,7 +388,8 @@ def spec_logs(spec, confirmed_only):
 
 PLAN_FIELDS = {'process': 'fk', 'characteristic': 'text', 'special': 'text', 'lsl': 'number', 'usl': 'number', 'unit': 'text',
                'method': 'text', 'sampling': 'text', 'inspection_type': 'text', 'reaction': 'text', 'failure_mode': 'text',
-               'severity': 'int', 'occurrence': 'int', 'detection': 'int'}
+               'severity': 'int', 'occurrence': 'int', 'detection': 'int', 'effect': 'text', 'cause': 'text',
+               'prevention': 'text', 'recommended_action': 'text'}
 
 
 class NotApproved(ValidationError):
@@ -426,6 +427,21 @@ def save_plan(plan, user, data, lines, version):
         for ln in deleted:
             ln.delete()
     return plan
+
+
+def plan_checks(plan):
+    """PFMEA↔관리계획서 정합성 경고(막지 않는다). 줄 순서대로 「특성: 내용」."""
+    out = []
+    for ln in plan.lines.order_by('pk'):
+        if ln.action_priority == 'H' and not ln.recommended_action:
+            out.append(f'{ln.characteristic}: 조치 우선순위 H인데 권고 조치가 비어 있습니다.')
+        if (ln.severity or 0) >= 9 and not ln.special:
+            out.append(f'{ln.characteristic}: 심각도 9 이상인데 특별특성이 없습니다. CC 지정을 검토하세요.')
+        if ln.special and (not ln.failure_mode or None in (ln.severity, ln.occurrence, ln.detection)):
+            out.append(f'{ln.characteristic}: 특별특성인데 PFMEA(고장모드·S·O·D)가 비어 있습니다.')
+        if ln.failure_mode and not ln.method and not ln.inspection_type:
+            out.append(f'{ln.characteristic}: 고장모드에 대한 관리(측정방법·검사 구분)가 없습니다.')
+    return out
 
 
 def current_plan(item, stage):

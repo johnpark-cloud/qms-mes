@@ -13,7 +13,7 @@ from core.rules import approve, approve_and_log, request_revision_log
 from qms.api.specs import BAD_BODY, PAGE_SIZE, _bad, _day, _log, _num, _status, _who
 from qms.models import SPECIAL, ControlPlan, ControlPlanLine, InspectionSpec
 from qms.rules import (PLAN_FIELDS, Stale, compare_plans, current_plan, make_specs_from_plan, open_or_new_plan_revision,
-                       plan_diff_text, plan_logs, plan_version, prev_plan, save_plan)
+                       plan_checks, plan_diff_text, plan_logs, plan_version, prev_plan, save_plan)
 
 LIST_COLUMNS = ['품번', '품명', '단계', '개정', '상태', '항목 수', '승인자', '승인일']
 
@@ -72,6 +72,7 @@ def _detail(plan, user):
         'type_options': [{'value': '', 'label': '없음'}] + [{'value': v, 'label': label} for v, label in InspectionSpec.TYPES],
         'stage_options': [{'value': v, 'label': label} for v, label in ControlPlan.STAGES],
         'diff': compare_plans(prev, plan),
+        'checks': plan_checks(plan),
     }
 
 
@@ -194,9 +195,10 @@ class PlanDocumentView(APIView):
     def get(self, request, pk):
         require_perm(request.user, 'qms.view_controlplan')
         plan = get_object_or_404(ControlPlan, pk=pk)
-        doc = plan.document()
+        pfmea = request.query_params.get('kind') == 'pfmea'
+        doc = plan.pfmea_document() if pfmea else plan.document()
         if request.query_params.get('export') == 'xlsx':
-            name = f'{plan.item.code}_{plan.get_stage_display()}_관리계획서_Rev{plan.revision}.xlsx'
+            name = f'{plan.item.code}_{plan.get_stage_display()}_{"PFMEA" if pfmea else "관리계획서"}_Rev{plan.revision}.xlsx'
             return xlsx_response(document_xlsx(doc), name)
         return Response(doc)
 

@@ -199,7 +199,8 @@ class ControlPlanLineInline(LockedWhenApprovedInline):
     extra = 1
     readonly_fields = ['action_priority']
     fields = ['process', 'characteristic', 'special', 'lsl', 'usl', 'unit', 'method', 'sampling', 'inspection_type',
-              'reaction', 'failure_mode', 'severity', 'occurrence', 'detection', 'action_priority']
+              'reaction', 'failure_mode', 'effect', 'cause', 'prevention', 'severity', 'occurrence', 'detection', 'action_priority',
+              'recommended_action']
 
 
 @admin.register(ControlPlan)

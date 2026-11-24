@@ -16,7 +16,7 @@ import SignModal from '../../components/SignModal'
 import { addRecent } from '../../lib/recent'
 import { SAMPLING } from '../../lib/sampling'
 
-const FIELDS = ['process', 'characteristic', 'special', 'lsl', 'usl', 'unit', 'method', 'sampling', 'inspection_type', 'reaction', 'failure_mode', 'severity', 'occurrence', 'detection'] as const
+const FIELDS = ['process', 'characteristic', 'special', 'lsl', 'usl', 'unit', 'method', 'sampling', 'inspection_type', 'reaction', 'failure_mode', 'effect', 'severity', 'cause', 'prevention', 'occurrence', 'detection', 'recommended_action'] as const
 const norm = (v: unknown) => String(v ?? '')
 const errText = (e: unknown, fallback: string) => (e instanceof Error ? e.message : fallback)
 
@@ -32,9 +32,13 @@ const makeColumns = (d: PlanDetail): GridColumn[] => [
   { key: 'inspection_type', label: '검사 구분', kind: 'select', options: d.type_options, width: 110 },
   { key: 'reaction', label: '이상 시 조치', kind: 'text', width: 140 },
   { key: 'failure_mode', label: '잠재 고장모드', kind: 'text', width: 140 },
+  { key: 'effect', label: '고장 영향', kind: 'text', width: 140 },
   { key: 'severity', label: 'S', kind: 'number', width: 50 },
+  { key: 'cause', label: '고장 원인', kind: 'text', width: 140 },
+  { key: 'prevention', label: '예방 관리', kind: 'text', width: 140 },
   { key: 'occurrence', label: 'O', kind: 'number', width: 50 },
   { key: 'detection', label: 'D', kind: 'number', width: 50 },
+  { key: 'recommended_action', label: '권고 조치', kind: 'text', width: 140 },
 ]
 
 const toRows = (d: PlanDetail): GridRow[] => d.lines.map((c) => ({ _key: `c${c.id}`, ...c }))
@@ -185,6 +189,8 @@ export default function PlanPage() {
     ...(d.can_make_specs ? [{ key: 'make-specs', label: '검사기준 초안 만들기', disabled: makeSpecs.isPending, onClick: () => makeSpecs.mutate() }] : []),
     { key: 'xlsx', label: <a href={`/api/qms/plans/${id}/document/?export=xlsx`} download>엑셀 받기</a> },
     { key: 'pdf', label: <Link to={`/plans/${id}/print`}>인쇄/PDF</Link> },
+    { key: 'pfmea-xlsx', label: <a href={`/api/qms/plans/${id}/document/?kind=pfmea&export=xlsx`} download>PFMEA 엑셀 받기</a> },
+    { key: 'pfmea-pdf', label: <Link to={`/plans/${id}/print?kind=pfmea`}>PFMEA 인쇄/PDF</Link> },
   ]
 
   const props = [
@@ -247,6 +253,16 @@ export default function PlanPage() {
               <div key={m.id}>
                 <Link to={`/specs/${m.id}`}>{m.title}</Link>
               </div>
+            ))}
+          />
+        )}
+        {d.checks.length > 0 && (
+          <Alert
+            style={{ marginBottom: 12 }}
+            type="warning"
+            message={`PFMEA·관리계획서 확인 ${d.checks.length}건`}
+            description={d.checks.map((c, i) => (
+              <div key={i}>{c}</div>
             ))}
           />
         )}

@@ -501,6 +501,26 @@ class ControlPlan(Approvable):
             **_doc_tail(self, plan_logs(self, confirmed_only=True)),
         }
 
+    def pfmea_document(self):
+        """PFMEA 문서. 관리계획서 줄 중 고장모드가 있는 줄만 AIAG-VDA 열 순서로 보인다. 검출 관리 = 측정방법."""
+        from .rules import plan_logs
+
+        def n(v):
+            return '' if v is None else v
+
+        rows = [[str(ln.process or ''), ln.characteristic, ln.failure_mode, ln.effect, n(ln.severity), ln.special, ln.cause,
+                 ln.prevention, n(ln.occurrence), ln.method, n(ln.detection), ln.action_priority, ln.recommended_action]
+                for ln in self.lines.select_related('process').exclude(failure_mode='').order_by('pk')]
+        return {
+            'title': f'{self.item.code} PFMEA Rev.{self.revision}', 'number': None, 'revision': f'Rev.{self.revision}',
+            'draft': self.approved_by_id is None, 'landscape': True,
+            'head': [['품번', self.item.code], ['품명', self.item.name], ['단계', self.get_stage_display()],
+                     ['관리계획서', str(self)]],
+            'tables': [{'title': '고장모드', 'columns': ['공정', '특성', '잠재 고장모드', '고장 영향', 'S', '특별특성', '고장 원인',
+                                                      '예방 관리', 'O', '검출 관리', 'D', 'AP', '권고 조치'], 'rows': rows}],
+            **_doc_tail(self, plan_logs(self, confirmed_only=True)),
+        }
+
 
 class ControlPlanLine(models.Model):
     plan = models.ForeignKey(ControlPlan, on_delete=models.CASCADE, related_name='lines', verbose_name='관리계획서')
@@ -519,6 +539,11 @@ class ControlPlanLine(models.Model):
     severity = models.PositiveSmallIntegerField('심각도(S)', null=True, blank=True)
     occurrence = models.PositiveSmallIntegerField('발생도(O)', null=True, blank=True)
     detection = models.PositiveSmallIntegerField('검출도(D)', null=True, blank=True)
+    # PFMEA 칸: 관리계획서 한 줄이 PFMEA 한 줄이다. 검출 관리는 측정방법(method)을 쓴다
+    effect = models.CharField('고장 영향', max_length=200, blank=True)
+    cause = models.CharField('고장 원인', max_length=200, blank=True)
+    prevention = models.CharField('예방 관리', max_length=200, blank=True)
+    recommended_action = models.CharField('권고 조치', max_length=200, blank=True)
     history = HistoricalRecords()
 
     class Meta:
@@ -529,6 +554,10 @@ class ControlPlanLine(models.Model):
 
     def clean(self):
         check_limits(self)
+        bad = {f: '1~10으로 적으세요.' for f in ('severity', 'occurrence', 'detection')
+               if getattr(self, f) is not None and not 1 <= getattr(self, f) <= 10}
+        if bad:
+            raise ValidationError(bad)
 
     @property
     def action_priority(self):

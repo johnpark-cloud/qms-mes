@@ -32,6 +32,10 @@ export interface PlanLine {
   severity: number | null
   occurrence: number | null
   detection: number | null
+  effect: string
+  cause: string
+  prevention: string
+  recommended_action: string
 }
 
 export interface PlanDetail {
@@ -56,6 +60,7 @@ export interface PlanDetail {
   type_options: Option[]
   stage_options: Option[]
   diff: { fields: Record<string, [string, string]>; rows: DiffRow[] } | null
+  checks: string[] // PFMEA↔관리계획서 정합성 경고(qms.rules.plan_checks)
 }
 
 // qms/models.py ControlPlan.STAGES 와 같은 값이다.

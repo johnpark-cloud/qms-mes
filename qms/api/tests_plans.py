@@ -181,3 +181,56 @@ class PlanApiTest(TestCase):
         with mock.patch('qms.rules.Characteristic.objects.create', side_effect=ValidationError('중간 실패')):
             client.post('/admin/qms/controlplan/', {'action': 'make_specs', '_selected_action': [a.pk]})
         self.assertFalse(InspectionSpec.objects.filter(item=self.item).exists())
+
+
+class PfmeaLinkTest(TestCase):
+    """PFMEA↔관리계획서: 한 줄에 PFMEA 칸(영향·원인·예방·권고 조치)을 두고, PFMEA 문서와 정합성 경고를 낸다."""
+    setUp, c, mkplan, approve = PlanApiTest.setUp, PlanApiTest.c, PlanApiTest.mkplan, PlanApiTest.approve
+
+    PFMEA = {'effect': '셀 발화', 'cause': '코팅 두께 편차', 'prevention': '코터 갭 일상 점검', 'recommended_action': '두께 인라인 측정 추가'}
+
+    def test_pfmea_fields_save_and_show(self):
+        plan = ControlPlan.objects.create(item=self.item)
+        rows = [{'id': None, 'characteristic': '두께', 'process': self.p1.pk, 'failure_mode': '두께 미달', **self.PFMEA}]
+        r = self.c(self.eng).put(f'/api/qms/plans/{plan.pk}/', {'lines': rows, 'version': None}, format='json')
+        self.assertEqual(r.status_code, 200, r.content)
+        line = r.json()['lines'][0]
+        self.assertEqual({k: line[k] for k in self.PFMEA}, self.PFMEA)
+
+    def test_sod_range_1_to_10(self):
+        plan = ControlPlan.objects.create(item=self.item)
+        bad = [{'id': None, 'characteristic': '가', 'severity': '11', 'occurrence': '0'}]
+        r = self.c(self.eng).put(f'/api/qms/plans/{plan.pk}/', {'lines': bad, 'version': None}, format='json')
+        self.assertEqual(r.status_code, 400)
+        f = r.json()['fields']
+        self.assertEqual((f['lines.0.severity'], f['lines.0.occurrence']), (['1~10으로 적으세요.'], ['1~10으로 적으세요.']))
+
+    def test_pfmea_document(self):
+        plan = self.mkplan()
+        ControlPlanLine.objects.filter(plan=plan, characteristic='용량').update(failure_mode='용량 미달', **self.PFMEA)
+        d = self.c(self.eng).get(f'/api/qms/plans/{plan.pk}/document/?kind=pfmea').json()
+        self.assertEqual(d['title'], 'F1 PFMEA Rev.1')
+        t = d['tables'][0]
+        self.assertEqual(t['columns'], ['공정', '특성', '잠재 고장모드', '고장 영향', 'S', '특별특성', '고장 원인', '예방 관리', 'O',
+                                        '검출 관리', 'D', 'AP', '권고 조치'])
+        self.assertEqual(t['rows'], [[str(self.p1), '용량', '용량 미달', '셀 발화', 9, 'CC', '코팅 두께 편차', '코터 갭 일상 점검', 4,
+                                      '', 3, 'H', '두께 인라인 측정 추가']])  # 고장모드 없는 「온도」 줄은 빠진다
+        self.assertIn(['관리계획서', str(plan)], d['head'])
+        x = self.c(self.eng).get(f'/api/qms/plans/{plan.pk}/document/?kind=pfmea&export=xlsx')
+        self.assertIn('PFMEA', x['Content-Disposition'])
+
+    def test_checks(self):
+        plan = ControlPlan.objects.create(item=self.item)
+        mk = lambda **kw: ControlPlanLine.objects.create(plan=plan, **kw)
+        mk(characteristic='A', failure_mode='a', severity=9, occurrence=5, detection=3, special='CC', method='캘리퍼')
+        mk(characteristic='B', failure_mode='b', severity=9, occurrence=1, detection=1, method='육안')
+        mk(characteristic='C', special='SC')
+        mk(characteristic='D', failure_mode='d', severity=3, occurrence=2, detection=2)
+        mk(characteristic='E', failure_mode='e', severity=5, occurrence=2, detection=2, special='SC', inspection_type='OUTGOING')
+        checks = self.c(self.eng).get(f'/api/qms/plans/{plan.pk}/').json()['checks']
+        self.assertEqual(checks, [
+            'A: 조치 우선순위 H인데 권고 조치가 비어 있습니다.',
+            'B: 심각도 9 이상인데 특별특성이 없습니다. CC 지정을 검토하세요.',
+            'C: 특별특성인데 PFMEA(고장모드·S·O·D)가 비어 있습니다.',
+            'D: 고장모드에 대한 관리(측정방법·검사 구분)가 없습니다.',
+        ])
