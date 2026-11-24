@@ -119,4 +119,4 @@ React 19·TypeScript·Vite·Ant Design 새 화면. 개발 PC에서 `npm run buil
 | 서버 | `QMS_DEBUG`(기본 1), `QMS_ALLOWED_HOSTS` |
 | 메일 | `QMS_SMTP_HOST`·`QMS_SMTP_PORT`·`QMS_SMTP_USER`·`QMS_SMTP_PASSWORD`·`QMS_SMTP_TLS`·`QMS_MAIL_FROM`, 알림 대상 `QMS_NOTIFY_EMAILS`, `QMS_TEAMS_WEBHOOK` |
 
-마이그레이션은 `core/migrations`, `qms/migrations`, `personal/migrations`에 있다. `서버시작.bat`이 켤 때마다 `migrate --noinput`을 실행한다.
+마이그레이션은 `core/migrations`, `qms/migrations`, `personal/migrations`에 있다. `서버시작.bat`이 켤 때마다 `migrate --check`로 갱신할 것이 있는지 보고, 있으면 `backup`(실패 시 중단) 후 `migrate --noinput`을 실행한다.

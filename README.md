@@ -15,6 +15,8 @@ python -m venv .venv
 
 프로젝트 폴더의 **`서버시작.bat`을 더블클릭**하면 DB 갱신(migrate) 후 서버가 켜지고 브라우저가 열립니다. 끌 때는 그 검은 창에서 `Ctrl+C`를 누르거나 창을 닫습니다.
 
+갱신할 DB 구조가 있으면 migrate 전에 자동으로 백업합니다(`QMS_BACKUP_DIR`, 없으면 `%USERPROFILE%\qms-backup`; 30일 지난 백업은 지웁니다). 백업이 실패하면 DB 갱신을 하지 않고 멈춥니다.
+
 터미널에서 직접 켤 때:
 
 ```powershell
