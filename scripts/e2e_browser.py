@@ -356,13 +356,13 @@ try:
             ok = False
         check('검사 목록 탭', ok, page.url)
 
-        try:  # 요약 타일 = API 요약, ?tab 없이도 수입검사 메뉴가 강조된다
+        try:  # 요약 타일 = API 요약, 검사 실적은 검사 입력의 하위 탭이라 사이드바는 「검사 입력」이 강조된다(core/nav.py SUB)
             page.goto('/app/inspections')
             page.locator('[data-summary]').wait_for(timeout=5000)
             s = api_get(page, '/api/qms/inspections/?tab=INCOMING')['summary']
             shown = page.locator('[data-summary]').inner_text()
             sel = page.locator('.ant-menu-item-selected').inner_text()
-            ok = '합격률' in shown and str(s['total']) in shown and '수입검사' in sel
+            ok = '합격률' in shown and str(s['total']) in shown and sel == '검사 입력'
             why = f"{s} / 메뉴 {sel!r}"
         except Exception as e:
             ok, why = False, str(e)[:80]
@@ -447,9 +447,9 @@ try:
             page.get_by_role('menuitem', name='검사 입력', exact=True).click()
             page.wait_for_url('**/app/inspect')
             ok = page.url.endswith('/app/inspect')
-            page.get_by_role('menuitem', name='수입검사', exact=True).click()
-            page.wait_for_url('**/app/inspections?tab=INCOMING')
-            ok = ok and page.url.endswith('/app/inspections?tab=INCOMING')
+            page.get_by_role('tab', name='검사 실적', exact=True).click()  # 하위 메뉴는 화면 위 탭
+            page.wait_for_url('**/app/inspections')
+            ok = ok and page.url.endswith('/app/inspections')
         except Exception:
             ok = False
         check('메뉴 → 새 화면', ok, page.url)
@@ -820,7 +820,8 @@ try:
         try:
             page.goto('/app/todo')
             page.locator('.ant-menu-submenu-title', has_text='품질보증').click()
-            page.get_by_role('menuitem', name='부적합 등록', exact=True).click()
+            page.get_by_role('menuitem', name='부적합(NCR)', exact=True).click()
+            page.get_by_role('tab', name='부적합 등록', exact=True).click()  # 하위 메뉴는 화면 위 탭
             page.wait_for_url('**/app/nc-new')
             page.get_by_placeholder('스캔하거나 번호·품번 일부 입력').fill('RAW-2611-001')
             page.get_by_label('부적합 내용').fill('E2E 간편 등록')
