@@ -20,7 +20,7 @@ from core.rules import child_editable
 
 from .models import (AuditChecklist, AuditFinding, AuditItem, Capa, ChangeRequest, Characteristic, ControlPlan,
                      ControlPlanLine, CustomerClaim, CustomerRule, Document, DocumentRevision, Evidence, ExcelTemplate, Gauge,
-                     GaugeCalibration,
+                     GaugeCalibration, MsaStudy,
                      Inspection, InspectionSpec, InternalAudit, Measurement, Memo, MemoPhoto, PpapElement, PpapSubmission, Qualification, Scar)
 from .rules import NotApproved, make_specs_from_plan, new_spec_revision
 from .similar import similar_html
@@ -159,6 +159,14 @@ class GaugeCalibrationAdmin(BaseAdmin):
     list_display = ['gauge', 'calibrated_on', 'cal_type', 'agency', 'result', 'cert_no']
     list_filter = ['result', 'cal_type']
     search_fields = ['gauge__number', 'gauge__name', 'agency', 'cert_no']
+
+
+@admin.register(MsaStudy)
+class MsaStudyAdmin(BaseAdmin):
+    list_display = ['gauge', 'kind', 'characteristic', 'performed_on', 'grr_percent', 'ndc', 'result']
+    list_filter = ['kind', 'result']
+    search_fields = ['gauge__number', 'gauge__name']
+    readonly_fields = ['summary']
 
 
 @admin.register(Gauge)

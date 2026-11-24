@@ -1,5 +1,6 @@
 import calendar
 import datetime
+from decimal import Decimal
 
 from django.conf import settings
 from django.contrib.auth.base_user import AbstractBaseUser
@@ -12,6 +13,8 @@ from simple_history.models import HistoricalRecords
 
 from core.numbering import next_revision
 from core.models import Approvable, Item, Lot, Nonconformance, save_numbered, validate_photo
+
+from . import msa
 
 
 PRIVATE_APPS = ['personal', 'auth', 'admin', 'sessions', 'contenttypes']  # 증적·엑셀 양식으로 내보내지 않는 앱
@@ -392,6 +395,54 @@ class GaugeCalibration(models.Model):
             else:
                 return
             g.save()
+
+
+class MsaStudy(models.Model):
+    """측정시스템 분석 (IATF 7.1.5.1.1). GR&R은 원자료 파일을 올리면 평균·범위법으로 %GRR·ndc를 계산하고 판정은 숫자로 정한다."""
+    GRR, BIAS, LINEARITY, STABILITY, ATTRIBUTE = 'GRR', 'BIAS', 'LINEARITY', 'STABILITY', 'ATTRIBUTE'
+    KINDS = [(GRR, 'GR&R(반복성·재현성)'), (BIAS, '편의'), (LINEARITY, '선형성'), (STABILITY, '안정성'), (ATTRIBUTE, '계수형')]
+    ACCEPT, CONDITIONAL, REJECT = 'ACCEPT', 'CONDITIONAL', 'REJECT'
+    RESULTS = [(ACCEPT, '적합'), (CONDITIONAL, '조건부'), (REJECT, '부적합')]
+
+    gauge = models.ForeignKey(Gauge, on_delete=models.PROTECT, related_name='msa_studies', verbose_name='계측기')
+    characteristic = models.ForeignKey(Characteristic, on_delete=models.PROTECT, null=True, blank=True, related_name='+',
+                                       verbose_name='검사 특성', help_text='공차(상·하한)가 있으면 공차 대비 %GRR도 계산한다')
+    kind = models.CharField('분석 종류', max_length=10, choices=KINDS, default=GRR)
+    performed_on = models.DateField('분석일')
+    data = models.FileField('원자료', upload_to='msa/%Y/', blank=True, help_text=msa.GUIDE)
+    grr_percent = models.DecimalField('%GRR', max_digits=6, decimal_places=2, null=True, blank=True,
+                                      help_text='GR&R: 원자료를 올리면 계산한다. 다른 프로그램 결과면 직접 입력')
+    ndc = models.PositiveIntegerField('구별 범주 수(ndc)', null=True, blank=True)
+    result = models.CharField('판정', max_length=12, choices=RESULTS, blank=True,
+                              help_text='GR&R은 %GRR 10 이하 적합, 30 이하 조건부, 그 밖·ndc 5 미만 부적합으로 자동 판정')
+    summary = models.TextField('계산 내역', blank=True, editable=False)
+    note = models.TextField('비고', blank=True, help_text='조건부·부적합이면 개선 조치')
+    history = HistoricalRecords()
+
+    class Meta:
+        verbose_name = verbose_name_plural = '측정시스템 분석(MSA)'
+
+    def __str__(self):
+        return f'{self.gauge.number} {self.get_kind_display()} {self.performed_on}'
+
+    def clean(self):
+        if self.performed_on and self.performed_on > timezone.localdate():
+            raise ValidationError({'performed_on': '분석일은 오늘 이후일 수 없습니다.'})
+        if self.kind != self.GRR:
+            if not self.result:
+                raise ValidationError({'result': '판정을 고르세요.'})
+            return
+        if self.data and not self.data._committed:  # 새로 올린 원자료만 계산(저장된 파일은 다시 계산하지 않는다)
+            try:
+                r = msa.from_file(self.data.file)
+            except ValidationError as e:
+                raise ValidationError({'data': e.messages})
+            ch = self.characteristic
+            tol = ch.usl - ch.lsl if ch and ch.usl is not None and ch.lsl is not None else None
+            self.grr_percent, self.ndc, self.summary = Decimal(str(r['grr_percent'])), r['ndc'], msa.summary(r, tol)
+        if self.grr_percent is None or self.ndc is None:
+            raise ValidationError({'grr_percent': 'GR&R은 원자료 파일을 올리거나 %GRR·ndc를 입력하세요.'})
+        self.result = msa.judge(self.grr_percent, self.ndc)
 
 
 class Qualification(models.Model):

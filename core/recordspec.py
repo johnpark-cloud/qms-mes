@@ -116,7 +116,9 @@ SPECS = {
         tabs=(('active', '사용', lambda qs: qs.filter(active=True)), ALL,
               ('inactive', '사용 중지', lambda qs: qs.filter(active=False))),
         children=(Child('calibrations', '교정 이력', ('calibrated_on', 'cal_type', 'agency', 'result', 'cert_no', 'certificate', 'note'),
-                        ('-calibrated_on', '-pk')),),
+                        ('-calibrated_on', '-pk')),
+                  Child('msa_studies', '측정시스템 분석(MSA)', ('performed_on', 'kind', 'characteristic', 'grr_percent', 'ndc', 'result'),
+                        ('-performed_on', '-pk'))),
         side=('relations', 'files', 'history'),
         order=('number',),
         # 최근 교정일은 교정 이력(합격)으로 바뀌는 것이 원칙이나, 이력 없이 쓰던 대장을 위해 직접 고치는 칸도 둔다
@@ -134,6 +136,17 @@ SPECS = {
         # 결과·교정일은 계측기 대장을 바꾸므로 등록 후 고치지 않는다(잘못 넣었으면 새 이력으로 바로잡는다)
         edit=('agency', 'cert_no', 'note'),
         create=('gauge', 'calibrated_on', 'cal_type', 'agency', 'result', 'cert_no', 'note')),
+    'qms.msastudy': Spec(
+        fields=('gauge', 'characteristic', 'kind', 'performed_on', 'grr_percent', 'ndc', 'result', 'summary', 'data', 'note'),
+        columns=('gauge', 'kind', 'characteristic', 'performed_on', 'grr_percent', 'ndc', 'result'),
+        search=('gauge__number', 'gauge__name', 'characteristic__name'),
+        tabs=(ALL, ('reject', '부적합', lambda qs: qs.filter(result='REJECT')),
+              ('conditional', '조건부', lambda qs: qs.filter(result='CONDITIONAL'))),
+        side=('relations', 'files', 'history'),
+        order=('-performed_on', '-pk'),
+        # 계산 결과·판정은 원자료로 정해지므로 등록 후 고치지 않는다(다시 분석하면 새 기록)
+        edit=('note',),
+        create=('gauge', 'characteristic', 'kind', 'performed_on', 'data', 'grr_percent', 'ndc', 'result', 'note')),
     'qms.qualification': Spec(
         fields=('user', 'inspection_type', 'valid_until', 'basis', 'record'),
         columns=('user', 'inspection_type', 'valid_until', 'basis'),
@@ -535,7 +548,8 @@ def editor(obj, name):
         return {'key': name, 'label': str(f.verbose_name), 'type': 'json', 'required': not f.blank, 'choices': None,
                 'value': json.dumps(v, ensure_ascii=False, indent=2) if v else '', 'help': str(f.help_text)}
     if isinstance(f, models.FileField):  # 새로 만들기에서만(파일은 multipart로 보낸다)
-        return {'key': name, 'label': str(f.verbose_name), 'type': 'file', 'value': None, 'required': not f.blank, 'choices': None}
+        return {'key': name, 'label': str(f.verbose_name), 'type': 'file', 'value': None, 'required': not f.blank, 'choices': None,
+                'help': str(f.help_text)}
     if f.choices:
         kind = 'choice'
     elif isinstance(f, models.BooleanField):

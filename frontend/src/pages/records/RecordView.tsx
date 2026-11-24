@@ -166,10 +166,13 @@ export function Editor({ e, ...rest }: { e: Edit; [k: string]: any }) {
     </>
   )
   if (e.type === 'file') return (  // 값은 antd UploadFile 하나: createRecord가 multipart로 보낸다
-    <Upload maxCount={1} beforeUpload={() => false} fileList={rest.value ? [rest.value] : []}
-      onChange={({ fileList }) => rest.onChange?.(fileList[0] ?? null)}>
-      <Button id={rest.id}>파일 고르기</Button>
-    </Upload>
+    <>
+      <Upload maxCount={1} beforeUpload={() => false} fileList={rest.value ? [rest.value] : []}
+        onChange={({ fileList }) => rest.onChange?.(fileList[0] ?? null)}>
+        <Button id={rest.id}>파일 고르기</Button>
+      </Upload>
+      {e.help && <Typography.Text type="secondary" style={{ fontSize: 12 }}>{e.help}</Typography.Text>}
+    </>
   )
   if (e.type === 'tags') return <Select mode="tags" open={false} tokenSeparators={[',']} suffixIcon={null} placeholder="입력하고 Enter (쉼표로 여러 개)" {...rest} />
   if (e.type === 'choice') return <Select options={e.choices ?? []} showSearch optionFilterProp="label" allowClear={!e.required} {...rest} />

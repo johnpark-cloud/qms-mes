@@ -5,7 +5,7 @@
 종류를 더하거나 빼고 키를 바꿀 때 고칠 곳은 아래 표들뿐이다(마이그레이션 필요 없음):
   EXCLUDED  들여오지 않는 종류            EXTRA    SPECS 밖 대상(품목)
   LEGACY    이미 저장된 설정의 대상 키      LOOKUP   유일 칸이 없는 모델을 가리킬 때 찾는 칸(자동: number·code·username)
-  MATCH     고칠 기록을 찾는 키 열(자동: 유일 칸)   RESOLVE  특별한 외래키 찾기(공정 순서·상위 코드)
+  MATCH     고칠 기록을 찾는 키 열(자동: 유일 칸)   RESOLVE  특별한 외래키 찾기(공정 순서·상위 코드·검사 특성)
 """
 import csv
 import functools
@@ -97,7 +97,21 @@ def _code_parent(text, values):
     return hits[0]
 
 
-RESOLVE = {('core.workresult', 'step'): _routing_step, ('core.codevalue', 'parent'): _code_parent}
+def _characteristic(text, values):
+    """검사 특성. '품번/특성명'으로 적고, 같은 이름이 여러 개정에 있으면 최신 개정을 쓴다."""
+    from qms.models import Characteristic
+    code, _, name = (p.strip() for p in text.rpartition('/'))
+    hits = list(Characteristic.objects.filter(spec__item__code=code, name=name).select_related('spec')
+                .order_by('-spec__revision', '-pk')) if code else []
+    if not hits:
+        raise ValidationError(f"검사 특성 '{text}'이(가) 없습니다. '품번/특성명'으로 적으세요.")
+    if len({c.spec.inspection_type for c in hits}) > 1:
+        raise ValidationError(f"검사 특성 '{text}'이(가) 검사 구분 여러 곳에 있습니다. 화면에서 고르세요.")
+    return hits[0].pk
+
+
+RESOLVE = {('core.workresult', 'step'): _routing_step, ('core.codevalue', 'parent'): _code_parent,
+           ('qms.msastudy', 'characteristic'): _characteristic}
 
 
 def _match(model, columns):
@@ -166,6 +180,7 @@ def template_csv(target):
 HINTS = {  # 찾는 방법이 특별한 외래키(RESOLVE)
     ('core.workresult', 'step'): '공정 코드. 앞 칸 작업지시 품목의 라우팅에 있는 공정이어야 한다',
     ('core.codevalue', 'parent'): '상위 코드. 같은 코드가 여러 곳에 있으면 1/5처럼 위에서부터 /로 이어 적는다',
+    ('qms.msastudy', 'characteristic'): '검사 특성. 품번/특성명(예: C1/두께), 같은 이름이 여러 개정에 있으면 최신 개정',
 }
 
 

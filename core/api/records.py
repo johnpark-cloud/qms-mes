@@ -196,10 +196,16 @@ def repeat_title(group):
 
 
 def _notices(obj, user):
-    """기록 위 안내 띠. 강화 검사 대상 공급자의 LOT, 반복 부적합이면 CAPA 제안(CAPA 모듈이 켜져 있을 때만)."""
+    """기록 위 안내 띠. 강화 검사 대상 공급자의 LOT, 최근 MSA 부적합 계측기, 반복 부적합이면 CAPA 제안(CAPA 모듈이 켜져 있을 때만)."""
     if isinstance(obj, Lot):
         watch = obj.supplier_watch()
         return [{'message': watch, 'label': '', 'url': ''}] if watch else []
+    if obj._meta.label_lower == 'qms.gauge':
+        last = obj.msa_studies.order_by('-performed_on', '-pk').first()
+        if last and last.result == last.REJECT:
+            return [{'message': f'최근 측정시스템 분석({last.get_kind_display()}, {last.performed_on})이 부적합입니다. '
+                                '측정 방법·계측기를 개선한 뒤 다시 분석하세요.', 'label': '', 'url': ''}]
+        return []
     if not isinstance(obj, Nonconformance) or not modules.active('qms_capa'):
         return []
     from qms.due import REPEAT_DAYS, repeat_group_of

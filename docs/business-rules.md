@@ -86,6 +86,8 @@
 | 교정 14일 전부터 내 할 일·알림에 표시한다. | `qms/due.py` |
 | 같은 품번·같은 부적합 유형이 최근 90일 동안 CAPA 없이 3건이면 내 할 일·알림·부적합 화면에서 CAPA를 제안한다(강제하지 않음). CAPA를 만든 부적합까지는 세지 않는다. | `qms/due.py` `repeat_ncs`, `core/api/records.py` `_notices` |
 | 교정 이력(`GaugeCalibration`)이 합격이면 계측기의 최근 교정일을 그 교정일로 앞당긴다(더 옛날 날짜면 그대로). 불합격이면 최근 교정일은 그대로 두고 계측기를 사용 중지해 측정을 거부한다. 교정일은 오늘 이후일 수 없고, 결과·교정일은 등록 후 기록 화면에서 고치지 않는다(새 이력으로 바로잡음). | `GaugeCalibration.clean`·`save`, `core/recordspec.py` `qms.gaugecalibration` |
+| 측정시스템 분석(`MsaStudy`) GR&R은 원자료 파일(부품·측정자·반복·측정값)을 평균·범위법(AIAG)으로 계산하거나 %GRR·ndc를 직접 받고, 판정은 숫자로만 정한다: %GRR 10 이하 적합, 30 이하 조건부, 30 초과 또는 ndc 5 미만 부적합(입력한 판정은 무시). 틀이 맞지 않는 파일은 저장하지 않는다. 그 밖의 종류는 판정을 직접 고른다. 분석일은 오늘 이후일 수 없고, 등록 후에는 비고만 고친다. | `MsaStudy.clean`, `qms/msa.py`, `core/recordspec.py` `qms.msastudy` |
+| 계측기의 최근 MSA가 부적합이면 계측기 기록 화면에 개선·재분석 안내만 띄운다(측정은 막지 않음). | `core/api/records.py` `_notices` |
 
 측정값 입력(검사 입력 화면, `collect` 자동 수집)은 NaN·무한대 값을 거부한다. `collect`는 읽을 수 없는 CSV를 `error/` 폴더로 옮기고 다음 파일을 계속 처리한다(`qms/rules.py` `measurement`, `qms/management/commands/collect.py`).
 

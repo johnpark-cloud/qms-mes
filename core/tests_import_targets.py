@@ -19,7 +19,7 @@ from core.models import (CodeValue, Department, ImportProfile, Item, Lot, Noncon
 from core.rules import LOCKED_MSG
 from core.tests_import_log import temp_imports
 from core.tests_modules import force_off
-from qms.models import AuditChecklist, ChangeRequest, Gauge, InternalAudit
+from qms.models import AuditChecklist, ChangeRequest, Characteristic, Gauge, InspectionSpec, InternalAudit, MsaStudy
 
 # 대상마다 한 행. 대상이 늘면 여기에 한 줄 더한다(test_every_target_has_sample).
 SAMPLES = {
@@ -27,6 +27,7 @@ SAMPLES = {
     'qms.document': {'number': 'QP-9', 'title': '품질 매뉴얼'},
     'qms.gauge': {'number': 'G-9', 'name': '캘리퍼스', 'cal_type': '사내 교정', 'interval_months': '12',
                   'last_calibrated': '2026-11-01', 'active': '예'},
+    'qms.msastudy': {'gauge': 'G-1', 'kind': '편의', 'performed_on': '2026-11-02', 'result': '적합'},
     'qms.gaugecalibration': {'gauge': 'G-1', 'calibrated_on': '2026-11-02', 'cal_type': '사외 교정', 'result': '합격'},
     'qms.qualification': {'user': 'kim', 'inspection_type': '수입검사', 'valid_until': '2027-12-31', 'basis': '교육 이수'},
     'core.lot': {'number': 'L-9', 'item': 'C1', 'qty': '5', 'is_serial': '아니오'},
@@ -170,6 +171,14 @@ class ImportTargetsTest(TestCase):
         p = self.profile('core.workresult', SAMPLES['core.workresult'])
         count, errors = run_import(p, self.file(p, {**SAMPLES['core.workresult'], 'step': 'P99'}), self.root)
         self.assertIn("공정 코드 'P99'", errors[0])
+
+    def test_msa_characteristic_by_item_and_name(self):
+        spec = InspectionSpec.objects.create(item=self.c1, inspection_type=InspectionSpec.OUTGOING)
+        Characteristic.objects.create(spec=spec, name='두께')
+        p = self.profile('qms.msastudy', (*SAMPLES['qms.msastudy'], 'characteristic'))
+        self.assertIn("'C1/폭'", run_import(p, self.file(p, {**SAMPLES['qms.msastudy'], 'characteristic': 'C1/폭'}), self.root)[1][0])
+        self.assertEqual(run_import(p, self.file(p, {**SAMPLES['qms.msastudy'], 'characteristic': 'C1/두께'}), self.root), (1, []))
+        self.assertEqual(MsaStudy.objects.get().characteristic.name, '두께')
 
     def test_code_parent_path(self):
         for top in ('8', '9'):  # 0~6은 기본 자료(0011)

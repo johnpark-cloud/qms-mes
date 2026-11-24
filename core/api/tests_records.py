@@ -38,7 +38,7 @@ def mes_fixture():
 
 class RecordsApiTest(TestCase):
     def setUp(self):
-        from qms.models import Document, DocumentRevision, Gauge, GaugeCalibration, Qualification
+        from qms.models import Document, DocumentRevision, Gauge, GaugeCalibration, MsaStudy, Qualification
         self.root = User.objects.create_superuser('root', password='pw')
         self.doc = Document.objects.create(number='QP-01', title='품질 매뉴얼', doc_type='매뉴얼')
         self.rev = DocumentRevision.objects.create(document=self.doc, file=SimpleUploadedFile('a.pdf', b'x'), change_note='제정')
@@ -46,6 +46,7 @@ class RecordsApiTest(TestCase):
         self.g1 = Gauge.objects.create(number='G-1', name='마이크로미터', last_calibrated=today)
         self.g2 = Gauge.objects.create(number='G-2', name='캘리퍼스', last_calibrated=today, active=False)
         GaugeCalibration.objects.create(gauge=self.g1, calibrated_on=today)
+        MsaStudy.objects.create(gauge=self.g1, kind=MsaStudy.BIAS, performed_on=today, result=MsaStudy.ACCEPT)
         self.qual = Qualification.objects.create(user=self.root, inspection_type='INCOMING', valid_until=today - datetime.timedelta(days=1),
                                                  basis='교육 이수')
         from core.models import Item, Lot, Nonconformance
