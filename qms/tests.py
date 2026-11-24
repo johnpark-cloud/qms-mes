@@ -288,6 +288,32 @@ class QmsTest(TestCase):
         self.inspect('10.0')  # 초품 합격
         Shipment.objects.create(lot=self.raw, customer='A사', qty=1)
 
+    def test_4m_stage_and_customer_status(self):
+        """W6: 진행 단계·고객 승인 상태는 드롭다운, 사내 「승인 완료」는 서명으로만."""
+        cr = ChangeRequest.objects.create(number='4M-S', item=self.raw_item, category='METHOD', description='용접 순서 변경')
+        self.assertEqual((cr.stage, cr.customer_status), (ChangeRequest.DRAFT, ChangeRequest.C_PENDING))
+        cr.stage = ChangeRequest.APPROVED
+        with self.assertRaisesMessage(ValidationError, '승인 완료는 승인 서명으로만'):
+            cr.save()
+        cr.stage, cr.customer_status = ChangeRequest.REVIEW, ChangeRequest.C_APPROVED
+        with self.assertRaisesMessage(ValidationError, '고객 승인 문서번호'):
+            cr.save()
+        cr.customer_approval_ref = 'CA-1'
+        cr.save()
+        for stage, cust in ((ChangeRequest.HOLD, ChangeRequest.C_APPROVED), (ChangeRequest.REVIEW, ChangeRequest.C_REJECTED)):
+            ChangeRequest.objects.filter(pk=cr.pk).update(stage=stage, customer_status=cust)
+            cr.refresh_from_db()
+            with self.assertRaises(ValidationError):
+                approve(cr, self.lead)  # 보류·반려(사내 또는 고객)는 승인할 수 없다
+        ChangeRequest.objects.filter(pk=cr.pk).update(stage=ChangeRequest.REVIEW, customer_status=ChangeRequest.C_APPROVED)
+        cr.refresh_from_db()
+        approve(cr, self.lead)
+        cr.refresh_from_db()
+        self.assertEqual(cr.stage, ChangeRequest.APPROVED)
+        quiet = ChangeRequest.objects.create(number='4M-N', item=self.raw_item, category='MAN', description='x',
+                                             customer_notice=False, customer_status=ChangeRequest.C_PENDING)
+        self.assertEqual(quiet.customer_status, ChangeRequest.C_NA)  # 고객 통보가 아니면 「해당 없음」
+
     def test_due_first_articles_only_effective(self):
         from .due import due_items
         now = timezone.now()

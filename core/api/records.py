@@ -266,6 +266,24 @@ def _detail(obj, spec, user):
                          'delete': _can_request(obj, EditRequest.DELETE, user)}}
 
 
+def _history_table(model, pk):
+    """개정 이력(W6): 변경 이력을 오래된 순으로. 처음 저장 = 신규, 칸이 바뀐 저장마다 Rev.n."""
+    rows, n = [], 0
+    for h in reversed(list(audit.rows(model, pk))):
+        p = audit.row_payload(h)
+        if h.history_type == '+':
+            label = '신규'
+        elif p['changes']:
+            n += 1
+            label = f'Rev.{n}'
+        else:
+            continue
+        cut = lambda s: s if len(s) <= 40 else s[:39] + '…'  # noqa: E731
+        rows.append([label, timezone.localtime(h.history_date).strftime('%Y-%m-%d %H:%M'), p['user'],
+                     '; '.join(f"{c['field']}: {cut(c['old'])} → {cut(c['new'])}" for c in p['changes']) or '처음 작성'])
+    return {'title': '개정 이력', 'columns': ['차수', '일시', '변경자', '변경 내용'], 'rows': rows}
+
+
 def document_of(obj, spec):
     """양식지(W3): A4 한 장 문서(DocStruct, frontend/src/api/specs.ts). 구역은 recordspec.DOCS, 표는 print_table 또는 하위 기록."""
     model = type(obj)
@@ -298,6 +316,8 @@ def document_of(obj, spec):
             rel = getattr(obj, c.accessor)
             tables.append({'title': c.label, 'columns': [recordspec.label_of(rel.model, n) for n in c.fields],
                            'rows': [list(recordspec.cells(o, c.fields).values()) for o in rel.all().order_by(*c.order)]})
+    if model._meta.label_lower in recordspec.HISTORY_DOCS:
+        tables.append(_history_table(model, obj.pk))
     # 작성 = 부적합은 발견자, 그 밖은 처음 저장한 사람
     first = obj.history.order_by('history_date', 'history_id').first() if hasattr(obj, 'history') else None
     return {'title': title, 'number': str(obj), 'revision': '', 'draft': hasattr(obj, 'approved_at') and obj.approved_at is None,

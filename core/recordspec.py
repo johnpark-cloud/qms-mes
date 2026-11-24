@@ -64,6 +64,11 @@ EVIDENCE_RECORDS = {'qms.controlplan': 'item', 'qms.inspectionspec': 'item', 'qm
                     'qms.changerequest': 'item'}
 EVIDENCE_LIMIT = 50  # 종류마다 최근 기록만 고를 수 있게 보인다
 
+# 승인 서명만 넣는 선택지: 수정 드롭다운에서 뺀다(모델 clean도 막는다)
+SIGN_CHOICES = {'qms.changerequest': {'stage': {'APPROVED'}}}
+# 양식지 끝에 변경 이력(simple-history)을 「개정 이력」 표로 붙이는 기록
+HISTORY_DOCS = {'qms.changerequest'}
+
 ROWS = {'core.partner': {'contacts': (('role', '업무'), ('name', '이름'), ('phone', '전화'), ('email', '이메일'))}}
 
 
@@ -213,16 +218,20 @@ SPECS = {
         edit=('supplier', 'request', 'issued_at', 'response_due', 'response', 'responded_at', 'partner', 'lot', 'nonconformance'),
         close=True,
         create=('number', 'supplier', 'partner', 'lot', 'nonconformance', 'request', 'issued_at', 'response_due')),
-    'qms.changerequest': Spec(  # 출하 차단(초품 합격 전)은 Shipment.clean 그대로
-        fields=('number', 'item', 'category', 'description', 'customer_notice', 'customer_approval_ref', 'effective_at',
-                'approved_by', 'approved_at', 'first_article_state'),
-        columns=('number', 'item', 'category', 'effective_at', 'approved_at'),
+    'qms.changerequest': Spec(  # 출하 차단(초품 합격 전)은 Shipment.clean 그대로. 단계·고객 승인 규칙은 ChangeRequest.clean(W6)
+        fields=('number', 'item', 'category', 'stage', 'effective_at', 'description', 'customer_notice', 'customer_status',
+                'customer_approval_ref', 'reviewer', 'reviewed_at', 'review_comment', 'approved_by', 'approved_at',
+                'first_article_state'),
+        columns=('number', 'item', 'category', 'stage', 'customer_status', 'effective_at', 'approved_at'),
         search=('number', 'item__code', 'description'),
-        tabs=(ALL, ('draft', '초안', lambda qs: qs.filter(approved_at__isnull=True)),
+        tabs=(ALL, ('draft', '진행 중', lambda qs: qs.filter(approved_at__isnull=True).exclude(stage__in=('HOLD', 'REJECTED'))),
+              ('hold', '보류·반려', lambda qs: qs.filter(approved_at__isnull=True, stage__in=('HOLD', 'REJECTED'))),
               ('approved', '승인됨', lambda qs: qs.filter(approved_at__isnull=False))),
         order=('-effective_at', '-pk'),
-        edit=('category', 'description', 'customer_notice', 'customer_approval_ref', 'item', 'effective_at'),
-        create=('number', 'item', 'category', 'description', 'customer_notice', 'customer_approval_ref', 'effective_at')),
+        edit=('category', 'stage', 'description', 'customer_notice', 'customer_status', 'customer_approval_ref', 'item',
+              'effective_at', 'reviewer', 'reviewed_at', 'review_comment'),
+        create=('number', 'item', 'category', 'description', 'customer_notice', 'customer_approval_ref', 'effective_at',
+                'reviewer')),
     'qms.internalaudit': Spec(  # 종결 규칙(실시일, CAPA 없는 중·경부적합)은 InternalAudit.clean 그대로
         fields=('name', 'kind', 'scope', 'checklist', 'planned_date', 'auditor', 'auditee', 'auditor_user', 'auditee_dept',
                 'performed_at', 'closed_at'),
@@ -386,8 +395,9 @@ DOCS = {
         ('요구', ('number', 'supplier', 'partner', 'lot', 'nonconformance', 'issued_at', 'response_due', 'request')),
         ('회신', ('response', 'responded_at', 'closed_at')))),
     'qms.changerequest': ('4M 변경 신청서', (
-        ('변경', ('number', 'item', 'category', 'effective_at', 'description')),
-        ('고객', ('customer_notice', 'customer_approval_ref')),
+        ('변경', ('number', 'item', 'category', 'stage', 'effective_at', 'description')),
+        ('고객', ('customer_notice', 'customer_status', 'customer_approval_ref')),
+        ('검토', ('reviewer', 'reviewed_at', 'review_comment')),
         ('승인·초품', ('approved_by', 'approved_at', 'first_article_state')))),
     'qms.internalaudit': ('내부심사 보고서', (
         ('심사', ('name', 'kind', 'scope', 'checklist', 'planned_date', 'performed_at', 'closed_at')),
@@ -513,8 +523,9 @@ def editor(obj, name):
         kind = 'text'
     else:
         kind = 'str'
+    skip = SIGN_CHOICES.get(obj._meta.label_lower, {}).get(name, ())
     return {'key': name, 'label': str(f.verbose_name), 'type': kind, 'value': v, 'required': not f.blank,
-            'choices': [{'value': k, 'label': str(n)} for k, n in f.choices] if f.choices else None}
+            'choices': [{'value': k, 'label': str(n)} for k, n in f.choices if k not in skip] if f.choices else None}
 
 
 CHOICE_LIMIT = 500  # shortcut: 외래키 선택지는 앞 500개만 — 기록이 더 많아지면 검색 API로 바꾼다

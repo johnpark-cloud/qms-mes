@@ -499,14 +499,26 @@ class ControlPlanLine(models.Model):
 class ChangeRequest(Approvable):
     """4M 변경. 승인 후 적용 일시가 지나면, 그 품번의 합격 검사(초품)가 나오기 전까지 출하를 막는다."""
     CATEGORIES = [('MAN', '사람(Man)'), ('MACHINE', '설비(Machine)'), ('MATERIAL', '자재(Material)'), ('METHOD', '방법(Method)')]
+    # 진행 단계(W6): 「승인 완료」는 승인 서명(save)이 넣는다. 화면 드롭다운에서는 뺀다(recordspec.SIGN_CHOICES)
+    DRAFT, REVIEW, HOLD, REJECTED, APPROVED = 'DRAFT', 'REVIEW', 'HOLD', 'REJECTED', 'APPROVED'
+    STAGES = [(DRAFT, '작성 중'), (REVIEW, '검토 중'), (HOLD, '보류'), (REJECTED, '반려'), (APPROVED, '승인 완료')]
+    C_NA, C_PENDING, C_REQUESTED, C_APPROVED, C_REJECTED = 'NA', 'PENDING', 'REQUESTED', 'APPROVED', 'REJECTED'
+    CUSTOMER_STATUSES = [(C_NA, '해당 없음'), (C_PENDING, '요청 전'), (C_REQUESTED, '승인 요청'), (C_APPROVED, '고객 승인'),
+                         (C_REJECTED, '고객 반려')]
 
     number = models.CharField('변경 번호', max_length=50, unique=True)
     item = models.ForeignKey(Item, on_delete=models.PROTECT, related_name='changes', verbose_name='품목')
     category = models.CharField('4M 구분', max_length=10, choices=CATEGORIES)
+    stage = models.CharField('진행 단계', max_length=10, choices=STAGES, default=DRAFT)
     description = models.TextField('변경 내용')
     customer_notice = models.BooleanField('고객 통보 필요', default=True)
+    customer_status = models.CharField('고객 승인 상태', max_length=10, choices=CUSTOMER_STATUSES, default=C_PENDING)
     customer_approval_ref = models.CharField('고객 승인 문서번호', max_length=100, blank=True)
     effective_at = models.DateTimeField('적용 일시', default=timezone.now)
+    reviewer = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, null=True, blank=True, related_name='+',
+                                 limit_choices_to={'is_active': True}, verbose_name='검토자')
+    reviewed_at = models.DateField('검토일', null=True, blank=True)
+    review_comment = models.TextField('검토 의견', blank=True)
     history = HistoricalRecords()
 
     class Meta:
@@ -516,11 +528,24 @@ class ChangeRequest(Approvable):
         return f'{self.number} {self.item.code} {self.get_category_display()}'
 
     def clean(self):
-        if self.approved_at and self.customer_notice and not self.customer_approval_ref:
-            raise ValidationError('고객 통보 대상 변경은 고객 승인 문서번호가 있어야 승인할 수 있습니다.')
+        if not self.customer_notice:
+            self.customer_status = self.C_NA
+        elif self.customer_status == self.C_NA:
+            self.customer_status = self.C_PENDING
+        if self.customer_status == self.C_APPROVED and not self.customer_approval_ref:
+            raise ValidationError({'customer_approval_ref': '고객 승인이면 고객 승인 문서번호를 넣으세요.'})
+        if self.stage == self.APPROVED and not self.approved_at:
+            raise ValidationError({'stage': '승인 완료는 승인 서명으로만 됩니다.'})
+        if self.approved_at:
+            if self.customer_notice and not self.customer_approval_ref:
+                raise ValidationError('고객 통보 대상 변경은 고객 승인 문서번호가 있어야 승인할 수 있습니다.')
+            if self.stage in (self.HOLD, self.REJECTED) or self.customer_status == self.C_REJECTED:
+                raise ValidationError('보류·반려된 변경은 승인할 수 없습니다. 진행 단계·고객 승인 상태를 먼저 바꾸세요.')
 
     def save(self, *args, **kwargs):
         self.clean()
+        if self.approved_at:
+            self.stage = self.APPROVED
         super().save(*args, **kwargs)
 
     @property

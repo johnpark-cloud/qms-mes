@@ -6,7 +6,7 @@
 
 | 목적 | 명령 | 비고 |
 | --- | --- | --- |
-| 단위 테스트 전체 | `.\.venv\Scripts\python manage.py test` | core·qms·personal 모두. 테스트용 DB를 따로 만들므로 `data/`의 운영 DB는 건드리지 않는다. 2026-11-24 기준 662개(SQLite에서는 PostgreSQL 전용 2개 건너뜀) |
+| 단위 테스트 전체 | `.\.venv\Scripts\python manage.py test` | core·qms·personal 모두. 테스트용 DB를 따로 만들므로 `data/`의 운영 DB는 건드리지 않는다. 2026-11-24 기준 664개(SQLite에서는 PostgreSQL 전용 2개 건너뜀) |
 | PostgreSQL에서 전체 | `.\.venv\Scripts\python manage.py test --noinput` | 사용자 환경변수 `QMS_DB_NAME`·`QMS_DB_USER`·`QMS_DB_PASSWORD`가 있으면 위 명령도 PostgreSQL에서 돈다(SQLite로 돌리려면 그 창에서 `Remove-Item Env:QMS_DB_NAME`). e2e 두 스크립트는 `QMS_DB_NAME`을 빼고 임시 SQLite를 쓴다. 테스트 DB `test_qms`를 만들고 지우므로 **한 번에 하나만** 실행한다(두 실행이 겹치면 서로의 테스트 DB를 지워 연결 오류가 난다). `PgBackupRestoreTest`는 PostgreSQL에서만 돈다 |
 | 앱 하나만 | `.\.venv\Scripts\python manage.py test qms` | 작업 중 빠른 확인용. 완료 판단에는 전체 실행이 필요하다 |
 | 테스트 하나만 | `.\.venv\Scripts\python manage.py test core.tests.ShellTest.test_logged_in_pages_not_stored` | |

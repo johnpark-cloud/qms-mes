@@ -547,6 +547,28 @@ class RecordsCapaClaimApiTest(TestCase):
         self.assertEqual((d['status'], d['can_close']), ('종결', False))
         self.assertEqual(self.close('qms.customerclaim', self.claim.pk).json()['detail'], '이미 종결된 기록입니다.')
 
+    def test_change_request_stage_review_and_revisions(self):
+        """W6: 4M 진행 단계 드롭다운(승인 완료 제외)·검토자·검토 의견, 양식지 개정 이력."""
+        d = self.detail('qms.changerequest', self.cr.pk)
+        ed = {e['key']: e for e in d['edit']}
+        self.assertEqual([c['value'] for c in ed['stage']['choices']], ['DRAFT', 'REVIEW', 'HOLD', 'REJECTED'])
+        self.assertEqual([c['value'] for c in ed['customer_status']['choices']], ['NA', 'PENDING', 'REQUESTED', 'APPROVED', 'REJECTED'])
+        for k in ('reviewer', 'reviewed_at', 'review_comment'):
+            self.assertIn(k, ed)
+        r = self.patch('qms.changerequest', self.cr.pk, {'stage': 'APPROVED'})
+        self.assertEqual(r.status_code, 400, r.content)
+        r = self.patch('qms.changerequest', self.cr.pk, {'stage': 'REVIEW', 'reviewer': str(self.root.pk),
+                                                          'review_comment': '금형 치수 확인 필요', 'description': '설비 교체(2호기)'})
+        self.assertEqual(r.status_code, 200, r.content)
+        f = {x['key']: x['value'] for x in self.detail('qms.changerequest', self.cr.pk)['fields']}
+        self.assertEqual((f['stage'], f['review_comment']), ('검토 중', '금형 치수 확인 필요'))
+        doc = self.client.get(f'/api/records/qms.changerequest/{self.cr.pk}/document/').json()
+        rev = next(t for t in doc['tables'] if t['title'] == '개정 이력')
+        self.assertEqual(rev['columns'], ['차수', '일시', '변경자', '변경 내용'])
+        self.assertEqual([r[0] for r in rev['rows']], ['신규', 'Rev.1'])
+        self.assertIn('변경 내용: 설비 교체 → 설비 교체(2호기)', rev['rows'][1][3])
+        self.assertEqual(rev['rows'][1][2], 'root')
+
     def test_scar_and_capa_close_rules(self):
         r = self.close('qms.scar', self.scar.pk)
         self.assertEqual(r.json()['detail'], '공급자 회신 없이 종결할 수 없습니다.')

@@ -307,12 +307,17 @@ class Command(BaseCommand):
         for no, item, cat, desc, notice, ref, eff, ok in (
                 ('EX-CR-001', self.s200, 'MACHINE', '프레스 금형 교체(마모 보수)', True, 'EX-CUST-APR-001', ago(3), True),
                 ('EX-CR-002', self.f300, 'METHOD', '용접 순서 변경', False, '', ago(2), True),
-                ('EX-CR-003', self.f310, 'MATERIAL', '힌지 핀 재질 변경 검토(승인 전)', True, '', self.now + datetime.timedelta(days=10), False)):
+                ('EX-CR-003', self.f310, 'MATERIAL', '힌지 핀 재질 변경(SUS304 → SUS316)', True, '', self.now + datetime.timedelta(days=10), False)):
             if not ChangeRequest.objects.filter(number=no).exists():
                 cr = ChangeRequest(number=no, item=item, category=cat, description=desc, customer_notice=notice, customer_approval_ref=ref,
                                    effective_at=eff)
+                if ref:
+                    cr.customer_status = ChangeRequest.C_APPROVED
                 if ok:
                     cr.approved_by, cr.approved_at = self.u['lead'], self.now
+                else:  # 승인 전 = 진행 단계로 표시(W6)
+                    cr.stage, cr.customer_status, cr.reviewer = ChangeRequest.REVIEW, ChangeRequest.C_REQUESTED, self.u['lead']
+                    cr.review_comment = '내식성 시험 성적서 받은 뒤 승인 서명'
                 cr.save()
 
     # ---------- 부적합·클레임·CAPA·SCAR·PPAP ----------

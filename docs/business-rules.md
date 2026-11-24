@@ -39,7 +39,7 @@
 | 승인된 기록은 수정할 수 없다. 새 개정을 만든다. | `Approvable.save`, `Characteristic.save`, `ControlPlanLine` 저장 |
 | 검사·문서 기준은 "승인된 최신 개정"이 최신 승인본이다. | `InspectionSpec.current` |
 | 검사기준 저장은 `qms.rules.save_spec`이 한다(admin과 같은 잠금: `save_with_lock`). 기준서 속성과 검사항목 줄을 한꺼번에 저장하고 하나라도 잘못이면 아무것도 저장하지 않는다. 다른 기준서의 항목 id는 400으로 거부한다. 동시 수정은 `spec_version`(기준서·항목 이력 중 가장 큰 `history_id`)이 달라지면 409 `다른 사람이 먼저 고쳤습니다. 다시 불러오세요.`다. 항목 삭제는 `delete_characteristic` 권한이 필요하다(역할 그룹에는 없어 사실상 시스템 관리자만). | `qms/rules.py` `save_spec`·`spec_version`, `qms/api/specs.py` |
-| 4M 변경 중 고객 통보 대상은 고객 승인 문서번호가 있어야 승인할 수 있다. | `ChangeRequest.clean` |
+| 4M 변경 중 고객 통보 대상은 고객 승인 문서번호가 있어야 승인할 수 있다. 진행 단계가 보류·반려이거나 고객 승인 상태가 고객 반려면 승인할 수 없다. 진행 단계 「승인 완료」는 승인 서명으로만 된다(수정 드롭다운에 없음, `recordspec.SIGN_CHOICES`). 고객 승인 상태 「고객 승인」은 고객 승인 문서번호가 있어야 한다. | `ChangeRequest.clean`/`save` |
 | PPAP: 제출(S) 요소마다 증적이 있어야 PSW를 승인할 수 있다. 승인 후에는 제출일·고객 승인일만 기록할 수 있다. | `PpapSubmission.clean`/`save`, `PpapElement` 저장 |
 
 ### 개정 이력(RevisionLog)
@@ -101,6 +101,7 @@
 | 규칙 | 위치 |
 | --- | --- |
 | 승인되고 적용 일시가 지난 4M 변경은, 적용 일시 이후 그 품번의 합격 검사(초품)가 나올 때까지 출하를 막는다. | `ChangeRequest.awaiting_first_article`, `core/models.py` `Shipment.clean`, 내 할 일 표시는 같은 기준으로 `qms/due.py` |
+| 4M 진행 단계(작성 중·검토 중·보류·반려·승인 완료)와 고객 승인 상태(해당 없음·요청 전·승인 요청·고객 승인·고객 반려)는 저장 칸이다. 승인 서명이 되면 단계는 「승인 완료」로 바뀌고, 고객 통보가 아니면 고객 승인 상태는 「해당 없음」이다. 보류·반려 건은 내 할 일 「승인 대기」에서 뺀다. 4M 양식지 끝 「개정 이력」 표는 변경 이력(simple-history)에서 만든다. | `ChangeRequest.clean`/`save`, `qms/due.py`, `core/api/records.py` `_history_table` |
 
 ## 9. 클레임·SCAR·CAPA·내부심사
 

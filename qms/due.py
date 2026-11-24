@@ -72,7 +72,7 @@ def due_items(approver=False, user=None):
         'pending_specs': list(InspectionSpec.objects.filter(approved_at__isnull=True)) if approver else [],
         'pending_docs': list(DocumentRevision.objects.filter(approved_at__isnull=True)) if approver else [],
         'pending_plans': list(ControlPlan.objects.filter(approved_at__isnull=True)) if approver else [],
-        'pending_changes': list(ChangeRequest.objects.filter(approved_at__isnull=True)) if approver else [],
+        'pending_changes': list(ChangeRequest.objects.filter(approved_at__isnull=True).exclude(stage__in=(ChangeRequest.HOLD, ChangeRequest.REJECTED))) if approver else [],
         'pending_ppaps': list(PpapSubmission.objects.filter(approved_at__isnull=True)) if approver else [],
     }
     on = active_set()
