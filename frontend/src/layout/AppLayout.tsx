@@ -14,6 +14,7 @@ const ROUTE_MODULE: Record<string, string> = {
   inspect: 'qms_inspection',
   inspections: 'qms_inspection',
   ledger: 'qms_inspection',
+  documents: 'qms_document',
   'customer-rules': 'qms_claim',
 }
 

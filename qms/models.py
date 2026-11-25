@@ -845,6 +845,8 @@ class Document(models.Model):
     number = models.CharField('문서번호', max_length=50, unique=True)
     title = models.CharField('문서명', max_length=200)
     doc_type = models.CharField('종류', max_length=50, blank=True, help_text='예: Control Plan, PFMEA, 작업표준서')
+    department = models.ForeignKey('core.Department', on_delete=models.PROTECT, null=True, blank=True,
+                                   related_name='documents', verbose_name='주관 부서')
     history = HistoricalRecords()
 
     class Meta:
@@ -857,6 +859,40 @@ class Document(models.Model):
     def current_revision(self):
         """최신 승인본 = 승인된 최신 개정."""
         return self.revisions.filter(approved_at__isnull=False).order_by('-approved_at').first()
+
+
+class DocumentForm(models.Model):
+    """결재서(문서)에 딸린 입력·출력 양식(P6a). 연결 기록을 고르면 문서 체계에서 그 기록 화면·대장으로 바로 간다."""
+    IN, OUT = 'IN', 'OUT'
+    DIRECTIONS = [(IN, '입력'), (OUT, '출력')]
+    # 값 → 화면 주소는 qms/api/documents.py target_url. 'ledger:<검사 구분>'은 검사 관리대장, 나머지는 기록 목록
+    TARGETS = [('ledger:INCOMING', '수입검사 관리대장'), ('ledger:PROCESS', '공정검사 관리대장'),
+               ('ledger:OUTGOING', '출하검사 관리대장'), ('qms.inspectionspec', '검사기준서'), ('qms.controlplan', '관리계획서'),
+               ('core.workorder', '작업지시'), ('core.workresult', '생산실적'), ('core.shipment', '출하'),
+               ('core.nonconformance', '부적합(NCR)'), ('qms.capa', '시정조치(CAPA)'), ('qms.changerequest', '변경점(4M)'),
+               ('qms.customerclaim', '고객 클레임(8D)'), ('qms.scar', '공급자 시정조치(SCAR)'),
+               ('qms.ppapsubmission', 'PPAP'), ('qms.gaugecalibration', '교정 이력'), ('qms.msastudy', '측정시스템 분석(MSA)'),
+               ('qms.qualification', '검사원 자격'), ('core.pmrecord', '보전 이력'), ('qms.internalaudit', '내부 심사'),
+               ('qms.managementreview', '경영검토')]
+
+    document = models.ForeignKey(Document, on_delete=models.PROTECT, related_name='forms', verbose_name='결재서')
+    code = models.CharField('양식 번호', max_length=50, unique=True, help_text='예: CSE-PQ-07-01')
+    name = models.CharField('양식명', max_length=200)
+    direction = models.CharField('구분', max_length=3, choices=DIRECTIONS)
+    revision = models.CharField('개정', max_length=20, blank=True)
+    department = models.ForeignKey('core.Department', on_delete=models.PROTECT, null=True, blank=True,
+                                   related_name='document_forms', verbose_name='작성 부서')
+    target = models.CharField('연결 기록', max_length=40, choices=TARGETS, blank=True,
+                              help_text='이 양식을 시스템의 어느 기록으로 쓰는지. 비우면 양식 기록만 둔다.')
+    sort = models.PositiveIntegerField('정렬', default=0)
+    history = HistoricalRecords()
+
+    class Meta:
+        verbose_name = verbose_name_plural = '양식'
+        ordering = ['document__number', 'direction', 'sort', 'code']
+
+    def __str__(self):
+        return f'{self.code} {self.name}'
 
 
 class DocumentRevision(Approvable):

@@ -1,6 +1,6 @@
 from django.urls import path
 
-from . import analysis, audit, inspections, memos, plans, specs, views
+from . import analysis, audit, documents, inspections, memos, plans, specs, views
 
 urlpatterns = [
     path('overview/', views.OverviewView.as_view()),
@@ -32,6 +32,7 @@ urlpatterns = [
     path('inspect/submit/', inspections.SubmitView.as_view()),
     path('inspect/upload/', inspections.UploadView.as_view()),
     path('inspect/upload/template/', inspections.UploadTemplateView.as_view()),
+    path('documents/matrix/', documents.DocMatrixView.as_view()),
     path('kpi/', analysis.KpiView.as_view()),
     path('suppliers/', analysis.SuppliersView.as_view()),
     path('suppliers/grade/', analysis.SupplierGradeView.as_view()),

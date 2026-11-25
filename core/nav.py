@@ -13,7 +13,7 @@ APP_PAGES = {'/admin/core/item/': '/app/items', '/admin/core/process/': '/app/pr
              '/admin/qms/controlplan/': '/app/plans', '/admin/qms/customerrule/': '/app/customer-rules',
              '/admin/qms/inspection/': '/app/inspections', '/me/': '/app/me',
              # 옛 서버 화면 → 같은 일을 하는 새 화면 (옛 주소도 계속 열린다)
-             '/todo/': '/app/todo', '/overview/': '/app/overview', '/inspect/': '/app/inspect', '/ledger/': '/app/ledger', '/import/': '/app/import',
+             '/todo/': '/app/todo', '/overview/': '/app/overview', '/inspect/': '/app/inspect', '/ledger/': '/app/ledger', '/documents/': '/app/documents', '/import/': '/app/import',
              '/trace/': '/app/trace', '/memo/inbox/': '/app/memos', '/nc/new/': '/app/nc-new',
              '/kpi/': '/app/kpi', '/suppliers/': '/app/suppliers', '/audit-pack/': '/app/audit-pack',
              '/memo/new/': '/app/memos', '/admin/core/moduleswitch/': '/app/modules',
@@ -84,7 +84,8 @@ SUB = {'생산실적': '작업지시', 'LOT 추적': 'LOT',
        '부적합 등록': '부적합(NCR)', '보류': '부적합(NCR)',
        '체크리스트·증적': '심사 관리', '심사 자료 출력': '심사 관리',
        '고객사별 8D 기한': '고객 클레임(8D)', '공급자 시정조치(SCAR)': '공급자 평가',
-       '채번 코드값': '채번 규칙', '보전 이력': '설비·예방보전'}
+       '채번 코드값': '채번 규칙', '보전 이력': '설비·예방보전',
+       '문서 관리': '문서 체계', '양식': '문서 체계'}
 
 NAV = [
     ('통합 업무 홈', [('내 할 일', 'todo', None),
@@ -110,7 +111,9 @@ NAV = [
                     ('보류', 'admin:core_hold_changelist', 'core.view_hold'),
                     ('시정조치(CAPA)', 'admin:qms_capa_changelist', 'qms.view_capa'),
                     ('변경점 관리(4M)', 'admin:qms_changerequest_changelist', 'qms.view_changerequest'),
+                    ('문서 체계', 'documents', 'qms.view_document'),
                     ('문서 관리', 'admin:qms_document_changelist', 'qms.view_document'),
+                    ('양식', 'admin:qms_documentform_changelist', 'qms.view_documentform'),
                     ('심사 관리', 'admin:qms_internalaudit_changelist', 'qms.view_internalaudit'),
                     ('체크리스트·증적', 'admin:qms_auditchecklist_changelist', 'qms.view_auditchecklist'),
                     ('심사 자료 출력', 'audit_pack', 'core.view_nonconformance')]),

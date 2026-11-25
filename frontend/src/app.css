@@ -181,6 +181,9 @@ a.flow-box:hover { border-color: currentColor; }
 /* 검사 관리대장: 새 줄 칸 이름·규격 */
 .ledger-label { font-size: 12px; color: var(--ant-color-text-secondary); margin-bottom: 2px; white-space: nowrap; }
 .ledger-spec { font-size: 11px; color: var(--ant-color-text-tertiary); font-weight: 400; }
+.doc-hint { color: var(--ant-color-text-secondary); font-size: 12px; }
+.form-chip { margin: 0; cursor: pointer; white-space: normal; }
+.form-chip-code { font-variant-numeric: tabular-nums; opacity: .75; }
 
 /* 조직도(사용자·조직도 「조직도」 보기): 위에서 아래로, 부서 상자를 선으로 잇는다 */
 .org-chart { overflow-x: auto; padding: 4px 0 16px; }

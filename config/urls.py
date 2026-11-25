@@ -46,6 +46,7 @@ urlpatterns = [
     path('memo/inbox/', qms_views.memo_inbox, name='memo_inbox'),
     path('inspect/', qms_views.inspect_home, name='inspect'),
     path('ledger/', RedirectView.as_view(url='/app/ledger'), name='ledger'),
+    path('documents/', RedirectView.as_view(url='/app/documents'), name='documents'),
     path('inspect/lot/', qms_views.inspect_lot, name='inspect_lot'),
     path('inspect/receive/', qms_views.inspect_receive, name='inspect_receive'),
     path('inspect/<int:lot_id>/<int:spec_id>/', qms_views.inspect_form, name='inspect_form'),

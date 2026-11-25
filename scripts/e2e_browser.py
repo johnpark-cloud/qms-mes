@@ -830,6 +830,26 @@ try:
             ok, page_err = False, str(e)[:120]
         check('문서 열람 확인: 「읽었음」 → 열람 확인 표', ok, page.url if ok else page_err)
 
+        # 문서 체계(P6a): 부서별 결재서 × 입력·출력 양식 칩 → 대장 연결 칩을 누르면 관리대장(수입검사)
+        manage('shell', '-c', (
+            "from core.models import Department; from qms.models import Document, DocumentForm;"
+            "dep = Department.objects.create(code='E2E-QA', name='E2E 품질팀');"
+            "d = Document.objects.create(number='E2E-PQ-07', title='E2E 수입검사 절차', department=dep);"
+            "DocumentForm.objects.create(document=d, code='E2E-PQ-07-01', name='수입검사 의뢰서', direction='IN');"
+            "DocumentForm.objects.create(document=d, code='E2E-PQ-07-02', name='수입검사 관리대장', direction='OUT', target='ledger:INCOMING')"))
+        try:
+            page.goto('/app/documents')
+            card = page.locator('.ant-card', has_text='E2E 품질팀')
+            card.locator('.form-chip', has_text='E2E-PQ-07-01').wait_for(timeout=8000)
+            if os.environ.get('E2E_SHOTS'):
+                page.screenshot(path=os.path.join(os.environ['E2E_SHOTS'], 'documents.png'), full_page=True)
+            menu = page.locator('.ant-menu-item-selected').first.inner_text().strip()
+            card.locator('.form-chip', has_text='E2E-PQ-07-02').click()
+            page.wait_for_url('**/app/ledger?type=INCOMING', timeout=8000)
+            ok, page_err = menu == '문서 체계', f'메뉴 {menu!r}'
+        except Exception as e:
+            ok, page_err = False, str(e)[:120]
+        check('문서 체계: 부서 카드·양식 칩 → 관리대장', ok, page.url if ok else page_err)
 
         # 기록 화면 새로 만들기: 목록 「새로 만들기」 → 입력 → 저장 → 새 기록 화면
         try:

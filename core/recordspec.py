@@ -122,13 +122,23 @@ def _today():
 
 SPECS = {
     'qms.document': Spec(
-        fields=('number', 'title', 'doc_type', 'current_revision'),
-        columns=('number', 'title', 'doc_type'),
-        search=('number', 'title', 'doc_type'),
-        children=(Child('revisions', '개정 이력', ('revision', 'change_note', 'approved_at', 'file'), ('-created_at', '-pk')),),
+        fields=('number', 'title', 'doc_type', 'department', 'current_revision'),
+        columns=('number', 'title', 'doc_type', 'department'),
+        search=('number', 'title', 'doc_type', 'department__name'),
+        children=(Child('revisions', '개정 이력', ('revision', 'change_note', 'approved_at', 'file'), ('-created_at', '-pk')),
+                  Child('forms', '입력·출력 양식', ('code', 'name', 'direction', 'target'), ('direction', 'sort', 'code'))),
         order=('number',),
-        edit=('number', 'title', 'doc_type'),
-        create=('number', 'title', 'doc_type')),
+        edit=('number', 'title', 'doc_type', 'department'),
+        create=('number', 'title', 'doc_type', 'department')),
+    'qms.documentform': Spec(
+        fields=('document', 'code', 'name', 'direction', 'revision', 'department', 'target', 'sort'),
+        columns=('code', 'name', 'direction', 'document', 'department', 'target'),
+        search=('code', 'name', 'document__number', 'document__title'),
+        tabs=(ALL, ('in', '입력', lambda qs: qs.filter(direction='IN')), ('out', '출력', lambda qs: qs.filter(direction='OUT'))),
+        side=('relations', 'files', 'history'),
+        order=('document__number', 'direction', 'sort', 'code'),
+        edit=('code', 'name', 'direction', 'revision', 'department', 'target', 'sort'),
+        create=('document', 'code', 'name', 'direction', 'revision', 'department', 'target', 'sort')),
     'qms.documentrevision': Spec(
         fields=('document', 'revision', 'file', 'change_note', 'created_at', 'approved_by', 'approved_at', 'body'),
         columns=('document', 'revision', 'created_at', 'approved_at'),

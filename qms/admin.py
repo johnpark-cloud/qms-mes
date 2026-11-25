@@ -19,7 +19,7 @@ from core.relations import trace_url
 from core.rules import child_editable
 
 from .models import (AuditChecklist, AuditFinding, AuditItem, Capa, ChangeRequest, Characteristic, ControlPlan,
-                     ControlPlanLine, CustomerClaim, CustomerRule, Document, DocumentRevision, Evidence, ExcelTemplate, Gauge,
+                     ControlPlanLine, CustomerClaim, CustomerRule, Document, DocumentForm, DocumentRevision, Evidence, ExcelTemplate, Gauge,
                      GaugeCalibration, MsaStudy,
                      Inspection, InspectionSpec, InternalAudit, ManagementReview, ManagementReviewAction, Measurement, Memo, MemoPhoto, PpapElement, PpapSubmission, Qualification, Scar)
 from .rules import NotApproved, make_specs_from_plan, new_spec_revision
@@ -577,6 +577,14 @@ class DocumentAdmin(BaseAdmin):
                     raise  # 번호 겹침이 아닌 다른 제약 위반은 그대로 알린다
                 obj.number = numbering.next_number(auto, form.auto_values)
         super().save_model(request, obj, form, change)  # 스무 번 연속 겹침은 사실상 없다
+
+
+@admin.register(DocumentForm)
+class DocumentFormAdmin(BaseAdmin):
+    list_display = ['code', 'name', 'direction', 'document', 'department', 'target']
+    search_fields = ['code', 'name', 'document__number', 'document__title']
+    list_filter = ['direction', 'target']
+    autocomplete_fields = ['document']
 
 
 @admin.register(DocumentRevision)

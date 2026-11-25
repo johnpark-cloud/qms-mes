@@ -70,6 +70,8 @@ class RecordsApiTest(TestCase):
         from qms.models import ManagementReview, ManagementReviewAction
         mr = ManagementReview.objects.create(period_start=today, period_end=today, chair=self.root, attendees='대표')
         ManagementReviewAction.objects.create(review=mr, task='검사 인원 충원', owner=self.root, due_date=today)
+        from qms.models import DocumentForm
+        DocumentForm.objects.create(document=self.doc, code='QP-01-01', name='검사 의뢰서', direction=DocumentForm.IN)
         mes_fixture()
         self.client.force_login(self.root)
 

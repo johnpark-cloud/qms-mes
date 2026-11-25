@@ -19,12 +19,13 @@ from core.models import (CodeValue, Department, Equipment, ImportProfile, Item, 
 from core.rules import LOCKED_MSG
 from core.tests_import_log import temp_imports
 from core.tests_modules import force_off
-from qms.models import AuditChecklist, ChangeRequest, Characteristic, Gauge, InspectionSpec, InternalAudit, MsaStudy
+from qms.models import AuditChecklist, ChangeRequest, Characteristic, Document, Gauge, InspectionSpec, InternalAudit, MsaStudy
 
 # 대상마다 한 행. 대상이 늘면 여기에 한 줄 더한다(test_every_target_has_sample).
 SAMPLES = {
     'item': {'code': 'N1', 'name': '새 품목', 'item_type': '원자재'},
     'qms.document': {'number': 'QP-9', 'title': '품질 매뉴얼'},
+    'qms.documentform': {'document': 'QP-1', 'code': 'QP-1-01', 'name': '수입검사 의뢰서', 'direction': '입력', 'department': 'QA'},
     'qms.gauge': {'number': 'G-9', 'name': '캘리퍼스', 'cal_type': '사내 교정', 'interval_months': '12',
                   'last_calibrated': '2026-11-01', 'active': '예'},
     'qms.msastudy': {'gauge': 'G-1', 'kind': '편의', 'performed_on': '2026-11-02', 'result': '적합'},
@@ -89,6 +90,7 @@ class ImportTargetsTest(TestCase):
         Equipment.objects.create(code='EQ-1', name='프레스')
         self.cl = AuditChecklist.objects.create(name='CL-A')
         InternalAudit.objects.create(name='IA-1', planned_date=timezone.localdate(), auditor='홍길동')
+        Document.objects.create(number='QP-1', title='수입검사 절차')
 
     def profile(self, key, fields):
         cols = headers(targets()[key])
