@@ -61,7 +61,8 @@ LABELS = {'core.hold': {'lot': 'LOT', 'nonconformance': '부적합', 'created_at
           'qms.changerequest': {'first_article_state': '초품 합격'},
           'qms.ppapelement': {'record': '증적 기록'},
           'qms.evidence': {'record': '증적 기록'},
-          'core.workorder': {'progress': '진도율(%)'}}
+          'core.workorder': {'progress': '진도율(%)'},
+          'core.shipment': {'outgoing_result': '출하검사'}}
 
 
 # 여러 줄 표 칸(JSON 목록): 열 (키, 이름). 기록 화면에서 줄을 더하고 뺀다. 검사는 모델 clean이 한다
@@ -423,7 +424,7 @@ SPECS = {
         create=('work_order', 'step', 'lot', 'input_qty', 'good_qty', 'defect_qty')),
     'core.shipment': Spec(
         fields=('lot', 'customer', 'partner', 'qty', 'shipped_at'),
-        columns=('lot', 'customer', 'qty', 'shipped_at'),
+        columns=('lot', 'customer', 'qty', 'shipped_at', 'outgoing_result'),
         search=('lot__number', 'customer'),
         order=('-shipped_at', '-pk'),
         edit=('customer', 'qty', 'partner', 'shipped_at'),

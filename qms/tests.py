@@ -476,6 +476,72 @@ class QmsTest(TestCase):
         self.client.force_login(self.lead)
         self.assertContains(self.client.get(f'/api/records/core.shipment/{ship.pk}/document/'), '출하성적서')
 
+    def cell_shipment(self):
+        """출하 이력서용: 원자재 수입검사 합격 → 셀 조립 실적 → 셀 출하검사(측정 2개) → 출하."""
+        from core.models import Process, RoutingStep, WorkResult
+        self.inspect('10.0')
+        step = RoutingStep.objects.create(item=self.cell_item, seq=10, process=Process.objects.create(code='P10', name='조립'))
+        wo = WorkOrder.objects.create(number='WO-9', item=self.cell_item, planned_qty=10)
+        t0 = timezone.now() - datetime.timedelta(hours=3)
+        WorkResult.objects.create(work_order=wo, step=step, lot=self.cell, input_qty=5, good_qty=5,
+                                  started_at=t0, ended_at=t0 + datetime.timedelta(hours=1))
+        out_spec = InspectionSpec.objects.create(item=self.cell_item, inspection_type=InspectionSpec.OUTGOING)
+        ocv = Characteristic.objects.create(spec=out_spec, name='OCV', lsl=Decimal('3.6'), usl=Decimal('3.7'), unit='V')
+        approve(out_spec, self.lead)
+        insp = Inspection.objects.create(lot=self.cell, spec=out_spec)
+        Measurement.objects.create(inspection=insp, characteristic=ocv, value=Decimal('3.61'))
+        Measurement.objects.create(inspection=insp, characteristic=ocv, value=Decimal('3.65'))
+        insp.finalize()
+        return Shipment.objects.create(lot=self.cell, customer='A사', qty=5), t0
+
+    def test_shipment_trace(self):
+        ship, t0 = self.cell_shipment()
+        root = User.objects.create_superuser('root', password='pw')
+        self.client.force_login(root)
+        d = self.client.get(f'/api/records/core.shipment/{ship.pk}/trace/').json()
+        steps = {s['label']: s for s in d['steps']}
+        self.assertEqual(list(steps), ['LOT 생성', '작업 시작', '작업 완료', '공정검사', '출하검사', '출하'])
+        self.assertEqual(steps['작업 시작']['at'], timezone.localtime(t0).isoformat())
+        self.assertEqual(steps['공정검사']['text'], '없음')  # 빠진 단계도 자리를 남긴다
+        self.assertIsNone(steps['공정검사']['at'])
+        self.assertEqual(steps['출하검사']['text'], '합격')
+        self.assertEqual(d['inspections'][0]['rows'], [['OCV', '3.6 ~ 3.7 V', 2, '3.61', '3.65', '합격']])  # 특성별 n·최소·최대
+        self.assertEqual([(i['lot'], i['iqc']) for i in d['inputs']], [('RAW-1', '합격')])
+        self.assertEqual(d['ncs'], [])
+        self.assertTrue(any(e['kind'] == 'shipment' for e in d['timeline']))
+        wo = WorkOrder.objects.get()
+        self.assertEqual(self.client.get(f'/api/records/core.workorder/{wo.pk}/trace/').status_code, 404)  # 출하만
+        User.objects.create_user('nobody', password='pw')
+        self.client.login(username='nobody', password='pw')
+        self.assertEqual(self.client.get(f'/api/records/core.shipment/{ship.pk}/trace/').status_code, 403)
+
+    def test_shipment_trace_shows_nc_and_missing_outgoing(self):
+        ship = Shipment.objects.create(lot=self.cell, customer='A사', qty=1)  # 출하 뒤에 원자재 불합격이 드러난 경우
+        nc = self.inspect('11.0').nonconformance  # 원자재 불합격 → 셀까지 보류
+        root = User.objects.create_superuser('root', password='pw')
+        self.client.force_login(root)
+        d = self.client.get(f'/api/records/core.shipment/{ship.pk}/trace/').json()
+        self.assertEqual([n['number'] for n in d['ncs']], [nc.number])
+        self.assertTrue(d['ncs'][0]['open'])
+        self.assertEqual({s['label']: s['text'] for s in d['steps']}['출하검사'], '없음')
+        self.assertEqual(d['inputs'][0]['iqc'], '불합격')
+
+    def test_coa_document_and_list_column(self):
+        ship, _ = self.cell_shipment()
+        root = User.objects.create_superuser('root', password='pw')
+        self.client.force_login(root)
+        doc = self.client.get(f'/api/records/core.shipment/{ship.pk}/document/').json()
+        self.assertEqual(doc['title'], '출하성적서')
+        head = dict(doc['head'])
+        self.assertEqual(head['품목'], 'C1 셀')
+        self.assertIn('출하검사', head['검사 근거'])
+        tables = {t['title']: t for t in doc['tables']}
+        self.assertEqual(tables['투입 LOT']['rows'][0][:2], ['RAW-1', 'R1 양극재'])
+        self.assertEqual(tables['투입 LOT']['rows'][0][-1], '합격')
+        rows = self.client.get('/api/records/core.shipment/').json()
+        cols = [c['key'] for c in rows['columns']]
+        self.assertIn('outgoing_result', cols)
+
     # 자동수집
     def test_collect_csv(self):
         path = Path(tempfile.mkdtemp()) / 'm.csv'

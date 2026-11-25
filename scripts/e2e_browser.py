@@ -914,6 +914,25 @@ try:
             page.screenshot(path=os.path.join(os.environ['E2E_SHOTS'], 'users.png'), full_page=True)
         check('사용자·조직도: 새 사용자 만들기(관리자 비밀번호 확인) → 조직도·변경 기록', ok, page.url if ok else page_err)
 
+        # P2: 출하 기록 → 출하 여정·검사 근거·투입 LOT과 「출하성적서」 주 버튼
+        manage('shell', '-c', (
+            "from core.models import Item, Lot, Shipment;"
+            "i=Item.objects.create(code='E2E-SH', name='E2E 출하품', item_type='FIN');"
+            "print(Shipment.objects.create(lot=Lot.objects.create(number='E2E-SH-1', item=i), customer='E2E고객', qty=3).pk)"))
+        try:
+            page.goto('/app/r/core/shipment')
+            page.locator('.ant-table-tbody tr', has_text='E2E-SH-1').click()
+            page.wait_for_url('**/app/r/core/shipment/*')
+            page.get_by_role('heading', name='출하 여정').wait_for(timeout=5000)
+            page.locator('.flow-box', has_text='출하검사').get_by_text('없음').wait_for(timeout=5000)
+            page.get_by_role('button', name='출하성적서').click()
+            page.wait_for_url('**/app/r/core/shipment/*/print')
+            page.get_by_text('검사 근거').first.wait_for(timeout=5000)
+            ok, page_err = True, ''
+        except Exception as e:
+            ok, page_err = False, str(e)[:120]
+        check('출하 기록: 출하 여정(빠진 출하검사 「없음」) → 출하성적서 양식지', ok, page.url if ok else page_err)
+
         # 세션이 끊기면 API를 부르는 화면이 로그인으로 보내야 한다 (client.ts 의 403 처리)
         page.context.clear_cookies()
         page.goto('/app/overview')

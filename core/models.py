@@ -424,10 +424,21 @@ class Lot(models.Model):
     def ancestors(self):
         return self._walk('parent_links', 'parent')
 
+    def latest_inspection(self, itype):
+        """이 LOT의 가장 최근 검사(itype: INCOMING·PROCESS·OUTGOING). 없으면 None."""
+        return self.inspections.filter(spec__inspection_type=itype).select_related('spec', 'inspector').order_by('-inspected_at', '-pk').first()
+
     def assert_usable(self, action):
         causes = sorted({h.nonconformance.number for h in self.holds.filter(released_at__isnull=True).select_related('nonconformance')})
         if causes:
             raise ValidationError(f"[부적합] {', '.join(causes)}: {self.number}은(는) 보류 중이라 {action}할 수 없습니다.")
+
+
+def result_text(insp):
+    """검사 판정 글자: 없음·판정 전·합격·불합격."""
+    if insp is None:
+        return '없음'
+    return insp.get_result_display() or '판정 전'
 
 
 def lot_changed(obj, field):
@@ -680,13 +691,43 @@ class Shipment(models.Model):
         """인쇄 화면(core.views.print_view)에 붙는 표 = 출하성적서."""
         return '출하성적서', self.COA_HEADER, self.coa_rows()
 
+    @property
+    def outgoing_result(self):
+        """출하 목록 열: 이 LOT의 최근 출하검사 판정(없으면 빈칸)."""
+        insp = self.lot.latest_inspection('OUTGOING')
+        return result_text(insp) if insp else ''
+
+    def coa_inspection(self):
+        """성적서 근거: 이 LOT의 최신 합격 출하검사, 없으면 최신 합격 공정검사."""
+        for itype in ('OUTGOING', 'PROCESS'):
+            insp = (self.lot.inspections.filter(result='PASS', spec__inspection_type=itype)
+                    .select_related('spec', 'inspector').order_by('-inspected_at').first())
+            if insp:
+                return insp
+        return None
+
+    def print_head(self):
+        """양식지(출하성적서) 머리: 고객·품목·LOT·수량·출하일·검사 근거."""
+        item, insp = self.lot.item, self.coa_inspection()
+        who = (insp.inspector.get_full_name() or insp.inspector.username) if insp and insp.inspector else ''
+        basis = (f'{insp.spec.get_inspection_type_display()} {timezone.localtime(insp.inspected_at):%Y-%m-%d} 합격'
+                 + (f' ({who})' if who else '')) if insp else '합격 검사 없음'
+        return [['고객사', self.customer], ['품목', f'{item.code} {item.name}'], ['LOT', self.lot.number],
+                ['수량', format(self.qty.normalize(), 'f')], ['출하 일시', f'{timezone.localtime(self.shipped_at):%Y-%m-%d %H:%M}'],
+                ['검사 근거', basis]]
+
+    def print_more(self):
+        """출하성적서 뒤 표: 투입 LOT(계보 전체)과 그 수입검사 판정."""
+        rows = []
+        for a in sorted(self.lot.ancestors(), key=lambda lot: lot.number):
+            supplier = a.supplier or (a.partner.name if a.partner_id else '')
+            rows.append([a.number, f'{a.item.code} {a.item.name}', supplier, result_text(a.latest_inspection('INCOMING'))])
+        return [{'title': '투입 LOT', 'columns': ['LOT', '품목', '공급자', '수입검사'], 'rows': rows}] if rows else []
+
     def coa_rows(self):
         """출하성적서 표: 이 LOT의 최신 합격 출하검사(없으면 공정검사) 항목별 결과. 엑셀 매핑 예: {"A10": "coa_rows"}"""
-        for itype in ('OUTGOING', 'PROCESS'):
-            insp = self.lot.inspections.filter(result='PASS', spec__inspection_type=itype).order_by('-inspected_at').first()
-            if insp:
-                break
-        else:
+        insp = self.coa_inspection()
+        if not insp:
             return []
         rows = []
         for m in insp.measurements.select_related('characteristic').order_by('characteristic_id', 'pk'):

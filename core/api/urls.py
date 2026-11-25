@@ -41,6 +41,7 @@ urlpatterns = [
     path('records/<str:label>/<int:pk>/dispose/', records.RecordDisposeView.as_view()),
     path('records/<str:label>/<int:pk>/close/', records.RecordCloseView.as_view()),
     path('records/<str:label>/<int:pk>/ack/', records.RecordAckView.as_view()),
+    path('records/<str:label>/<int:pk>/trace/', records.RecordTraceView.as_view()),
     path('edit-requests/<int:pk>/', records.EditRequestView.as_view()),
     path('core/modules/', screens.ModuleSettingsView.as_view()),
     path('core/nc-mail/<int:pk>/', screens.NcMailView.as_view()),

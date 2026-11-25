@@ -26,6 +26,7 @@ from core.grid import record_version
 from core.models import Approvable, EditRequest, Lot, Nonconformance, is_approver
 from core.records import can_edit_locked, is_locked
 from core.relations import is_registered, record_url, sheet_url, status_of, trace_url
+from core.timeline import shipment_trace
 
 from . import listing
 from .permissions import require_perm
@@ -337,7 +338,7 @@ def document_of(obj, spec):
     def day(t):
         return timezone.localtime(t).strftime('%Y-%m-%d') if t else ''
 
-    head = [] if sections else kv(spec.fields)
+    head = obj.print_head() if hasattr(obj, 'print_head') else [] if sections else kv(spec.fields)
     tables = [{'title': t, 'columns': ['항목', '내용'], 'rows': kv(names)} for t, names in sections]
     if hasattr(obj, 'print_table'):  # 부적합 보고서·출하성적서·PSW
         title, header, rows = obj.print_table()
@@ -350,6 +351,7 @@ def document_of(obj, spec):
                 tables[-1]['rows'].append(r[1:])
         else:
             tables.append({'title': title, 'columns': header, 'rows': rows})
+        tables += obj.print_more() if hasattr(obj, 'print_more') else []  # 출하성적서 뒤 투입 LOT
     else:
         for c in spec.children:
             rel = getattr(obj, c.accessor)
@@ -377,6 +379,17 @@ class RecordDocumentView(APIView):
         if request.query_params.get('export') == 'xlsx':
             return xlsx_response(document_xlsx(doc), f"{doc['title']}_{getattr(obj, 'number', obj.pk)}.xlsx")
         return Response(doc)
+
+
+class RecordTraceView(APIView):
+    """출하 이력서(P2): LOT 생성부터 출하까지 단계·검사 근거·투입 LOT·부적합·4M·타임라인."""
+    schema = None
+
+    def get(self, request, label, pk):
+        model, spec = _model(request.user, label)
+        if label != 'core.shipment':
+            raise Http404
+        return Response(shipment_trace(get_object_or_404(model, pk=pk)))
 
 
 class RecordDetailView(APIView):

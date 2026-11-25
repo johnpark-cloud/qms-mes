@@ -37,13 +37,15 @@ interface Props {
   menu?: MenuProps['items']
   /** 제목 옆 큰 글자(검사 판정 띠) */
   lead?: ReactNode
+  /** 구역 카드 위에 먼저 보일 이야기(출하 여정 등) */
+  intro?: ReactNode
   /** 넓은 표(검사항목·관리 항목)가 본문인 화면: 연결·메모 패널을 아래로 내려 표가 화면 폭을 다 쓴다 */
   wide?: boolean
 }
 
 const COLOR = { 초안: 'orange', 승인됨: 'green', 잠김: 'default', 합격: 'green', 불합격: 'red', 미판정: 'orange' } as const
 
-export default function RecordPage({ title, status, actions, props, sections, next, children, side, record, menu = [], lead, onDelete, editRequest, listPath = '/todo', wide }: Props) {
+export default function RecordPage({ title, status, actions, props, sections, next, children, side, record, menu = [], lead, intro, onDelete, editRequest, listPath = '/todo', wide }: Props) {
   const [showEmpty, setShowEmpty] = useState(false)
   const me = useQuery({ queryKey: ['me'], queryFn: fetchMe, staleTime: Infinity }).data
   const qc = useQueryClient()
@@ -100,6 +102,7 @@ export default function RecordPage({ title, status, actions, props, sections, ne
               {next.button}
             </div>
           )}
+          {intro}
           <div className="record-sections">
             {(sections ?? [{ label: '', items: props }]).filter((s) => s.items.length).map((s) => {
               const shown = showEmpty ? s.items : s.items.filter((p) => !p.empty)

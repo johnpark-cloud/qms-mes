@@ -10,6 +10,7 @@ import MemoPanel from '../../components/MemoPanel'
 import RecordPage from '../../components/RecordPage'
 import type { PropItem } from '../../components/RecordPage'
 import RelationsPanel from '../../components/RelationsPanel'
+import ShipmentTrace from '../../components/ShipmentTrace'
 import EditRequestModal from '../../components/EditRequestModal'
 import SignModal from '../../components/SignModal'
 import { addRecent } from '../../lib/recent'
@@ -400,7 +401,7 @@ export default function RecordView() {
           ) : (
             <>
               <Link to={d.list_url.slice(4)}><Button>{d.kind} 목록</Button></Link>
-              <Link to={`/r/${app}/${model}/${id}/print`}><Button>양식지 · 인쇄</Button></Link>
+              <Link to={`/r/${app}/${model}/${id}/print`}>{label === 'core.shipment' ? <Button type="primary">출하성적서</Button> : <Button>양식지 · 인쇄</Button>}</Link>
               {d.requests.edit && !d.can_change && <Button onClick={() => setAsking(true)}>수정 요청</Button>}
               {d.can_approve && next?.key !== 'approve' && <Button onClick={() => setSigning(true)}>승인</Button>}
               {d.can_dispose && next?.key !== 'dispose' && <Button onClick={() => setDisposing(true)}>처분</Button>}
@@ -416,6 +417,7 @@ export default function RecordView() {
         ]}
         props={[]}
         next={next}
+        intro={label === 'core.shipment' && id ? <ShipmentTrace id={id} /> : undefined}
         sections={(d.sections ?? [{ label: '', keys: d.fields.map((f) => f.key) }]).map((sec) => ({
           label: sec.label,
           items: toProps(d.fields.filter((f) => sec.keys.includes(f.key))),
