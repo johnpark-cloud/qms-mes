@@ -114,6 +114,26 @@ class RecordsApiTest(TestCase):
                 self.assertIn(spec.overdue, [k for k, _, _ in spec.tabs], label)
                 self.assertIsInstance(self.client.get(f'/api/records/{label}/').json()['overdue']['count'], int, label)
 
+    def test_hub_summary(self):  # 허브(P3): 묶음 안 기록 목록마다 탭별 건수·지연·7일 안 기한, 「주의 필요」(지연 → 기한 순)
+        from qms.models import Capa
+        today = timezone.localdate()
+        late = Capa.objects.create(title='늦은 대책', source='OTHER', action='x', owner=self.root, due_date=today - datetime.timedelta(days=3))
+        soon = Capa.objects.create(title='곧 기한', source='OTHER', action='x', owner=self.root, due_date=today + datetime.timedelta(days=2))
+        Capa.objects.create(title='먼 기한', source='OTHER', action='x', owner=self.root, due_date=today + datetime.timedelta(days=30))
+        d = self.client.get('/api/hub/', {'group': '품질보증 및 개선'}).json()
+        self.assertTrue(all(m['href'].startswith('/app/r/') for m in d['modules']))  # 등록·출력 메뉴는 표에서 뺀다
+        capa = next(m for m in d['modules'] if m['label'] == '시정조치(CAPA)')
+        self.assertEqual((capa['href'], capa['count'], capa['overdue'], capa['soon']), ('/app/r/qms/capa', 4, {'tab': 'late', 'count': 1}, 2))  # setUp CAPA는 오늘 기한
+        self.assertEqual({t['key']: t['count'] for t in capa['tabs']}['late'], 1)
+        self.assertTrue(capa['can_add'])
+        mine = [(a['url'], a['days']) for a in d['attention'] if a['module'] == '시정조치(CAPA)']
+        self.assertEqual([m for m in mine if m[1] != 0], [(record_url(late), -3), (record_url(soon), 2)])
+        days = [a['days'] for a in d['attention'] if a['days'] is not None]
+        self.assertEqual(days, sorted(days))
+        self.assertEqual(self.client.get('/api/hub/', {'group': '없는 묶음'}).status_code, 404)
+        self.client.force_login(User.objects.create_user('nobody', password='pw', is_staff=True))  # 볼 권한 없는 묶음은 없는 것과 같다
+        self.assertEqual(self.client.get('/api/hub/', {'group': '품질보증 및 개선'}).status_code, 404)
+
     def test_list_sort_and_filter(self):  # 열 머리 정렬, 선택지·참/거짓·외래키·날짜 필터, 엑셀도 같은 조건
         from qms.models import Gauge
         old = timezone.localdate() - datetime.timedelta(days=30)

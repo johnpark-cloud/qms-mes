@@ -320,6 +320,9 @@ components:
 - 이전 개정 비교 색: 바뀐 칸 `.diff-changed`(주황 계열 면), 추가 `.diff-added`(초록 계열 면), 삭제 `.diff-removed`(빨강 글자 + 취소선). 색만으로 전달하지 않도록 비교 결과 글(`diff_text`)을 함께 보인다. 저장 오류 칸은 `.cell-error`(빨강 테두리)다.
 - 인쇄: 문서 화면(`.doc-page`)은 A4 세로, 여백 12mm, 글자 10pt, 흰 바탕에 검정 글자다. `@media print`에서 `.print-bar`는 숨긴다. 승인 전 문서에는 `.doc-watermark`로 `초안 — 승인 전`을 대각선으로 크게 깐다. 표 행은 쪽 중간에서 끊지 않는다(`break-inside: avoid`).
 
+- 한눈에 보기(`/app/hub/<묶음>`): 카드 나열 대신 「처리할 것」 세 칸(`.hub-tile`: 지연 `.hub-tile-late` 오류 색·7일 안 기한 `.hub-tile-soon` 주의 색·승인 전, 0이면 회색) → 상태 보드(`.hub-row`: 목록 이름 | 탭 칩 `.hub-chip` | 「추가」, 지연 칩 `.hub-chip-late`, 0건 칩 `.hub-chip-zero` 흐리게) + 오른쪽 「주의 필요」(`.hub-attention`, 기한 꼬리표 `.due`). 900px 이하에서 한 줄로 내린다.
+- 조직도(`/app/users` 「조직도」 보기, `.org-chart`): 부서 상자(`.org-node`: 머리 `.org-dept` 부서명·부서장, 아래 인원 줄 `.org-person`)를 위에서 아래로 1px `--app-label` 선으로 잇는다. 고른 상자·인원은 2px 기본색 테두리(`.org-picked`), 사용 안 함은 흐리게(`.org-off`). 누르면 antd `Drawer`(오른쪽 창)에서 고친다. 넓으면 가로로 스크롤한다.
+
 ### 기록 화면 규칙 (`/app/` 상세)
 품번·검사기준·관리계획서·검사 상세는 모두 `frontend/src/components/RecordPage.tsx` 한 틀을 쓴다. 클래스는 `frontend/src/app.css`의 `.record-*`다.
 - 배치: 머리 띠(`.record-head`) → 왼쪽 본문(`.record-main`: 기본정보 + 하위 표) + 오른쪽 열(`.record-side`: 연결·메모·첨부 탭, 320px). 960px 이하에서는 오른쪽 열이 본문 아래로 내려간다. 1920×1080에서 머리 띠·기본정보·첫 하위 표가 스크롤 없이 보여야 한다.

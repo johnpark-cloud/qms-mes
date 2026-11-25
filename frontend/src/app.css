@@ -145,7 +145,30 @@ a.flow-box:hover { border-color: currentColor; }
   .ant-layout-header, .ant-layout-sider, .menu-tabs { display: none !important; }
   .doc-page { margin: 0; padding: 0; width: auto; min-height: 0; }
 }
-/* 메뉴 묶음 한눈에 보기: 넓으면 2~3열, 좁으면 1열 */
+/* 메뉴 묶음 한눈에 보기(P3): 처리할 것 칸 → 상태 보드(모듈 × 탭 건수) + 주의 필요. 좁으면 1열 */
+.hub-todo { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 200px), 1fr)); gap: 12px; margin-bottom: 16px; }
+.hub-tile { border: 1px solid var(--app-border); border-radius: 8px; padding: 10px 16px; min-width: 0; }
+.hub-tile-late { border-color: var(--app-negative); background: var(--app-negative-bg); }
+.hub-tile-soon { border-color: var(--app-critical); background: var(--app-critical-bg); }
+.hub-tile-label { color: var(--app-label); font-size: 13px; }
+.hub-tile-num { font-size: 28px; font-weight: 700; line-height: 1.2; }
+.hub-tile-late .hub-tile-num { color: var(--app-negative); }
+.hub-tile-soon .hub-tile-num { color: var(--app-critical); }
+.hub-tile-parts { display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: 13px; }
+.hub-body { display: grid; grid-template-columns: minmax(0, 2fr) minmax(260px, 1fr); gap: 16px; align-items: start; }
+@media (max-width: 900px) { .hub-body { grid-template-columns: 1fr; } }
+.hub-row { display: grid; grid-template-columns: 180px 1fr auto; gap: 8px 12px; align-items: center; padding: 8px 0; border-top: 1px solid var(--app-border); }
+.hub-row:first-of-type { border-top: 0; }
+@media (max-width: 640px) { .hub-row { grid-template-columns: 1fr auto; } .hub-tabs { grid-column: 1 / -1; } }
+.hub-name { font-weight: 600; overflow-wrap: anywhere; }
+.hub-tabs { display: flex; flex-wrap: wrap; gap: 6px; }
+.hub-chip { padding: 1px 8px; border: 1px solid var(--app-border); border-radius: 10px; font-size: 13px; color: inherit; white-space: nowrap; }
+.hub-chip-late { border-color: var(--app-negative); color: var(--app-negative); background: var(--app-negative-bg); }
+.hub-chip-zero { opacity: 0.5; }
+.hub-attention ul { list-style: none; margin: 0; padding: 0; }
+.hub-attention li { padding: 6px 0; border-top: 1px solid var(--app-border); }
+.hub-attention li:first-child { border-top: 0; }
+/* 분석 화면 카드 묶음: 넓으면 2~3열, 좁으면 1열 */
 .hub-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 420px), 1fr)); gap: 16px; }
 /* 검색 「전체 메뉴」: 밀러 열(묶음 → 메뉴 → 기록). 좁은 화면에서는 세로로 쌓는다 */
 .miller { display: grid; grid-template-columns: 1fr 1fr 1.4fr; gap: 0; margin-top: 8px; border: 1px solid var(--app-border); border-radius: 6px; height: 60vh; }
@@ -155,3 +178,25 @@ a.flow-box:hover { border-color: currentColor; }
 
 /* 미리보기 측정 결과: 불합격 줄을 옅은 빨강으로 */
 .row-ng > td { background: var(--ant-color-error-bg, #fff1f0) !important; }
+
+/* 조직도(사용자·조직도 「조직도」 보기): 위에서 아래로, 부서 상자를 선으로 잇는다 */
+.org-chart { overflow-x: auto; padding: 4px 0 16px; }
+.org-chart ul { display: flex; justify-content: center; position: relative; list-style: none; margin: 0; padding: 20px 0 0; }
+.org-chart > ul { padding-top: 0; width: max-content; min-width: 100%; } /* 넓으면 왼쪽이 잘리지 않고 스크롤 */
+.org-chart > ul > li { padding-top: 0; }
+.org-chart > ul > li::before, .org-chart > ul > li::after { display: none; } /* 최상위 부서끼리는 잇지 않는다 */
+.org-chart li { position: relative; display: flex; flex-direction: column; align-items: center; padding: 20px 6px 0; }
+.org-chart li::before, .org-chart li::after { content: ''; position: absolute; top: 0; right: 50%; width: 50%; height: 20px; border-top: 1px solid var(--app-label); }
+.org-chart li::after { right: auto; left: 50%; border-left: 1px solid var(--app-label); }
+.org-chart li:only-child::before, .org-chart li:only-child::after { display: none; }
+.org-chart li:only-child { padding-top: 0; }
+.org-chart li:first-child::before, .org-chart li:last-child::after { border: 0; }
+.org-chart li:last-child::before { border-right: 1px solid var(--app-label); }
+.org-chart ul ul::before { content: ''; position: absolute; top: 0; left: 50%; height: 20px; border-left: 1px solid var(--app-label); }
+.org-node { display: flex; flex-direction: column; min-width: 150px; border: 1px solid var(--app-border); border-radius: 8px; overflow: hidden; background: var(--ant-color-bg-container, #fff); }
+.org-node button { all: unset; cursor: pointer; padding: 4px 10px; font-size: 13px; text-align: left; }
+.org-node button:hover, .org-node button:focus-visible { background: var(--app-neutral-bg); }
+.org-node .org-dept { display: flex; flex-direction: column; padding: 6px 10px; font-weight: 600; background: var(--app-neutral-bg); border-bottom: 1px solid var(--app-border); }
+.org-picked, .org-node button.org-picked { outline: 2px solid var(--ant-color-primary, #0a6ed1); outline-offset: -2px; }
+.org-off { opacity: 0.55; }
+.org-loose { display: inline-flex; margin-top: 24px; }

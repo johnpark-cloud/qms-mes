@@ -113,7 +113,7 @@ export function groupProps<T extends { key: string; label: string; required?: bo
 }
 
 /** 기한 꼬리표: 지남(빨강) · 7일 안(주황) · 그 밖(회색) */
-function Due({ days }: { days: number }) {
+export function Due({ days }: { days: number }) {
   const cls = days < 0 ? 'due due-late' : days <= 7 ? 'due due-soon' : 'due'
   return <span className={cls}>{days < 0 ? `${-days}일 지남` : days === 0 ? '오늘' : `D-${days}`}</span>
 }

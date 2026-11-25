@@ -1,7 +1,7 @@
 from django.urls import include, path
 from drf_spectacular.views import SpectacularAPIView
 
-from . import attachments, master, records, screens, users, views
+from . import attachments, hub, master, records, screens, users, views
 from .permissions import IsStaff
 
 urlpatterns = [
@@ -10,6 +10,7 @@ urlpatterns = [
     path('auth/logout/', views.LogoutView.as_view()),
     path('auth/me/', views.MeView.as_view()),
     path('search/', views.SearchView.as_view()),
+    path('hub/', hub.HubView.as_view()),
     path('items/', views.ItemLookupView.as_view()),
     path('core/lots/', views.LotSearchView.as_view()),
     path('core/trace/', views.TraceView.as_view()),

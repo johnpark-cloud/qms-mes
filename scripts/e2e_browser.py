@@ -766,7 +766,7 @@ try:
             ok, page_err = False, str(e)[:120]
         check('PPAP 요소: 문서·증적 기록 잇기 → 요소 표에서 양식지 열기', ok, page.url if ok else page_err)
 
-        # 한눈에 보기: 기한 지난 CAPA → 카드 제목 앞 「지연 N」 → 누르면 지연 탭
+        # 한눈에 보기(P3): 기한 지난 CAPA → 상태 보드 CAPA 줄의 빨간 「지연 N」 칸 → 누르면 지연 탭
         manage('shell', '-c', (
             "import datetime; from django.contrib.auth import get_user_model; from django.utils import timezone;"
             "from qms.models import Capa;"
@@ -774,14 +774,17 @@ try:
             " due_date=timezone.localdate() - datetime.timedelta(days=5))"))
         try:
             page.goto('/app/hub/품질보증 및 개선')
-            card = page.locator('.ant-card', has_text='시정조치(CAPA)')
-            card.locator('.ant-tag', has_text=re.compile(r'지연 [1-9]')).click(timeout=8000)
+            page.locator('.hub-tile-late', has_text='시정조치(CAPA)').wait_for(timeout=8000)
+            if os.environ.get('E2E_SHOTS'):
+                page.screenshot(path=os.path.join(os.environ['E2E_SHOTS'], 'hub.png'), full_page=True)
+            row = page.locator('.hub-row', has_text='시정조치(CAPA)')
+            row.locator('.hub-chip-late').click(timeout=8000)
             page.wait_for_url('**/app/r/qms/capa?tab=late')
             page.locator('.ant-table-tbody tr', has_text='E2E 늦은 대책').wait_for(timeout=5000)
             ok, page_err = True, ''
         except Exception as e:
             ok, page_err = False, str(e)[:120]
-        check('한눈에 보기 「지연 N」 → 지연 탭', ok, page.url if ok else page_err)
+        check('한눈에 보기: 지연 칸·상태 보드 「지연 N」 → 지연 탭', ok, page.url if ok else page_err)
 
         # 문서 열람 확인: 승인된 개정 → 「읽었음」 → 열람 확인 표에 내 이름, 버튼 사라짐
         rev_pk = manage('shell', '-c', (
@@ -891,10 +894,19 @@ try:
             ok, page_err = False, str(e)[:120]
         check('엑셀 보고서 양식 새로 만들기 → 파일·셀 매핑 저장', ok, page.url if ok else page_err)
 
-        # 옛 사용자 관리 화면 대신 사용자·조직도(W5): 새 사용자 → 관리자 비밀번호 확인 → 조직도에 나타남
+        # 사용자·조직도(W5·P4): 새 부서(오른쪽 창) → 새 사용자 → 관리자 비밀번호 확인 → 조직도 상자에 나타남
         try:
             page.goto('/app/users')
-            page.get_by_text('부서 없음').wait_for(timeout=5000)
+            page.locator('.org-chart').wait_for(timeout=5000)
+            page.get_by_role('button', name='부서 추가').click()
+            page.get_by_label('부서 이름', exact=True).fill('E2E 검사팀')
+            page.get_by_label('부서 코드', exact=True).fill('E2EQC')
+            page.get_by_role('button', name='만들기').click()
+            page.locator('.org-node', has_text='E2E 검사팀').wait_for(timeout=5000)
+            page.keyboard.press('Escape')  # 오른쪽 창을 닫아야 위 단추를 누를 수 있다
+            if os.environ.get('E2E_SHOTS'):
+                page.locator('.ant-drawer-open').wait_for(state='detached', timeout=5000)
+                page.screenshot(path=os.path.join(os.environ['E2E_SHOTS'], 'org-chart.png'), full_page=True)
             page.get_by_role('button', name='사용자 추가').click()
             page.get_by_label('아이디', exact=True).fill('e2e-kim')
             page.get_by_label('성', exact=True).fill('김')
@@ -905,14 +917,14 @@ try:
             page.locator('.ant-modal input[type=password]').fill('e2e-pass-123')
             page.get_by_role('button', name='서명').click()
             page.wait_for_url(re.compile(r'/app/users/\d+$'))
-            page.locator('.ant-tree', has_text='김검사').wait_for(timeout=5000)
+            page.locator('.org-chart', has_text='김검사').wait_for(timeout=5000)
             page.get_by_text('계정 생성 (역할: 검사원)').wait_for(timeout=5000)
             ok, page_err = True, ''
         except Exception as e:
             ok, page_err = False, str(e)[:120]
         if os.environ.get('E2E_SHOTS'):
             page.screenshot(path=os.path.join(os.environ['E2E_SHOTS'], 'users.png'), full_page=True)
-        check('사용자·조직도: 새 사용자 만들기(관리자 비밀번호 확인) → 조직도·변경 기록', ok, page.url if ok else page_err)
+        check('사용자·조직도: 새 부서·새 사용자 만들기(관리자 비밀번호 확인) → 조직도·변경 기록', ok, page.url if ok else page_err)
 
         # P2: 출하 기록 → 출하 여정·검사 근거·투입 LOT과 「출하성적서」 주 버튼
         manage('shell', '-c', (

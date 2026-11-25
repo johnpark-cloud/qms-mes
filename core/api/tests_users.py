@@ -51,6 +51,27 @@ class OrgApiTest(TestCase):
         self.assertEqual(self.post({'action': 'move_dept', 'id': self.qc.pk, 'parent': qc2.pk}).status_code, 200)
         self.assertEqual(Department.objects.get(pk=self.qc.pk).parent, qc2)
 
+    def test_save_dept(self):  # P4 조직도 오른쪽 창: 부서 추가·수정(이름·코드·상위·부서장·순서·사용), 순환·코드 중복은 400
+        self.client.force_login(self.root)
+        r = self.post({'action': 'save_dept', 'code': 'PD', 'name': '생산팀', 'parent': None, 'manager': self.lead.pk, 'sort': 3, 'active': True})
+        self.assertEqual(r.status_code, 200, r.content)
+        pd = Department.objects.get(code='PD')
+        self.assertEqual((pd.name, pd.manager, pd.sort, pd.active, r.json()['id']), ('생산팀', self.lead, 3, True, pd.pk))
+        row = next(x for x in self.client.get(URL).json()['depts'] if x['code'] == 'PD')  # 오른쪽 창 부서장 선택값
+        self.assertEqual((row['manager_id'], row['manager']), (self.lead.pk, 'lead'))
+        r = self.post({'action': 'save_dept', 'id': self.qc.pk, 'code': 'QC', 'name': '검사팀', 'parent': pd.pk, 'manager': None, 'sort': 1, 'active': False})
+        self.assertEqual(r.status_code, 200, r.content)
+        self.qc.refresh_from_db()
+        self.assertEqual((self.qc.name, self.qc.parent, self.qc.active), ('검사팀', pd, False))
+        r = self.post({'action': 'save_dept', 'id': pd.pk, 'code': 'PD', 'name': '생산팀', 'parent': self.qc.pk})  # 자기 하위로
+        self.assertEqual(r.status_code, 400)
+        self.assertIn('parent', r.json()['fields'])
+        r = self.post({'action': 'save_dept', 'code': 'QA', 'name': '중복'})
+        self.assertEqual(r.status_code, 400)
+        self.assertIn('code', r.json()['fields'])
+        self.client.force_login(self.lead)
+        self.assertEqual(self.post({'action': 'save_dept', 'code': 'X', 'name': 'X'}).status_code, 403)
+
     def test_create_user_needs_admin_password(self):
         self.client.force_login(self.root)
         new = {'action': 'save_user', 'username': 'kim', 'last_name': '김', 'first_name': '검사', 'email': '',

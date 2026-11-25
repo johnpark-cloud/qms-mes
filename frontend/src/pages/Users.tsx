@@ -1,7 +1,7 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import dayjs from 'dayjs'
 import {
-  Alert, Button, Card, Checkbox, Col, Descriptions, Empty, Form, Input, Modal, Row, Select, Space, Spin, Switch, Tag, Tree, Typography, message,
+  Alert, Button, Card, Checkbox, Col, Drawer, Empty, Form, Input, InputNumber, Modal, Row, Segmented, Select, Space, Spin, Switch, Tag, Tree, Typography, message,
 } from 'antd'
 import type { TreeDataNode, TreeProps } from 'antd'
 import { useEffect, useMemo, useState } from 'react'
@@ -10,7 +10,7 @@ import { ApiError, api } from '../api/client'
 import SignModal from '../components/SignModal'
 
 // core/api/users.py OrgView
-interface Dept { id: number; code: string; name: string; parent: number | null; active: boolean; sort: number; manager: string }
+interface Dept { id: number; code: string; name: string; parent: number | null; active: boolean; sort: number; manager: string; manager_id: number | null }
 interface User {
   id: number; username: string; name: string; last_name: string; first_name: string; email: string; active: boolean; admin: boolean
   groups: string[]; last_login: string | null; dept: number | null; employee_no: string; position: string; title: string; phone: string
@@ -22,13 +22,15 @@ const NONE = 'none'  // 부서 없는 인원
 const post = (body: object) => api(URL, { method: 'POST', body: JSON.stringify(body) })
 const errText = (e: unknown) => (e instanceof ApiError ? e.detail : '처리하지 못했습니다.')
 
-/** 사용자·조직도(시스템 관리자): 부서 트리에 인원을 끌어 놓아 배치하고, 인원을 눌러 인사 정보·역할·계정을 고친다. 삭제 대신 비활성. */
+/** 사용자·조직도(시스템 관리자): 조직도(위→아래)에서 부서·인원을 누르면 오른쪽 창에서 고친다.
+ * 「목록」 보기는 부서 트리에 인원을 끌어 놓아 배치한다. 삭제 대신 비활성. */
 export default function Users() {
   const qc = useQueryClient()
   const nav = useNavigate()
   const userId = Number(useParams().id) || null
   const [deptId, setDeptId] = useState<number | null>(null)
-  const [adding, setAdding] = useState(false)
+  const [adding, setAdding] = useState<'user' | 'dept' | null>(null)
+  const [view, setView] = useState<'chart' | 'list'>('chart')
   const [showOff, setShowOff] = useState(false)
   const [find, setFind] = useState('')
   const q = useQuery({ queryKey: ['org', userId], queryFn: () => api<Org>(userId ? `${URL}?user=${userId}` : URL), placeholderData: (prev) => prev })
@@ -85,7 +87,7 @@ export default function Users() {
     }
   }
   const select = (key: string) => {
-    setAdding(false)
+    setAdding(null)
     if (key.startsWith('u')) nav(`/users/${key.slice(1)}`)
     else {
       setDeptId(key === NONE ? null : Number(key.slice(1)))
@@ -94,21 +96,38 @@ export default function Users() {
   }
   const user = d.users.find((u) => u.id === userId)
   const dept = d.depts.find((x) => x.id === deptId)
+  const add = (what: 'user' | 'dept') => { setAdding(what); setDeptId(null); if (userId) nav('/users') }
+  const close = () => { setAdding(null); setDeptId(null); if (userId) nav('/users') }
+  const panel = adding === 'user' ? <UserForm key="new" org={d} onDone={async (id) => { setAdding(null); await refresh(); nav(`/users/${id ?? ''}`) }} />
+    : adding === 'dept' ? <DeptForm key="new-dept" org={d} onDone={async (id) => { setAdding(null); await refresh(); setDeptId(id ?? null) }} />
+      : user ? <UserForm key={user.id} org={d} user={user} onDone={refresh} />
+        : dept ? <DeptForm key={dept.id} org={d} dept={dept} onDone={refresh} />
+          : null
+  const tools = (
+    <Space wrap style={{ marginBottom: 12 }}>
+      <Segmented value={view} onChange={(v) => setView(v as 'chart' | 'list')} options={[{ value: 'chart', label: '조직도' }, { value: 'list', label: '목록' }]} />
+      <Input.Search allowClear placeholder="이름·아이디·직위" aria-label="인원 찾기" onChange={(e) => setFind(e.target.value)} style={{ width: 200 }} />
+      <Checkbox checked={showOff} onChange={(e) => setShowOff(e.target.checked)}>비활성·사용 안 함 포함</Checkbox>
+      <Button onClick={() => add('dept')}>부서 추가</Button>
+      <Button type="primary" onClick={() => add('user')}>사용자 추가</Button>
+    </Space>
+  )
 
+  if (view === 'chart') return (
+    <div>
+      <h1 className="page-title">사용자·조직도</h1>
+      {tools}
+      <OrgChart org={d} showOff={showOff} find={find} picked={user ? `u${user.id}` : dept ? `d${dept.id}` : ''} onPick={select} />
+      <Drawer open={!!panel} onClose={close} size="large" destroyOnHidden>{panel}</Drawer>
+    </div>
+  )
   return (
     <div>
       <h1 className="page-title">사용자·조직도</h1>
+      {tools}
       <Row gutter={16}>
         <Col xs={24} lg={10}>
-          <Card size="small" title="조직도" extra={
-            <Space>
-              <Link to="/r/core/department/new"><Button size="small">부서 추가</Button></Link>
-              <Button size="small" type="primary" onClick={() => { setAdding(true); if (userId) nav('/users') }}>사용자 추가</Button>
-            </Space>}>
-            <Space wrap style={{ marginBottom: 8 }}>
-              <Input.Search allowClear placeholder="이름·아이디·직위" aria-label="인원 찾기" onChange={(e) => setFind(e.target.value)} style={{ width: 200 }} />
-              <Checkbox checked={showOff} onChange={(e) => setShowOff(e.target.checked)}>비활성·사용 안 함 포함</Checkbox>
-            </Space>
+          <Card size="small" title="조직도">
             <Typography.Paragraph type="secondary" style={{ fontSize: 12, marginBottom: 8 }}>
               인원이나 부서를 끌어 다른 부서 위에 놓으면 옮겨집니다.
             </Typography.Paragraph>
@@ -119,26 +138,96 @@ export default function Users() {
           </Card>
         </Col>
         <Col xs={24} lg={14}>
-          {adding ? <UserForm key="new" org={d} onDone={async (id) => { setAdding(false); await refresh(); nav(`/users/${id ?? ''}`) }} />
-            : user ? <UserForm key={user.id} org={d} user={user} onDone={refresh} />
-              : dept ? <DeptCard dept={dept} org={d} />
-                : <Card size="small"><Empty description="왼쪽 조직도에서 부서나 인원을 고르세요." /></Card>}
+          {panel ?? <Card size="small"><Empty description="왼쪽 조직도에서 부서나 인원을 고르세요." /></Card>}
         </Col>
       </Row>
     </div>
   )
 }
 
-function DeptCard({ dept, org }: { dept: Dept; org: Org }) {
-  const parent = org.depts.find((x) => x.id === dept.parent)
+/** 위에서 아래로 내려가는 조직도: 부서 상자(부서장·인원 직위)를 선으로 잇는다. 누르면 오른쪽 창 */
+function OrgChart({ org, showOff, find, picked, onPick }: { org: Org; showOff: boolean; find: string; picked: string; onPick: (key: string) => void }) {
+  const users = org.users.filter((u) => (showOff || u.active) && (!find || `${u.name}${u.username}${u.position}${u.title}`.includes(find)))
+  const kids = (p: number | null) => org.depts.filter((x) => x.parent === p && (showOff || x.active))
+  const cls = (base: string, key: string, on: boolean) => `${base}${picked === key ? ' org-picked' : ''}${on ? '' : ' org-off'}`
+  const person = (u: User) => (
+    <button key={u.id} type="button" className={cls('org-person', `u${u.id}`, u.active)} onClick={() => onPick(`u${u.id}`)}>
+      {u.name} <span className="flow-sub">{[u.position, u.title].filter(Boolean).join(' · ')}</span>
+    </button>
+  )
+  // 부서장 → 직책 있는 사람 → 나머지
+  const people = (dept: number | null, head: number | null) => users.filter((u) => u.dept === dept)
+    .sort((a, b) => Number(b.id === head) - Number(a.id === head) || Number(!!b.title) - Number(!!a.title))
+  const node = (x: Dept) => (
+    <li key={x.id}>
+      <div className={cls('org-node', `d${x.id}`, x.active)}>
+        <button type="button" className="org-dept" onClick={() => onPick(`d${x.id}`)}>
+          {x.name}{x.manager && <span className="flow-sub">부서장 {x.manager}</span>}
+        </button>
+        {people(x.id, x.manager_id).map(person)}
+      </div>
+      {kids(x.id).length > 0 && <ul>{kids(x.id).map(node)}</ul>}
+    </li>
+  )
+  const loose = people(null, null)
   return (
-    <Card size="small" title={`${dept.name} (${dept.code})`} extra={<Link to={`/r/core/department/${dept.id}`}><Button size="small">부서 수정</Button></Link>}>
-      <Descriptions bordered size="small" column={1}>
-        <Descriptions.Item label="상위 부서">{parent?.name ?? '—'}</Descriptions.Item>
-        <Descriptions.Item label="부서장">{dept.manager || '—'}</Descriptions.Item>
-        <Descriptions.Item label="인원">{org.users.filter((u) => u.dept === dept.id && u.active).length}명</Descriptions.Item>
-        <Descriptions.Item label="사용">{dept.active ? '사용' : '사용 안 함'}</Descriptions.Item>
-      </Descriptions>
+    <div className="org-chart" aria-label="조직도">
+      {kids(null).length > 0 && <ul>{kids(null).map(node)}</ul>}
+      {loose.length > 0 && <div className="org-node org-loose"><span className="org-dept">부서 없음</span>{loose.map(person)}</div>}
+    </div>
+  )
+}
+
+/** 부서 추가·수정(오른쪽 창). 순환·코드 중복은 서버(Department.clean)가 막는다 */
+function DeptForm({ org, dept, onDone }: { org: Org; dept?: Dept; onDone: (id?: number) => void | Promise<void> }) {
+  const [form] = Form.useForm()
+  const [err, setErr] = useState('')
+  const [busy, setBusy] = useState(false)
+  const save = async (v: object) => {
+    setBusy(true)
+    setErr('')
+    try {
+      const r = await post({ action: 'save_dept', id: dept?.id, ...v }) as { id: number }
+      message.success(dept ? '저장했습니다.' : '부서를 만들었습니다.')
+      await onDone(r.id)
+    } catch (e) {
+      if (e instanceof ApiError) form.setFields(Object.entries(e.fields).filter(([k]) => k !== '__all__').map(([name, errors]) => ({ name, errors })))
+      setErr(errText(e))
+    } finally {
+      setBusy(false)
+    }
+  }
+  const members = dept ? org.users.filter((u) => u.dept === dept.id && u.active) : []
+  return (
+    <Card size="small" title={dept ? `${dept.name} (${dept.code})` : '새 부서'}>
+      <Form form={form} layout="vertical" onFinish={save}
+        initialValues={dept ? { code: dept.code, name: dept.name, parent: dept.parent, manager: dept.manager_id, sort: dept.sort, active: dept.active }
+          : { code: '', name: '', parent: null, manager: null, sort: 0, active: true }}>
+        <Row gutter={12}>
+          <Col span={16}><Form.Item label="부서 이름" name="name" rules={[{ required: true, message: '부서 이름을 입력하세요.' }]}><Input /></Form.Item></Col>
+          <Col span={8}><Form.Item label="부서 코드" name="code" rules={[{ required: true, message: '부서 코드를 입력하세요.' }]}><Input /></Form.Item></Col>
+          <Col span={12}><Form.Item label="상위 부서" name="parent">
+            <Select allowClear showSearch optionFilterProp="label" placeholder="없음(맨 위)"
+              options={org.depts.filter((x) => x.id !== dept?.id).map((x) => ({ value: x.id, label: x.name }))} />
+          </Form.Item></Col>
+          <Col span={12}><Form.Item label="부서장" name="manager">
+            <Select allowClear showSearch optionFilterProp="label" placeholder="없음"
+              options={org.users.filter((u) => u.active || u.id === dept?.manager_id).map((u) => ({ value: u.id, label: `${u.name} (${u.username})` }))} />
+          </Form.Item></Col>
+          <Col span={12}><Form.Item label="정렬" name="sort" extra="작을수록 왼쪽"><InputNumber min={0} style={{ width: '100%' }} /></Form.Item></Col>
+          <Col span={12}><Form.Item label="사용" name="active" valuePropName="checked"><Switch /></Form.Item></Col>
+        </Row>
+        {err && <Alert type="error" showIcon style={{ marginBottom: 12 }} title={err} />}
+        <Button type="primary" htmlType="submit" loading={busy}>{dept ? '저장' : '만들기'}</Button>
+      </Form>
+      {dept && (
+        <>
+          <h3 className="form-section" style={{ marginTop: 24 }}>인원 {members.length}명</h3>
+          {members.length ? <ul className="plain-list">{members.map((u) => (
+            <li key={u.id}><Link to={`/users/${u.id}`}>{u.name}</Link> <Typography.Text type="secondary">{[u.position, u.title].filter(Boolean).join(' · ')}</Typography.Text></li>
+          ))}</ul> : <Typography.Text type="secondary">인원이 없습니다. 사용자 창의 「부서」에서 배치합니다.</Typography.Text>}
+        </>
+      )}
     </Card>
   )
 }

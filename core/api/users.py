@@ -49,7 +49,7 @@ class OrgView(APIView):
     def get(self, request):
         data = {
             'depts': [{'id': d.pk, 'code': d.code, 'name': d.name, 'parent': d.parent_id, 'active': d.active, 'sort': d.sort,
-                       'manager': _name(d.manager) if d.manager else ''}
+                       'manager': _name(d.manager) if d.manager else '', 'manager_id': d.manager_id}
                       for d in Department.objects.select_related('manager')],
             'users': [_user_row(u) for u in User.objects.select_related('member').prefetch_related('groups').order_by('username')],
             'groups': [g for g in ROLE_GROUPS if Group.objects.filter(name=g).exists()],
@@ -74,6 +74,15 @@ class OrgView(APIView):
                 dept.parent = _dept(d.get('parent'))
                 dept.full_clean()  # 순환 검사(Department.clean)
                 dept.save()
+            elif action == 'save_dept':  # 조직도 오른쪽 창(P4)
+                dept = Department() if not d.get('id') else get_object_or_404(Department, pk=d['id'])
+                dept.code, dept.name = str(d.get('code') or '').strip(), str(d.get('name') or '').strip()
+                dept.parent = _dept(d.get('parent'))
+                dept.manager = None if d.get('manager') in (None, '') else get_object_or_404(User, pk=d['manager'])
+                dept.sort, dept.active = int(d.get('sort') or 0), d.get('active') is not False
+                dept.full_clean()  # 코드 중복·순환 검사(Department.clean)
+                dept.save()
+                return Response({'ok': True, 'id': dept.pk})
             elif action == 'save_user':
                 self._save_user(request, d)
             elif action == 'reset_password':

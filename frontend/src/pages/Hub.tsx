@@ -1,73 +1,107 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { Alert, Button, Card, Form, Modal, Space, Spin, Table, Tag } from 'antd'
+import { Alert, Button, Form, Modal, Space, Spin } from 'antd'
+import type { ReactNode } from 'react'
 import { useState } from 'react'
-import { Link, useNavigate, useParams } from 'react-router-dom'
-import { fetchMe } from '../api/auth'
+import { Link, useParams } from 'react-router-dom'
 import { api } from '../api/client'
-import type { ListPage, Row } from './records/RecordList'
 import { createRecord, type NewForm } from './records/RecordNew'
-import { Editor } from './records/RecordView'
+import { Due, Editor } from './records/RecordView'
 
-const SHOW = 5 // 위젯에 보이는 줄 수. 나머지는 「전체 보기」
+interface Tab { key: string; label: string; count: number }
+interface Mod {
+  label: string; href: string; ct: string; count: number; tabs: Tab[]
+  overdue: { tab: string; count: number } | null; soon: number; can_add: boolean; new_url: string | null
+}
+interface Att { module: string; title: string; url: string; days: number | null }
+interface HubData { group: string; modules: Mod[]; others: { label: string; href: string }[]; attention: Att[] }
 
-/** 메뉴 묶음 한눈에 보기(/app/hub/<묶음 이름>): 묶음 안 기록 목록을 위젯처럼 몇 줄씩, 바로 추가. 기록 목록이 아닌 메뉴는 위 단추로 */
+const to = (href: string) => href.slice(4) // /app/… → 라우터 주소
+const withTab = (href: string, tab: string) => `${to(href)}${href.includes('?') ? '&' : '?'}tab=${tab}`
+
+/** 메뉴 묶음 한눈에 보기(/app/hub/<묶음 이름>): 처리할 것(지연·7일 안 기한·승인 전) → 상태 보드(모듈 × 탭 건수) + 주의 필요 목록(P3) */
 export default function Hub() {
   const { group = '' } = useParams()
-  const me = useQuery({ queryKey: ['me'], queryFn: fetchMe, staleTime: Infinity }).data
-  const g = me?.nav.find((x) => x.group === group)
-  if (!me) return <Spin />
-  if (!g) return <Alert type="info" showIcon title="볼 수 있는 메뉴가 없습니다." />
-  const lists = g.items.filter((i) => i.href.startsWith('/app/r/'))
-  const others = g.items.filter((i) => !i.href.startsWith('/app/r/'))
+  const q = useQuery({ queryKey: ['hub', group], queryFn: () => api<HubData>(`/api/hub/?group=${encodeURIComponent(group)}`) })
+  const [adding, setAdding] = useState<string | null>(null)
+  if (q.isLoading) return <Spin />
+  if (q.error || !q.data) return <Alert type="info" showIcon title="볼 수 있는 메뉴가 없습니다." />
+  const d = q.data
+  const sum = (pick: (m: Mod) => number) => d.modules.map((m) => ({ m, n: pick(m) })).filter((x) => x.n > 0)
+  const late = sum((m) => m.overdue?.count ?? 0)
+  const soon = sum((m) => m.soon)
+  const draft = sum((m) => m.tabs.find((t) => t.key === 'draft')?.count ?? 0)
   return (
     <div>
-      <h1 className="page-title">{g.group}</h1>
-      {others.length > 0 && (
+      <h1 className="page-title">{d.group}</h1>
+      {d.others.length > 0 && (
         <Space wrap style={{ marginBottom: 16 }}>
-          {others.map((i) => (i.href.startsWith('/app/') ? <Link key={i.href} to={i.href.slice(4)}><Button>{i.label}</Button></Link>
+          {d.others.map((i) => (i.href.startsWith('/app/') ? <Link key={i.href} to={to(i.href)}><Button>{i.label}</Button></Link>
             : <Button key={i.href} href={i.href}>{i.label}</Button>))}
         </Space>
       )}
-      <div className="hub-grid">
-        {lists.map((i) => <Widget key={i.href} label={i.label} href={i.href} />)}
+      <section className="hub-todo" aria-label="처리할 것">
+        <Tile label="지연" tone="late" parts={late.map(({ m, n }) => ({ m, n, href: withTab(m.href, m.overdue!.tab) }))} />
+        <Tile label="7일 안 기한" tone="soon" parts={soon.map(({ m, n }) => ({ m, n, href: to(m.href) }))} />
+        <Tile label="승인 전" parts={draft.map(({ m, n }) => ({ m, n, href: withTab(m.href, 'draft') }))} />
+      </section>
+      <div className="hub-body">
+        <section className="record-card hub-board">
+          <h2>상태 보드</h2>
+          {d.modules.map((m) => (
+            <div key={m.href} className="hub-row">
+              <Link className="hub-name" to={to(m.href)}>{m.label}</Link>
+              <span className="hub-tabs">
+                {m.tabs.map((t) => (
+                  <Link key={t.key} to={withTab(m.href, t.key)}
+                    className={t.key === m.overdue?.tab && t.count ? 'hub-chip hub-chip-late' : t.count ? 'hub-chip' : 'hub-chip hub-chip-zero'}>
+                    {t.label} <b>{t.count}</b>
+                  </Link>
+                ))}
+              </span>
+              {m.can_add && m.new_url && <AddButton url={m.new_url} onQuick={() => setAdding(m.ct)} />}
+            </div>
+          ))}
+        </section>
+        <section className="record-card hub-attention">
+          <h2>주의 필요</h2>
+          {d.attention.length ? (
+            <ul>
+              {d.attention.map((a) => (
+                <li key={a.url}>
+                  <Link to={to(a.url)}>{a.title}</Link>
+                  {a.days !== null && <Due days={a.days} />}
+                  <div className="flow-sub">{a.module}</div>
+                </li>
+              ))}
+            </ul>
+          ) : <p className="flow-sub">기한 지났거나 7일 안에 오는 건이 없습니다.</p>}
+        </section>
+      </div>
+      {adding && <QuickNew ct={adding} onClose={() => setAdding(null)} />}
+    </div>
+  )
+}
+
+/** 「처리할 것」 칸: 큰 숫자 + 모듈별 건수(누르면 그 목록 탭) */
+function Tile({ label, tone, parts }: { label: string; tone?: 'late' | 'soon'; parts: { m: Mod; n: number; href: string }[] }) {
+  const total = parts.reduce((s, p) => s + p.n, 0)
+  return (
+    <div className={`hub-tile${total && tone ? ` hub-tile-${tone}` : ''}`}>
+      <div className="hub-tile-label">{label}</div>
+      <div className="hub-tile-num">{total}</div>
+      <div className="hub-tile-parts">
+        {parts.map((p) => <Link key={p.m.href} to={p.href}>{p.m.label} {p.n}</Link>)}
       </div>
     </div>
   )
 }
 
-function Widget({ label, href }: { label: string; href: string }) {
-  const [path, query = ''] = href.slice(4).split('?')
-  const ct = path.split('/').slice(2, 4).join('.')
-  const nav = useNavigate()
-  const [adding, setAdding] = useState(false)
-  const q = useQuery({ queryKey: ['hub', href], queryFn: () => api<ListPage>(`/api/records/${ct}/${query ? '?' + query : ''}`) })
-  const d = q.data
-  const late = d?.overdue?.count ? d.overdue : null // 관리자가 먼저 볼 것: 기한 지난 건수를 제목 앞에 빨갛게, 누르면 지연 탭
-  return (
-    <Card size="small" title={<Space size={6}>
-      {late && <Link to={`${path}?tab=${late.tab}`}><Tag color="red" style={{ margin: 0 }}>지연 {late.count}</Tag></Link>}
-      <span>{`${label}${d ? ` (${d.count})` : ''}`}</span>
-    </Space>}
-      extra={<Space>
-        {d?.can_add && d.new_url?.startsWith('/app/r/') && <Button size="small" type="primary" onClick={() => setAdding(true)}>추가</Button>}
-        {d?.can_add && d.new_url && !d.new_url.startsWith('/app/r/') && (d.new_url.startsWith('/app/')
-          ? <Link to={d.new_url.slice(4)}><Button size="small" type="primary">추가</Button></Link>
-          : <Button size="small" href={d.new_url}>추가</Button>)}
-        <Link to={path + (query ? '?' + query : '')}>전체 보기</Link>
-      </Space>}>
-      {q.error ? <Alert type="error" title={(q.error as Error).message} /> : (
-        <Table<Row> size="small" pagination={false} rowKey="id" loading={q.isLoading}
-          dataSource={d?.results.slice(0, SHOW)}
-          columns={(d?.columns ?? []).slice(0, 3).map((c) => ({ title: c.label, key: c.key, ellipsis: true, render: (_: unknown, r: Row) => r.cells[c.key] }))}
-          onRow={(r) => ({ onClick: () => nav(`${path}/${r.id}`), style: { cursor: 'pointer' } })}
-          locale={{ emptyText: '없음' }} />
-      )}
-      {adding && <QuickNew ct={ct} onClose={() => setAdding(false)} />}
-    </Card>
-  )
+function AddButton({ url, onQuick }: { url: string; onQuick: () => void }): ReactNode {
+  if (url.startsWith('/app/r/')) return <Button size="small" onClick={onQuick}>추가</Button>
+  return url.startsWith('/app/') ? <Link to={to(url)}><Button size="small">추가</Button></Link> : <Button size="small" href={url}>추가</Button>
 }
 
-/** 「추가」 창: 새 기록 화면과 같은 칸·저장(서버 모델 규칙). 저장하면 위젯 목록을 다시 불러온다 */
+/** 「추가」 창: 새 기록 화면과 같은 칸·저장(서버 모델 규칙). 저장하면 허브를 다시 불러온다 */
 function QuickNew({ ct, onClose }: { ct: string; onClose: () => void }) {
   const [form] = Form.useForm()
   const qc = useQueryClient()

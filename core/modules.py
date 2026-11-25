@@ -55,7 +55,7 @@ BASE_PATHS = (
     'approve/', 'request/', 'print/', 'memo/', 'media/',
     # 엑셀 보고서는 뷰가 양식 대상 모델로 check_label 한다(MOD-12)
     'report/',
-    'api/auth/', 'api/personal/', 'api/search/', 'api/items/', 'api/core/lots/', 'api/core/trace/', 'api/core/items/',
+    'api/auth/', 'api/personal/', 'api/search/', 'api/hub/', 'api/items/', 'api/core/lots/', 'api/core/trace/', 'api/core/items/',
     'api/core/numbering/', 'api/core/processes/', 'api/core/import/', 'api/core/nc-quick/', 'api/attachments/', 'api/relations/',
     'api/revision-log/', 'api/audit-log/', 'api/schema/', 'api/records/', 'api/edit-requests/', 'api/core/modules/', 'api/core/nc-mail/', 'api/core/org/',
     'api/qms/overview/', 'api/qms/todo/', 'api/qms/dashboard/', 'api/qms/memos/',
