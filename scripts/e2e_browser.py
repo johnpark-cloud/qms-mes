@@ -670,7 +670,7 @@ try:
             page.goto('/app/r/qms/gauge')
             page.locator('.ant-table-tbody tr', has_text='E2E-G1').click()
             page.wait_for_url('**/app/r/qms/gauge/*')
-            page.locator('.record-props', has_text='E2E 마이크로미터').wait_for(timeout=5000)
+            page.locator('.record-sections', has_text='E2E 마이크로미터').wait_for(timeout=5000)
             page.get_by_role('tab', name='변경 이력').click()
             page.get_by_text('생성').first.wait_for(timeout=5000)
             ok = True
@@ -684,7 +684,7 @@ try:
             name = page.locator('#name')
             name.fill('E2E 마이크로미터 2')
             page.get_by_role('button', name='저장').click()
-            page.locator('.record-props', has_text='E2E 마이크로미터 2').wait_for(timeout=5000)
+            page.locator('.record-sections', has_text='E2E 마이크로미터 2').wait_for(timeout=5000)
             page.get_by_role('tab', name='변경 이력').click()
             page.locator('.record-side li', has_text='· 변경').first.wait_for(timeout=5000)
             ok = True
@@ -707,7 +707,7 @@ try:
             page.locator('.ant-select-item-option', has_text='폐기').click()
             page.locator('.ant-modal input[type=password]').fill('e2e-pass-123')
             page.get_by_role('button', name='처분 승인').click()
-            page.locator('.record-props', has_text='폐기').wait_for(timeout=5000)
+            page.locator('.record-sections', has_text='폐기').wait_for(timeout=5000)
             page.locator('.ant-table-tbody tr', has_text='E2E-NC-1').first.wait_for(timeout=5000)  # 보류 표
             ok, page_err = page.get_by_role('button', name='처분', exact=True).count() == 0, '처분 버튼이 남음'
         except Exception as e:
@@ -749,7 +749,7 @@ try:
             page.locator('#record').click()
             page.locator('.ant-select-item-option', has_text='관리계획서 · E2E-PP').click()
             page.get_by_role('button', name='저장').click()
-            page.locator('.record-props', has_text='E2E-DOC').wait_for(timeout=5000)
+            page.locator('.record-sections', has_text='E2E-DOC').wait_for(timeout=5000)
             page.goto(f'/app/r/qms/ppapsubmission/{sub_pk}')
             row = page.locator('.ant-table-tbody tr', has_text='외관 승인 보고서(AAR)')
             row.get_by_role('link', name='기록').wait_for(timeout=5000)
@@ -810,7 +810,7 @@ try:
             page.locator('#name').fill('E2E 부서')
             page.get_by_role('button', name='저장').click()
             page.wait_for_url(re.compile(r'/app/r/core/department/\d+$'))
-            page.locator('.record-props', has_text='E2E 부서').wait_for(timeout=5000)
+            page.locator('.record-sections', has_text='E2E 부서').wait_for(timeout=5000)
             ok = True
         except Exception as e:
             ok, page_err = False, str(e)[:80]

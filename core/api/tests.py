@@ -1,7 +1,10 @@
+import tempfile
+from pathlib import Path
+
 from django.contrib.auth.models import Group, Permission, User
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.db.models import ProtectedError
-from django.test import SimpleTestCase, TestCase
+from django.test import SimpleTestCase, TestCase, override_settings
 from rest_framework.test import APIClient, APIRequestFactory
 
 from core.api.exceptions import CSRF_MSG, handler
@@ -56,6 +59,8 @@ class AuthApiTest(TestCase):
         self.assertIn('내 할 일', labels)
         self.assertNotIn('LOT 추적', labels)  # core.view_lot이 없다
         self.assertFalse(body['is_approver'])
+        with override_settings(DATA_DIR=Path(tempfile.mkdtemp())):  # 운영 data/ 에 로고가 있어도 결과가 같게
+            body = self.client.get('/api/auth/me/').json()
         self.assertFalse(body['logo'])  # data/brand/logo.* 가 없으면 화면이 /brand/logo 를 부르지 않는다(404 없음)
 
     def test_login_without_csrf_rejected(self):

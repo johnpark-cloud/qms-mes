@@ -258,7 +258,11 @@ def _detail(obj, spec, user):
         if n == spec.body:  # 본문은 아래 구역(_body)
             continue
         text, url = recordspec.value_of(obj, n)
-        fields.append({'key': n, 'label': recordspec.label_of(model, n), 'value': text, 'url': url})
+        f = {'key': n, 'label': recordspec.label_of(model, n), 'value': text, 'url': url}
+        due = recordspec.due_of(obj, n)
+        if due is not None:
+            f['due'] = due
+        fields.append(f)
     meta = model._meta
     by_parent = _parent_locked(obj, spec)
     locked = by_parent or is_locked(obj)
@@ -271,6 +275,7 @@ def _detail(obj, spec, user):
     return {'ct': meta.label_lower, 'id': obj.pk, 'title': str(obj), 'kind': str(meta.verbose_name),
             'status': status_of(obj), 'fields': fields, 'children': children, 'side': [s for s in spec.side if s == 'history' or is_registered(meta.label_lower)],
             'groups': recordspec.groups_of(spec), 'body': _body(obj, spec),
+            'sections': recordspec.sections_of(spec, [f['key'] for f in fields]),
             'admin_url': f'/admin/{meta.app_label}/{meta.model_name}/{obj.pk}/change/' if user.is_superuser else None,
             'list_url': f'/app/r/{meta.app_label}/{meta.model_name}',
             'version': record_version(obj, ()), 'locked': locked,

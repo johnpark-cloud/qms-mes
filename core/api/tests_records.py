@@ -163,6 +163,28 @@ class RecordsApiTest(TestCase):
         d = self.client.get(f'/api/records/qms.qualification/{self.qual.pk}/').json()
         self.assertEqual(next(f for f in d['fields'] if f['key'] == 'inspection_type')['value'], '수입검사')
 
+    def test_detail_sections_and_due(self):
+        """기록 화면 구역 카드(P1): 설명서 구역 순서대로, 빠진 칸은 「기타」, 구역이 없으면 「기본 정보」 하나. 기한 칸은 남은 날수."""
+        d = self.client.get(f'/api/records/qms.qualification/{self.qual.pk}/').json()
+        keys = [k for s in d['sections'] for k in s['keys']]
+        self.assertEqual(sorted(keys), sorted(f['key'] for f in d['fields']))  # 모든 칸이 한 번씩
+        self.assertEqual(d['sections'][0]['label'], '자격 내용')
+        self.assertEqual(next(f for f in d['fields'] if f['key'] == 'valid_until')['due'], -1)
+        self.assertNotIn('due', next(f for f in d['fields'] if f['key'] == 'basis'))
+        d = self.client.get(f'/api/records/qms.document/{self.doc.pk}/').json()
+        self.assertEqual(d['sections'], [{'label': '기본 정보', 'keys': [f['key'] for f in d['fields']]}])
+
+    def test_due_hidden_when_done(self):
+        self.g1.active = False
+        self.g1.save()
+        d = self.client.get(f'/api/records/qms.gauge/{self.g1.pk}/').json()
+        self.assertNotIn('due', next(f for f in d['fields'] if f['key'] == 'next_due'))
+
+    def test_spec_sections_name_real_fields(self):
+        for label, spec in recordspec.SPECS.items():
+            for name, keys in spec.sections:
+                self.assertTrue(set(keys) <= set(spec.fields), f'{label} {name}: {set(keys) - set(spec.fields)}')
+
     def test_unregistered_model_404(self):
         self.assertEqual(self.client.get('/api/records/auth.user/').status_code, 404)
         self.assertEqual(self.client.get('/api/records/personal.payslip/1/').status_code, 404)

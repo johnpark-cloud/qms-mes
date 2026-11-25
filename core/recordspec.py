@@ -45,6 +45,7 @@ class Spec(NamedTuple):
     ack: bool = False  # 「열람 확인」 버튼(POST …/ack/): 승인된 기록을 읽었다는 본인 기록(qms.DocumentRead), 하위 표 reads
     overdue: str = ''  # 기한 지난 미완료 건의 탭 키: 목록 API가 그 건수를 「overdue」로 주고, 한눈에 보기 카드가 「지연 N」으로 먼저 보인다
     body: str = ''  # 긴 본문 칸: 칸 표가 아니라 아래 「본문」 구역(편집·이전 개정과 비교, 모델 previous), 양식지 본문(W7)
+    sections: tuple = ()  # (구역 이름, 칸들): 기록 화면을 구역 카드로 나눈다. 빠진 칸은 「기타」, 비면 「기본 정보」 하나(P1)
 
 
 # 승인 서명·판정 경로로만 바뀌는 칸. 범용 저장(PATCH)은 이 칸을 받지 않는다(REC-06).
@@ -75,6 +76,35 @@ SIGN_CHOICES = {'qms.changerequest': {'stage': {'APPROVED'}}}
 HISTORY_DOCS = {'qms.changerequest'}
 
 ROWS = {'core.partner': {'contacts': (('role', '업무'), ('name', '이름'), ('phone', '전화'), ('email', '이메일'))}}
+
+
+# 기한 칸: 기록 화면에 남은 날수(D-day)를 붙인다. 종결·완료·폐기·사용 안 함인 기록에는 붙이지 않는다.
+# 고객 클레임 단계 기한(D3~D5)은 단계별 기한 칸이 따로 보여 주므로 종결 기한만 넣는다
+DUE_NAMES = frozenset({'due_date', 'valid_until', 'next_due', 'next_pm', 'closure_due'})
+
+
+def due_of(obj, name):
+    """기한까지 남은 날수(지났으면 음수). 기한 칸이 아니거나 끝난 기록이면 None."""
+    if name not in DUE_NAMES or getattr(obj, 'closed_at', None) or getattr(obj, 'active', True) is False             or getattr(obj, 'status', None) in ('DONE', 'SCRAPPED'):
+        return None
+    v = getattr(obj, name, None)
+    if not isinstance(v, datetime.date) or isinstance(v, datetime.datetime):
+        return None
+    return (v - _today()).days
+
+
+def sections_of(spec, keys):
+    """기록 화면 구역 [{label, keys}]: 설명서 순서, 화면에 있는 칸만, 남은 칸은 「기타」(구역이 없으면 「기본 정보」)."""
+    out, seen = [], set()
+    for label, names in spec.sections:
+        ks = [k for k in names if k in keys]
+        seen.update(ks)
+        if ks:
+            out.append({'label': label, 'keys': ks})
+    rest = [k for k in keys if k not in seen]
+    if rest:
+        out.append({'label': '기타' if out else '기본 정보', 'keys': rest})
+    return out
 
 
 def groups_of(spec):
@@ -112,6 +142,9 @@ SPECS = {
         ack=True,
         body='body'),
     'qms.gauge': Spec(
+        sections=(('기본 정보', ('number', 'name', 'kind', 'maker', 'model_no', 'serial_no', 'measuring_range', 'resolution')),
+                  ('관리', ('department', 'location', 'owner', 'active')),
+                  ('교정', ('cal_type', 'cal_agency', 'interval_months', 'last_calibrated', 'next_due', 'certificate'))),
         fields=('number', 'name', 'kind', 'maker', 'model_no', 'serial_no', 'measuring_range', 'resolution',
                 'department', 'location', 'owner', 'cal_type', 'cal_agency', 'interval_months', 'last_calibrated', 'next_due',
                 'certificate', 'active'),
@@ -166,7 +199,8 @@ SPECS = {
         side=('relations', 'files', 'history'),
         order=('-valid_until', '-pk'),
         edit=('inspection_type', 'valid_until', 'basis', 'user'),
-        create=('user', 'inspection_type', 'valid_until', 'basis')),
+        create=('user', 'inspection_type', 'valid_until', 'basis'),
+        sections=(('자격 내용', ('user', 'inspection_type', 'basis')), ('유효·근거', ('valid_until', 'record')))),
     'core.lot': Spec(
         fields=('number', 'item', 'work_order', 'is_serial', 'qty', 'supplier', 'partner', 'created_at'),
         columns=('number', 'item', 'qty', 'supplier', 'created_at'),
@@ -178,6 +212,10 @@ SPECS = {
         edit=('number', 'is_serial', 'qty', 'supplier', 'work_order', 'partner'),
         create=('number', 'item', 'qty', 'supplier', 'partner', 'work_order', 'is_serial')),
     'core.nonconformance': Spec(
+        sections=(('발생', ('number', 'origin', 'lot', 'process', 'detected_by', 'detected_at', 'special_char')),
+                  ('불량 내용', ('defect_type', 'defect_qty', 'inspected_qty', 'measured_value', 'description')),
+                  ('봉쇄·고객 통보', ('contained_qty', 'sorting_result', 'customer_notify', 'customer_notified_on', 'customer_approval_ref')),
+                  ('처분·승인', ('disposition', 'cost', 'capa_required', 'approved_by', 'approved_at', 'closed_at'))),
         fields=('number', 'origin', 'lot', 'process', 'detected_by', 'detected_at', 'defect_type', 'defect_qty', 'inspected_qty',
                 'description', 'measured_value', 'special_char', 'contained_qty', 'sorting_result', 'customer_notify',
                 'customer_notified_on', 'disposition', 'customer_approval_ref', 'cost', 'capa_required', 'approved_by',
@@ -203,6 +241,9 @@ SPECS = {
         order=('-created_at', '-pk')),
     # 외래키(담당자·확인자·LOT·부적합·거래처·품번)·날짜시간·비어 있을 수 있는 예/아니오(CAPA 유효성)는 관리 화면에서
     'qms.capa': Spec(
+        sections=(('개요', ('number', 'title', 'source', 'source_record', 'status', 'owner', 'due_date')),
+                  ('원인·조치', ('root_cause', 'action', 'done_at')),
+                  ('효과 검증', ('effective', 'verified_at', 'verified_by', 'verification_note', 'closed_at'))),
         fields=('number', 'title', 'source', 'source_record', 'status', 'owner', 'due_date', 'root_cause', 'action', 'done_at',
                 'effective', 'verified_at', 'verified_by', 'verification_note', 'closed_at'),
         columns=('number', 'title', 'source', 'owner', 'due_date', 'closed_at'),
@@ -216,6 +257,10 @@ SPECS = {
         create=('title', 'source', 'owner', 'due_date', 'action', 'root_cause', 'source_type', 'source_id'),
         hidden=('source_type', 'source_id')),
     'qms.customerclaim': Spec(
+        sections=(('접수', ('number', 'customer', 'partner', 'lot', 'received_at', 'defect_qty', 'nonconformance', 'description')),
+                  ('진행·기한', ('current_step', 'delay', 'containment_due', 'root_cause_due', 'corrective_due', 'closure_due', 'step_status')),
+                  ('8D', ('d1_team', 'd2_problem', 'd3_containment', 'd4_root_cause', 'd5_corrective', 'd6_verification',
+                          'd7_prevention', 'd8_closure', 'closed_at'))),
         fields=('number', 'customer', 'partner', 'lot', 'description', 'defect_qty', 'received_at', 'nonconformance',
                 'current_step', 'delay', 'containment_due', 'root_cause_due', 'corrective_due', 'closure_due', 'step_status', 'd1_team', 'd2_problem', 'd3_containment', 'd4_root_cause',
                 'd5_corrective', 'd6_verification', 'd7_prevention', 'd8_closure', 'closed_at'),
@@ -253,6 +298,9 @@ SPECS = {
         close=True,
         create=('number', 'supplier', 'partner', 'lot', 'nonconformance', 'request', 'issued_at', 'response_due')),
     'qms.changerequest': Spec(  # 출하 차단(초품 합격 전)은 Shipment.clean 그대로. 단계·고객 승인 규칙은 ChangeRequest.clean(W6)
+        sections=(('변경 내용', ('number', 'item', 'category', 'stage', 'effective_at', 'first_article_state', 'description')),
+                  ('고객 통보·승인', ('customer_notice', 'customer_status', 'customer_approval_ref')),
+                  ('검토·승인', ('reviewer', 'reviewed_at', 'review_comment', 'approved_by', 'approved_at'))),
         fields=('number', 'item', 'category', 'stage', 'effective_at', 'description', 'customer_notice', 'customer_status',
                 'customer_approval_ref', 'reviewer', 'reviewed_at', 'review_comment', 'approved_by', 'approved_at',
                 'first_article_state'),
@@ -353,6 +401,7 @@ SPECS = {
     # 작업지시·실적·출하(REC-11): LOT·작업지시·공정 같은 외래키는 관리 화면에서만 — 보류·4M 인터록(모델 clean/save)이 그대로 막는다.
     # 새 등록도 관리 화면 추가 폼. 기록 화면은 수량·납기 정정만(모델 clean: 양품+불량 ≤ 투입, 이전 공정 실적)
     'core.workorder': Spec(
+        sections=(('작업지시', ('number', 'item', 'process', 'status')), ('계획·진도', ('planned_qty', 'due_date', 'progress'))),
         fields=('number', 'item', 'process', 'planned_qty', 'due_date', 'status', 'progress'),
         columns=('number', 'item', 'planned_qty', 'due_date', 'status'),
         search=('number', 'item__code', 'item__name'),
@@ -380,6 +429,9 @@ SPECS = {
         edit=('customer', 'qty', 'partner', 'shipped_at'),
         create=('lot', 'partner', 'customer', 'qty')),
     'core.equipment': Spec(
+        sections=(('기본 정보', ('code', 'name', 'kind', 'process', 'location', 'status', 'owner')),
+                  ('제조', ('maker', 'model_no', 'serial_no')),
+                  ('예방보전', ('pm_interval_days', 'last_pm_on', 'next_pm'))),
         fields=('code', 'name', 'kind', 'process', 'location', 'maker', 'model_no', 'serial_no', 'owner', 'status',
                 'pm_interval_days', 'last_pm_on', 'next_pm'),
         columns=('code', 'name', 'kind', 'location', 'status', 'last_pm_on', 'next_pm'),
@@ -409,6 +461,8 @@ SPECS = {
         create=('equipment', 'kind', 'done_on', 'done_by', 'content', 'parts', 'downtime_min', 'cost')),
     # 기준정보: 코드·대상처럼 다른 기록이 가리키는 칸, 외래키, JSON(선택지·매핑)은 관리 화면에서
     'core.partner': Spec(
+        sections=(('기본 정보', ('code', 'name', 'is_customer', 'is_supplier', 'is_outsource', 'is_calibrator', 'status', 'active')),
+                  ('평가', ('grade', 'evaluated_on')), ('담당자·메모', ('contacts', 'note'))),
         fields=('code', 'name', 'is_customer', 'is_supplier', 'is_outsource', 'is_calibrator', 'contacts',
                 'status', 'grade', 'evaluated_on', 'active', 'note'),
         columns=('code', 'name', 'is_customer', 'is_supplier', 'status', 'grade'),

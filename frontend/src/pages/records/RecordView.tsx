@@ -8,13 +8,14 @@ import { ApiError, api } from '../../api/client'
 import AttachmentPanel from '../../components/AttachmentPanel'
 import MemoPanel from '../../components/MemoPanel'
 import RecordPage from '../../components/RecordPage'
+import type { PropItem } from '../../components/RecordPage'
 import RelationsPanel from '../../components/RelationsPanel'
 import EditRequestModal from '../../components/EditRequestModal'
 import SignModal from '../../components/SignModal'
 import { addRecent } from '../../lib/recent'
 
 // core/api/records.py RecordDetailView 응답
-interface Field { key: string; label: string; value: string; url: string | null }
+interface Field { key: string; label: string; value: string; url: string | null; due?: number } // due: 기한까지 남은 날수(지나면 음수)
 interface Row {
   id: number; url: string | null; status: string | null; cells: Record<string, string>
   sheets?: { label: string; url: string }[] // 증적(PPAP 요소·심사 증적)에 이어진 문서·기록 양식지
@@ -33,6 +34,7 @@ export interface Group { label: string; keys: string[] }
 interface Detail {
   ct: string; id: number; title: string; kind: string; status: string | null
   fields: Field[]; children: Child[]; side: string[]; admin_url: string | null; list_url: string; groups: Group[]
+  sections: { label: string; keys: string[] }[] // 구역 카드(core/recordspec.py sections_of)
   version: number; locked: boolean; edit: Edit[]; can_change: boolean; can_approve: boolean
   can_dispose: boolean; dispose: Edit[] | null; can_close: boolean; can_ack?: boolean; links: { label: string; url: string }[]
   notices: { message: string; label: string; url: string }[] // 기록 위 안내 띠(반복 부적합 → CAPA 제안)
@@ -95,14 +97,24 @@ function RowsEditor({ e, value, onChange }: { e: Edit; value?: Record<string, st
 /** groups에 든 예/아니오 칸은 처음 나온 자리에 한 칸으로 모은다. rows 칸은 한 줄 전체를 쓴다. */
 export function groupProps<T extends { key: string; label: string; required?: boolean; type?: string }>(
   items: T[], groups: Group[], one: (x: T) => ReactNode, many: (xs: T[]) => ReactNode, wide: (x: T) => boolean,
+  empty: (xs: T[]) => boolean = () => false,
 ) {
-  const out: { label: string; node: ReactNode; wide?: boolean; required?: boolean }[] = []
+  const out: PropItem[] = []
   for (const x of items) {
     const g = groups.find((g) => g.keys.includes(x.key))
-    if (!g) out.push({ label: x.label, node: one(x), wide: wide(x), required: x.required && x.type !== 'bool' })
-    else if (g.keys.find((k) => items.some((y) => y.key === k)) === x.key) out.push({ label: g.label, node: many(items.filter((y) => g.keys.includes(y.key))) })
+    if (!g) out.push({ label: x.label, node: one(x), wide: wide(x), required: x.required && x.type !== 'bool', empty: empty([x]) })
+    else if (g.keys.find((k) => items.some((y) => y.key === k)) === x.key) {
+      const xs = items.filter((y) => g.keys.includes(y.key))
+      out.push({ label: g.label, node: many(xs), empty: empty(xs) })
+    }
   }
   return out
+}
+
+/** 기한 꼬리표: 지남(빨강) · 7일 안(주황) · 그 밖(회색) */
+function Due({ days }: { days: number }) {
+  const cls = days < 0 ? 'due due-late' : days <= 7 ? 'due due-soon' : 'due'
+  return <span className={cls}>{days < 0 ? `${-days}일 지남` : days === 0 ? '오늘' : `D-${days}`}</span>
 }
 
 /** 문서 본문: 고칠 때는 큰 입력 칸, 볼 때는 줄바꿈 그대로 + 직전 개정과 비교 */
@@ -328,6 +340,41 @@ export default function RecordView() {
     files: { label: '첨부', node: <AttachmentPanel ct={d.ct} id={d.id} /> },
     history: { label: '변경 이력', node: <History label={label} id={d.id} /> },
   }
+  // 다음 행동 띠: 처분 > 승인 > 열람 확인 > 지난 기한. 띠에 올린 버튼은 위 버튼 줄에서 뺀다
+  const late = d.fields.find((f) => f.due !== undefined && f.due < 0)
+  const next = editing ? null
+    : d.can_dispose ? { key: 'dispose', tone: 'warning' as const, text: '처분 대기: MRB 처분을 정하세요. 처분 전까지 LOT 보류가 유지됩니다.',
+        button: <Button type="primary" onClick={() => setDisposing(true)}>처분</Button> }
+    : d.can_approve ? { key: 'approve', text: '승인 대기: 내용을 확인하고 승인 서명하세요. 승인하면 잠깁니다.',
+        button: <Button type="primary" onClick={() => setSigning(true)}>승인</Button> }
+    : d.can_ack ? { key: 'ack', text: '새로 승인된 개정입니다. 읽고 열람 확인을 남기세요.',
+        button: <Button type="primary" onClick={ack}>읽었음 (열람 확인)</Button> }
+    : late ? { key: 'late', tone: 'warning' as const, text: `${late.label}이(가) ${-late.due!}일 지났습니다.` }
+    : null
+  const toProps = (fields: Field[]) => groupProps(fields, d.groups ?? [],
+          (f) => {
+            const e = editable.get(f.key)
+            if (!editing || !e) return <><Go url={f.url}>{f.value || '—'}</Go>{f.due !== undefined && <Due days={f.due} />}</>
+            return (
+              <Form.Item name={e.key} valuePropName={e.type === 'bool' ? 'checked' : 'value'} style={{ margin: 0 }}
+                rules={e.required && e.type !== 'bool' ? [{ required: true, message: `${e.label}을(를) 입력하세요.` }] : []}>
+                <Editor e={e} />
+              </Form.Item>
+            )
+          },
+          (fs) => {
+            const es = fs.map((f) => editable.get(f.key)).filter((e): e is Edit => !!e)
+            if (editing && es.length) return <CheckGroup edits={es} />
+            return fs.filter((f) => f.value === '예').map((f) => f.label).join(', ') || '—'
+          },
+          // 표·긴 글·여러 줄 값(단계별 기한, 열 매핑)은 한 줄 전체를 쓴다
+          (f) => {
+            const t = editable.get(f.key)?.type
+            return t === 'rows' || (editing && (t === 'text' || t === 'json')) || f.value.includes('\n') || f.value.length > 60
+          },
+    // 볼 때 빈 칸(예/아니오 묶음은 「예」가 하나도 없을 때)은 「빈 항목 N개」로 접는다
+    (fs) => !editing && fs.every((f) => !f.value || (fs.length > 1 && f.value !== '예')))
+
   return (
     <Form form={form} component={false}>
       <SignModal open={signing} onClose={() => setSigning(false)} title="승인 서명" onSubmit={approve} />
@@ -355,10 +402,10 @@ export default function RecordView() {
               <Link to={d.list_url.slice(4)}><Button>{d.kind} 목록</Button></Link>
               <Link to={`/r/${app}/${model}/${id}/print`}><Button>양식지 · 인쇄</Button></Link>
               {d.requests.edit && !d.can_change && <Button onClick={() => setAsking(true)}>수정 요청</Button>}
-              {d.can_approve && <Button onClick={() => setSigning(true)}>승인</Button>}
-              {d.can_dispose && <Button onClick={() => setDisposing(true)}>처분</Button>}
+              {d.can_approve && next?.key !== 'approve' && <Button onClick={() => setSigning(true)}>승인</Button>}
+              {d.can_dispose && next?.key !== 'dispose' && <Button onClick={() => setDisposing(true)}>처분</Button>}
               {d.can_close && <Button onClick={close}>종결</Button>}
-              {d.can_ack && <Button type="primary" onClick={ack}>읽었음 (열람 확인)</Button>}
+              {d.can_ack && next?.key !== 'ack' && <Button type="primary" onClick={ack}>읽었음 (열람 확인)</Button>}
               {d.can_change && <Button type="primary" onClick={startEdit}>수정</Button>}
             </>
           )
@@ -367,27 +414,12 @@ export default function RecordView() {
           ...d.links.map((l) => ({ key: l.url, label: <a href={l.url}>{l.label}</a> })),
           ...(d.admin_url ? [{ key: 'admin', label: <a href={d.admin_url}>관리 화면에서 열기</a> }] : []),
         ]}
-        props={groupProps(d.fields, d.groups ?? [],
-          (f) => {
-            const e = editable.get(f.key)
-            if (!editing || !e) return <Go url={f.url}>{f.value || '—'}</Go>
-            return (
-              <Form.Item name={e.key} valuePropName={e.type === 'bool' ? 'checked' : 'value'} style={{ margin: 0 }}
-                rules={e.required && e.type !== 'bool' ? [{ required: true, message: `${e.label}을(를) 입력하세요.` }] : []}>
-                <Editor e={e} />
-              </Form.Item>
-            )
-          },
-          (fs) => {
-            const es = fs.map((f) => editable.get(f.key)).filter((e): e is Edit => !!e)
-            if (editing && es.length) return <CheckGroup edits={es} />
-            return fs.filter((f) => f.value === '예').map((f) => f.label).join(', ') || '—'
-          },
-          // 표·긴 글·여러 줄 값(단계별 기한, 열 매핑)은 한 줄 전체를 쓴다
-          (f) => {
-            const t = editable.get(f.key)?.type
-            return t === 'rows' || (editing && (t === 'text' || t === 'json')) || f.value.includes('\n') || f.value.length > 60
-          })}
+        props={[]}
+        next={next}
+        sections={(d.sections ?? [{ label: '', keys: d.fields.map((f) => f.key) }]).map((sec) => ({
+          label: sec.label,
+          items: toProps(d.fields.filter((f) => sec.keys.includes(f.key))),
+        }))}
         side={d.side.filter((k) => SIDE[k]).map((k) => ({ key: k, ...SIDE[k] }))}
       >
         {d.body && <BodySection body={d.body} editing={editing && editable.has('body')} />}

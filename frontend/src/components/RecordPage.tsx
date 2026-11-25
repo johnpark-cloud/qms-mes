@@ -8,6 +8,9 @@ import { fetchMe } from '../api/auth'
 import { api } from '../api/client'
 import EditRequestModal from './EditRequestModal'
 
+/** 기록 칸 한 줄. empty: 볼 때 「빈 항목 N개」로 접는다 */
+export interface PropItem { label: string; node: ReactNode; wide?: boolean; required?: boolean; empty?: boolean }
+
 interface Props {
   title: string
   /** 정해진 상태는 색을 붙이고, 그 밖은 회색 */
@@ -15,7 +18,11 @@ interface Props {
   /** 주요 버튼 1개. 나머지 동작은 menu(「⋯」)로 보낸다. */
   actions: ReactNode
   /** wide: 한 줄 전체를 쓴다(담당자 표처럼 여러 칸 입력) */
-  props: { label: string; node: ReactNode; wide?: boolean; required?: boolean }[]
+  props: PropItem[]
+  /** 구역 카드(이름 | 값 줄). 없으면 props를 이름 없는 한 구역으로 */
+  sections?: { label: string; items: PropItem[] }[]
+  /** 다음 행동 띠: 지금 할 일 한 줄과 주 버튼(DESIGN.md 「기록 화면 규칙」) */
+  next?: { text: string; tone?: 'info' | 'warning'; button?: ReactNode } | null
   children: ReactNode
   side: { key: string; label: string; node: ReactNode }[]
   /** 기록 종류(app.model)와 번호. 있으면 「이력」 버튼과 「⋯」 맨 아래 삭제(요청)를 붙인다. */
@@ -36,7 +43,8 @@ interface Props {
 
 const COLOR = { 초안: 'orange', 승인됨: 'green', 잠김: 'default', 합격: 'green', 불합격: 'red', 미판정: 'orange' } as const
 
-export default function RecordPage({ title, status, actions, props, children, side, record, menu = [], lead, onDelete, editRequest, listPath = '/todo', wide }: Props) {
+export default function RecordPage({ title, status, actions, props, sections, next, children, side, record, menu = [], lead, onDelete, editRequest, listPath = '/todo', wide }: Props) {
+  const [showEmpty, setShowEmpty] = useState(false)
   const me = useQuery({ queryKey: ['me'], queryFn: fetchMe, staleTime: Infinity }).data
   const qc = useQueryClient()
   const navigate = useNavigate()
@@ -85,14 +93,37 @@ export default function RecordPage({ title, status, actions, props, children, si
       </div>
       <div className={wide || !side.length ? 'record-body record-body-wide' : 'record-body'}>
         <div className="record-main">
-          <dl className="record-props">
-            {props.map((p) => (
-              <div key={p.label} className={p.wide ? 'wide' : undefined}>
-                <dt className={p.required ? 'required' : undefined}>{p.label}</dt>
-                <dd>{p.node}</dd>
-              </div>
-            ))}
-          </dl>
+          {next && (
+            <div className={`record-next record-next-${next.tone ?? 'info'}`} role="status">
+              <span className="record-next-label">다음 행동</span>
+              <span className="record-next-text">{next.text}</span>
+              {next.button}
+            </div>
+          )}
+          <div className="record-sections">
+            {(sections ?? [{ label: '', items: props }]).filter((s) => s.items.length).map((s) => {
+              const shown = showEmpty ? s.items : s.items.filter((p) => !p.empty)
+              const hidden = s.items.length - shown.length
+              return (
+                <section key={s.label || 'props'} className="record-card">
+                  {s.label && <h2>{s.label}</h2>}
+                  <dl className="kv">
+                    {shown.map((p) => (
+                      <div key={p.label} className={p.wide ? 'wide' : undefined}>
+                        <dt className={p.required ? 'required' : undefined}>{p.label}</dt>
+                        <dd>{p.node}</dd>
+                      </div>
+                    ))}
+                  </dl>
+                  {hidden > 0 && (
+                    <button type="button" className="kv-more" onClick={() => setShowEmpty(true)}>
+                      빈 항목 {hidden}개 보기
+                    </button>
+                  )}
+                </section>
+              )
+            })}
+          </div>
           {children}
         </div>
         {side.length > 0 && (
