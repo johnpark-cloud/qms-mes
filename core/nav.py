@@ -13,7 +13,7 @@ APP_PAGES = {'/admin/core/item/': '/app/items', '/admin/core/process/': '/app/pr
              '/admin/qms/controlplan/': '/app/plans', '/admin/qms/customerrule/': '/app/customer-rules',
              '/admin/qms/inspection/': '/app/inspections', '/me/': '/app/me',
              # 옛 서버 화면 → 같은 일을 하는 새 화면 (옛 주소도 계속 열린다)
-             '/todo/': '/app/todo', '/overview/': '/app/overview', '/inspect/': '/app/inspect', '/import/': '/app/import',
+             '/todo/': '/app/todo', '/overview/': '/app/overview', '/inspect/': '/app/inspect', '/ledger/': '/app/ledger', '/import/': '/app/import',
              '/trace/': '/app/trace', '/memo/inbox/': '/app/memos', '/nc/new/': '/app/nc-new',
              '/kpi/': '/app/kpi', '/suppliers/': '/app/suppliers', '/audit-pack/': '/app/audit-pack',
              '/memo/new/': '/app/memos', '/admin/core/moduleswitch/': '/app/modules',
@@ -80,7 +80,7 @@ NO_HUB = (HOME, '분석 및 보고서')  # 묶음 제목을 눌러도 한눈에 
 # 하위 메뉴 → 상위 메뉴(같은 묶음, 바로 위에 둔다). 새 화면 사이드바엔 상위만 보이고 하위는 그 화면 위 탭으로 연다.
 # 상위 메뉴를 볼 권한이 없으면 하위 메뉴가 사이드바에 그대로 보인다(core/api/views.py me_payload).
 SUB = {'생산실적': '작업지시', 'LOT 추적': 'LOT',
-       '검사 실적': '검사 입력', '교정 이력': '계측기 관리', '측정시스템 분석(MSA)': '계측기 관리',
+       '검사 실적': '검사 입력', '검사 관리대장': '검사 입력', '교정 이력': '계측기 관리', '측정시스템 분석(MSA)': '계측기 관리',
        '부적합 등록': '부적합(NCR)', '보류': '부적합(NCR)',
        '체크리스트·증적': '심사 관리', '심사 자료 출력': '심사 관리',
        '고객사별 8D 기한': '고객 클레임(8D)', '공급자 시정조치(SCAR)': '공급자 평가',
@@ -100,6 +100,7 @@ NAV = [
                    ('보전 이력', 'admin:core_pmrecord_changelist', 'core.view_pmrecord')]),
     ('품질관리 (QMS)', [('검사 입력', 'inspect', 'qms.add_inspection'),
                    ('검사 실적', 'admin:qms_inspection_changelist', 'qms.view_inspection'),
+                   ('검사 관리대장', 'ledger', 'qms.view_inspection'),
                    ('계측기 관리', 'admin:qms_gauge_changelist', 'qms.view_gauge'),
                    ('교정 이력', 'admin:qms_gaugecalibration_changelist', 'qms.view_gaugecalibration'),
                    ('측정시스템 분석(MSA)', 'admin:qms_msastudy_changelist', 'qms.view_msastudy'),

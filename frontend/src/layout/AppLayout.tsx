@@ -13,6 +13,7 @@ const ROUTE_MODULE: Record<string, string> = {
   plans: 'qms_inspection',
   inspect: 'qms_inspection',
   inspections: 'qms_inspection',
+  ledger: 'qms_inspection',
   'customer-rules': 'qms_claim',
 }
 

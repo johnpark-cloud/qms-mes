@@ -738,6 +738,39 @@ class InspectionApiTest(TestCase):
         self.assertEqual((r.status_code, r.json()['detail']), (404, '찾을 수 없습니다.'))
         self.assertEqual(self.c().get('/api/qms/inspections/999999/document/').status_code, 404)
 
+    def test_ledger_columns_follow_item_spec(self):
+        """검사 관리대장: 품목을 고르면 그 품목 승인 기준의 검사항목이 열로 붙고 측정값이 칸에 들어간다."""
+        self.make(self.lots[0], 'INCOMING', '10.0')
+        self.make(self.lots[1], 'INCOMING', '11.0')
+        self.make(self.lots[2], 'OUTGOING', '10.0')
+        r = self.c().get('/api/qms/inspections/ledger/?type=INCOMING').json()
+        self.assertEqual((r['type'], r['item'], r['columns'], r['count']), ('INCOMING', None, [], 2))
+        self.assertEqual(r['items'], [{'value': self.item.pk, 'label': str(self.item)}])
+        self.assertEqual([x['lot_number'] for x in r['rows']], ['L-2', 'L-1'])
+        r = self.c().get(f'/api/qms/inspections/ledger/?type=INCOMING&item={self.item.pk}').json()
+        self.assertEqual(r['columns'], [{'name': '두께', 'spec_text': '9.9 ~ 10.1 mm', 'is_variable': True}])
+        row = r['rows'][0]
+        self.assertEqual((row['lot_number'], row['source'], row['result_display'], row['values']),
+                         ('L-2', '성일철강', '불합격', {'두께': {'value': '11', 'passed': False}}))
+        self.assertTrue(row['nc_number'])
+        self.assertEqual(r['spec_id'], self.specs['INCOMING'].pk)
+        r = self.c().get(f'/api/qms/inspections/ledger/?type=INCOMING&item={self.item.pk}&q=L-1').json()
+        self.assertEqual([x['lot_number'] for x in r['rows']], ['L-1'])
+        r = self.c().get('/api/qms/inspections/ledger/?type=OUTGOING').json()
+        self.assertEqual([x['lot_number'] for x in r['rows']], ['L-3'])
+
+    def test_ledger_export_and_permission(self):
+        self.make(self.lots[0], 'INCOMING', '10.0')
+        r = self.c().get(f'/api/qms/inspections/ledger/?type=INCOMING&item={self.item.pk}&export=xlsx')
+        ws = load_workbook(BytesIO(r.content)).active
+        self.assertEqual([c.value for c in ws[1]], ['검사 일시', 'LOT', '품번', '품명', '공급자', '검사자', '두께 (9.9 ~ 10.1 mm)', '판정', '부적합'])
+        self.assertEqual([c.value for c in ws[2]][1:], ['L-1', 'D-1', '강판', '성일철강', 'insp', '10', '합격', None])  # 빈 칸은 None
+        r = self.c().get('/api/qms/inspections/ledger/?type=OUTGOING&export=xlsx')
+        self.assertEqual([c.value for c in load_workbook(BytesIO(r.content)).active[1]][4], '작업지시')
+        nobody = User.objects.create_user('nobody', password='x', is_staff=True)
+        self.assertEqual(self.c(nobody).get('/api/qms/inspections/ledger/?type=INCOMING').status_code, 403)
+        self.assertEqual(self.c().get('/api/qms/inspections/ledger/?type=INCOMING&item=x').json()['item'], None)
+
 
 
     def test_trace_timeline_links_new_inspection_page(self):

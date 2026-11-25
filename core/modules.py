@@ -26,7 +26,7 @@ MODULES = {
         '검사 (검사기준·관리계획서·검사·계측기·검사원 자격)',
         ('qms.inspectionspec', 'qms.characteristic', 'qms.inspection', 'qms.measurement', 'qms.gauge', 'qms.gaugecalibration', 'qms.msastudy',
          'qms.qualification', 'qms.controlplan', 'qms.controlplanline'),
-        ('inspect/', 'spc/', 'api/qms/spc/', 'api/qms/specs/', 'api/qms/plans/', 'api/qms/inspections/', 'api/qms/inspect/')),
+        ('inspect/', 'ledger/', 'spc/', 'api/qms/spc/', 'api/qms/specs/', 'api/qms/plans/', 'api/qms/inspections/', 'api/qms/inspect/')),
     # 4M 초품 해제는 검사 판정으로만 된다
     'qms_change': Module('변경점 관리(4M)', ('qms.changerequest',), requires=('qms_inspection',)),
     'qms_capa': Module('시정조치(CAPA)', ('qms.capa',)),

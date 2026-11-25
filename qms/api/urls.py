@@ -21,6 +21,7 @@ urlpatterns = [
     path('plans/<int:pk>/document/', plans.PlanDocumentView.as_view()),
     path('plans/<int:pk>/make-specs/', plans.PlanMakeSpecsView.as_view()),
     path('inspections/', inspections.InspectionListView.as_view()),
+    path('inspections/ledger/', inspections.LedgerView.as_view()),
     path('inspections/<int:pk>/', inspections.InspectionDetailView.as_view()),
     path('inspections/<int:pk>/document/', inspections.InspectionDocumentView.as_view()),
     path('inspect/queue/', inspections.QueueView.as_view()),

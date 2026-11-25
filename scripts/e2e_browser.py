@@ -368,6 +368,32 @@ try:
             ok, why = False, str(e)[:80]
         check('검사 목록 요약·메뉴 강조', ok, why)
 
+        try:  # 검사 관리대장: 새 줄에서 LOT 스캔 → 품목 열 자동 → 측정값·OK·계측기 → 판정 → 대장 맨 위 줄
+            page.goto('/app/ledger?type=INCOMING')
+            page.get_by_label('LOT 번호').fill('E2E-NEW-1')
+            page.keyboard.press('Enter')
+            thick = page.get_by_label('두께', exact=True)
+            thick.wait_for(timeout=5000)
+            thick.fill('10.0')
+            thick.press('Enter')
+            page.get_by_label('외관').click()
+            page.locator('.ant-select-item-option', has_text='OK').last.click()
+            page.get_by_label('계측기').click()
+            page.locator('.ant-select-item-option', has_text='E2E-G1').click()
+            page.get_by_test_id('ledger-judge').click()
+            page.get_by_role('status').filter(has_text='E2E-NEW-1 합격').wait_for(timeout=5000)
+            row = page.locator('tbody tr', has_text='E2E-NEW-1')
+            row.wait_for(timeout=5000)
+            heads = page.locator('thead th').all_inner_texts()
+            sel = page.locator('.ant-menu-item-selected').inner_text()
+            if os.environ.get('E2E_SHOTS'):
+                page.screenshot(path=os.path.join(os.environ['E2E_SHOTS'], 'ledger.png'), full_page=True)
+            ok = any(h.startswith('두께') for h in heads) and '10' in row.inner_text() and sel == '검사 입력'
+            why = f'머리글 {heads}, 메뉴 {sel!r}'
+        except Exception as e:
+            ok, why = False, str(e)[:120]
+        check('검사 관리대장: 새 줄 스캔→판정→대장 줄', ok, why)
+
         try:  # 검사 기록 머리 띠: 판정 글자, 측정값 표 머리글, 「⋯」 메뉴에 삭제 1번만
             page.goto(f'/app/inspections/{insp_id}')
             verdict = page.locator('.verdict')
@@ -803,6 +829,7 @@ try:
         except Exception as e:
             ok, page_err = False, str(e)[:120]
         check('문서 열람 확인: 「읽었음」 → 열람 확인 표', ok, page.url if ok else page_err)
+
 
         # 기록 화면 새로 만들기: 목록 「새로 만들기」 → 입력 → 저장 → 새 기록 화면
         try:

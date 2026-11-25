@@ -45,7 +45,7 @@ def _qty(d):
 
 
 def _lot(lot, on_hold=None):
-    return {'id': lot.pk, 'number': lot.number, 'item_code': lot.item.code, 'item_name': lot.item.name,
+    return {'id': lot.pk, 'number': lot.number, 'item_id': lot.item_id, 'item_code': lot.item.code, 'item_name': lot.item.name,
             'supplier': lot.supplier, 'qty': _qty(lot.qty), 'on_hold': lot.on_hold if on_hold is None else on_hold}
 
 
@@ -389,3 +389,66 @@ class InspectionDocumentView(APIView):
         if request.query_params.get('export') == 'xlsx':
             return xlsx_response(document_xlsx(doc), f'{x.lot.number}_{x.spec.get_inspection_type_display()}성적서.xlsx')
         return Response(doc)
+
+
+def _ledger_value(m):
+    return {'value': _num(m.value) if m.characteristic.is_variable else {True: 'OK', False: 'NG'}.get(m.ok), 'passed': m.passed}
+
+
+class LedgerView(APIView):
+    """검사 관리대장(수입·공정·출하). 한 줄이 검사 한 건. 품목을 고르면 그 품목 최신 승인 기준의 검사항목이 열로 붙는다.
+    새 줄 입력은 화면이 기존 inspect/lot·form·check·submit을 그대로 쓴다(판정 규칙은 submit_inspection 한 곳)."""
+    schema = None
+
+    def get(self, request):
+        require_perm(request.user, VIEW_PERM)
+        p = request.query_params
+        kind = p.get('type') if p.get('type') in dict(InspectionSpec.TYPES) else InspectionSpec.INCOMING
+        approved = InspectionSpec.objects.filter(inspection_type=kind, approved_at__isnull=False)
+        items = Item.objects.filter(pk__in=approved.values('item')).order_by('code')
+        item = items.filter(pk=_int(p.get('item'))).first() if _int(p.get('item')) is not None else None
+        spec = InspectionSpec.current(item, kind) if item else None
+        chars = list(spec.characteristics.order_by('pk')) if spec else []
+        qs = (Inspection.objects.filter(spec__inspection_type=kind)
+              .select_related('lot__item', 'lot__work_order', 'inspector', 'nonconformance').order_by('-inspected_at', '-pk'))
+        if item:
+            qs = qs.filter(lot__item=item).prefetch_related('measurements__characteristic')
+        q = p.get('q', '').strip()
+        if q:
+            qs = qs.filter(Q(lot__number__icontains=q) | Q(lot__supplier__icontains=q) | Q(lot__work_order__number__icontains=q))
+        incoming = kind == InspectionSpec.INCOMING
+
+        def source(x):
+            return x.lot.supplier if incoming else (x.lot.work_order.number if x.lot.work_order else '')
+
+        def values(x):  # 옛 개정으로 잰 값도 항목 이름으로 맞춘다
+            return {m.characteristic.name: _ledger_value(m) for m in x.measurements.all()} if item else {}
+
+        if p.get('export') == 'xlsx':
+            head = ['검사 일시', 'LOT', '품번', '품명', '공급자' if incoming else '작업지시', '검사자',
+                    *[f'{c.name} ({c.spec_text()})' for c in chars], '판정', '부적합']
+            rows = []
+            for x in qs:
+                v = values(x)
+                rows.append([_day(x.inspected_at), x.lot.number, x.lot.item.code, x.lot.item.name, source(x), _who(x.inspector),
+                             *[(v.get(c.name) or {}).get('value') or '' for c in chars],
+                             x.get_result_display() or '미판정', x.nonconformance.number if x.nonconformance else ''])
+            name = f'{dict(InspectionSpec.TYPES)[kind]} 관리대장'
+            return xlsx_response(table_xlsx(name, head, rows), f'{name}.xlsx')
+        try:
+            page = min(max(int(p.get('page', 1)), 1), 10**6)
+        except ValueError:
+            page = 1
+        count = qs.count()
+        start = (page - 1) * PAGE_SIZE
+        return Response({
+            'type': kind, 'item': item.pk if item else None, 'spec_id': spec.pk if spec else None,
+            'items': [{'value': i.pk, 'label': str(i)} for i in items],
+            'columns': [{'name': c.name, 'spec_text': c.spec_text(), 'is_variable': c.is_variable} for c in chars],
+            'count': count, 'page': page, 'has_more': start + PAGE_SIZE < count,
+            'rows': [{'id': x.pk, 'inspected_at': timezone.localtime(x.inspected_at).isoformat(), 'lot_number': x.lot.number,
+                      'item_code': x.lot.item.code, 'item_name': x.lot.item.name, 'source': source(x), 'inspector': _who(x.inspector),
+                      'result': x.result, 'result_display': x.get_result_display() or '미판정',
+                      'nc_number': x.nonconformance.number if x.nonconformance else '',
+                      'nc_url': record_url(x.nonconformance) if x.nonconformance else '', 'values': values(x)}
+                     for x in qs[start:start + PAGE_SIZE]]})

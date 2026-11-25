@@ -15,6 +15,7 @@ import InspectPage from './pages/inspect/InspectPage'
 import MeasurePage from './pages/inspect/MeasurePage'
 import Login from './pages/Login'
 import InspectionList from './pages/inspections/InspectionList'
+import LedgerPage from './pages/ledger/LedgerPage'
 import InspectionPage from './pages/inspections/InspectionPage'
 import InspectionPrint from './pages/inspections/InspectionPrint'
 import Overview from './pages/Overview'
@@ -95,6 +96,7 @@ function App() {
               <Route path="inspect" element={<InspectPage />} />
               <Route path="inspect/:lotId/:specId" element={<MeasurePage />} />
               <Route path="inspections" element={<InspectionList />} />
+              <Route path="ledger" element={<LedgerPage />} />
               <Route path="inspections/:id" element={<InspectionPage />} />
               <Route path="trace" element={<Trace />} />
               <Route path="memos" element={<Memos />} />
