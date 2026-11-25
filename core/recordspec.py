@@ -139,6 +139,13 @@ SPECS = {
         order=('document__number', 'direction', 'sort', 'code'),
         edit=('code', 'name', 'direction', 'revision', 'department', 'target', 'sort'),
         create=('document', 'code', 'name', 'direction', 'revision', 'department', 'target', 'sort')),
+    'qms.formrecord': Spec(
+        fields=('form', 'written_on', 'author', 'values', 'approved_by', 'approved_at'),
+        columns=('form', 'written_on', 'author', 'approved_at'),
+        search=('form__code', 'form__name'),
+        tabs=(ALL, ('draft', '작성 중', lambda qs: qs.filter(approved_at__isnull=True)),
+              ('approved', '승인됨', lambda qs: qs.filter(approved_at__isnull=False))),
+        order=('-written_on', '-pk')),
     'qms.documentrevision': Spec(
         fields=('document', 'revision', 'file', 'change_note', 'created_at', 'approved_by', 'approved_at', 'body'),
         columns=('document', 'revision', 'created_at', 'approved_at'),

@@ -17,6 +17,7 @@ import Login from './pages/Login'
 import InspectionList from './pages/inspections/InspectionList'
 import LedgerPage from './pages/ledger/LedgerPage'
 import DocMatrixPage from './pages/documents/DocMatrixPage'
+import FormLedgerPage from './pages/documents/FormLedgerPage'
 import InspectionPage from './pages/inspections/InspectionPage'
 import InspectionPrint from './pages/inspections/InspectionPrint'
 import Overview from './pages/Overview'
@@ -99,6 +100,7 @@ function App() {
               <Route path="inspections" element={<InspectionList />} />
               <Route path="ledger" element={<LedgerPage />} />
               <Route path="documents" element={<DocMatrixPage />} />
+              <Route path="documents/forms/:id" element={<FormLedgerPage />} />
               <Route path="inspections/:id" element={<InspectionPage />} />
               <Route path="trace" element={<Trace />} />
               <Route path="memos" element={<Memos />} />

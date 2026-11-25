@@ -1,6 +1,6 @@
 from django.urls import path
 
-from . import analysis, audit, documents, inspections, memos, plans, specs, views
+from . import analysis, audit, documents, forms, inspections, memos, plans, specs, views
 
 urlpatterns = [
     path('overview/', views.OverviewView.as_view()),
@@ -33,6 +33,10 @@ urlpatterns = [
     path('inspect/upload/', inspections.UploadView.as_view()),
     path('inspect/upload/template/', inspections.UploadTemplateView.as_view()),
     path('documents/matrix/', documents.DocMatrixView.as_view()),
+    path('forms/<int:pk>/', forms.FormLedgerView.as_view()),
+    path('forms/<int:pk>/fields/', forms.FormFieldsView.as_view()),
+    path('forms/<int:pk>/records/', forms.FormRecordCreateView.as_view()),
+    path('formrecords/<int:pk>/', forms.FormRecordView.as_view()),
     path('kpi/', analysis.KpiView.as_view()),
     path('suppliers/', analysis.SuppliersView.as_view()),
     path('suppliers/grade/', analysis.SupplierGradeView.as_view()),

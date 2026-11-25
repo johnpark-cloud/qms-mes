@@ -12,7 +12,7 @@ from qms.models import Document, DocumentForm
 
 def target_url(form):
     if not form.target:
-        return record_url(form)
+        return f'/app/documents/forms/{form.pk}'  # 양식 기록 대장(P6b)
     if form.target.startswith('ledger:'):
         return f'/app/ledger?type={form.target.partition(":")[2]}'
     app, _, model = form.target.partition('.')

@@ -835,7 +835,8 @@ try:
             "from core.models import Department; from qms.models import Document, DocumentForm;"
             "dep = Department.objects.create(code='E2E-QA', name='E2E 품질팀');"
             "d = Document.objects.create(number='E2E-PQ-07', title='E2E 수입검사 절차', department=dep);"
-            "DocumentForm.objects.create(document=d, code='E2E-PQ-07-01', name='수입검사 의뢰서', direction='IN');"
+            "DocumentForm.objects.create(document=d, code='E2E-PQ-07-01', name='수입검사 의뢰서', direction='IN',"
+            " fields=[{'name': '의뢰 내용', 'kind': 'text', 'required': True}, {'name': '수량', 'kind': 'number'}]);"
             "DocumentForm.objects.create(document=d, code='E2E-PQ-07-02', name='수입검사 관리대장', direction='OUT', target='ledger:INCOMING')"))
         try:
             page.goto('/app/documents')
@@ -850,6 +851,24 @@ try:
         except Exception as e:
             ok, page_err = False, str(e)[:120]
         check('문서 체계: 부서 카드·양식 칩 → 관리대장', ok, page.url if ok else page_err)
+
+        # 양식 기록(P6b): 연결 기록 없는 양식 칩 → 양식 대장 → 새 기록 → 항목대로 입력·저장 → 대장에 한 줄
+        try:
+            page.goto('/app/documents')
+            page.locator('.form-chip', has_text='E2E-PQ-07-01').click()
+            page.wait_for_url(re.compile(r'/app/documents/forms/\d+$'), timeout=8000)
+            page.get_by_role('button', name='새 기록').click()
+            page.get_by_label('의뢰 내용').fill('E2E 의뢰')
+            page.get_by_label('수량').fill('3')
+            page.locator('.ant-drawer-footer').get_by_role('button', name='저장').click()
+            page.locator('.ant-table-row', has_text='E2E 의뢰').wait_for(timeout=8000)
+            if os.environ.get('E2E_SHOTS'):
+                page.screenshot(path=os.path.join(os.environ['E2E_SHOTS'], 'form-ledger.png'), full_page=True)
+            menu = page.locator('.ant-menu-item-selected').first.inner_text().strip()
+            ok, page_err = menu == '문서 체계', f'메뉴 {menu!r}'
+        except Exception as e:
+            ok, page_err = False, str(e)[:120]
+        check('양식 기록: 양식 칩 → 대장 → 새 기록 저장', ok, page.url if ok else page_err)
 
         # 기록 화면 새로 만들기: 목록 「새로 만들기」 → 입력 → 저장 → 새 기록 화면
         try:

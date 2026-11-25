@@ -885,7 +885,11 @@ class DocumentForm(models.Model):
     target = models.CharField('연결 기록', max_length=40, choices=TARGETS, blank=True,
                               help_text='이 양식을 시스템의 어느 기록으로 쓰는지. 비우면 양식 기록만 둔다.')
     sort = models.PositiveIntegerField('정렬', default=0)
+    # 연결 기록이 없는 양식의 입력 칸(P6b): [{'name', 'kind', 'required'?, 'choices'?}] → 양식 기록(FormRecord) 대장
+    fields = models.JSONField('입력 항목', default=list, blank=True)
     history = HistoricalRecords()
+
+    KINDS = [('text', '글'), ('long', '긴 글'), ('number', '숫자'), ('date', '날짜'), ('choice', '선택')]
 
     class Meta:
         verbose_name = verbose_name_plural = '양식'
@@ -893,6 +897,65 @@ class DocumentForm(models.Model):
 
     def __str__(self):
         return f'{self.code} {self.name}'
+
+    def clean(self):
+        defs = self.fields
+        if not isinstance(defs, list) or not all(isinstance(d, dict) for d in defs):
+            raise ValidationError({'fields': '입력 항목 형식이 잘못되었습니다.'})
+        names, kinds = set(), dict(self.KINDS)
+        for i, d in enumerate(defs, 1):
+            name = str(d.get('name', '')).strip()
+            if not name:
+                raise ValidationError({'fields': f'{i}번째 항목의 이름을 적으세요.'})
+            if name in names:
+                raise ValidationError({'fields': f'항목 이름 「{name}」이 겹칩니다.'})
+            names.add(name)
+            if d.get('kind') not in kinds:
+                raise ValidationError({'fields': f'「{name}」의 종류를 고르세요.'})
+            if d['kind'] == 'choice' and not d.get('choices'):
+                raise ValidationError({'fields': f'「{name}」은 선택 항목이라 선택지가 필요합니다.'})
+
+
+class FormRecord(Approvable):
+    """양식 기록(P6b): 연결 기록이 없는 양식(교육 기록·회의록·점검표 등)을 양식의 입력 항목대로 쓴다.
+    값은 {항목 이름: 글자}. 승인 서명 뒤 잠긴다(Approvable)."""
+    form = models.ForeignKey(DocumentForm, on_delete=models.PROTECT, related_name='records', verbose_name='양식')
+    written_on = models.DateField('작성일', default=timezone.localdate)
+    author = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name='+', verbose_name='작성자')
+    values = models.JSONField('내용', default=dict, blank=True)
+    history = HistoricalRecords()
+
+    class Meta:
+        verbose_name = verbose_name_plural = '양식 기록'
+        ordering = ['-written_on', '-pk']
+
+    def __str__(self):
+        return f'{self.form.code} {self.written_on}'
+
+    def clean(self):
+        if not isinstance(self.values, dict):
+            raise ValidationError({'values': '내용 형식이 잘못되었습니다.'})
+        errors = []
+        for d in self.form.fields:
+            name, v = d['name'], str(self.values.get(d['name'], '') or '').strip()
+            if not v:
+                if d.get('required'):
+                    errors.append(f'「{name}」을(를) 적으세요.')
+                continue
+            if d['kind'] == 'number':
+                try:
+                    Decimal(v.replace(',', ''))
+                except Exception:
+                    errors.append(f'「{name}」은 숫자로 적으세요.')
+            elif d['kind'] == 'date':
+                try:
+                    datetime.date.fromisoformat(v)
+                except ValueError:
+                    errors.append(f'「{name}」은 날짜(YYYY-MM-DD)로 적으세요.')
+            elif d['kind'] == 'choice' and v not in d.get('choices', []):
+                errors.append(f'「{name}」은 선택지 중에서 고르세요.')
+        if errors:
+            raise ValidationError({'values': errors})
 
 
 class DocumentRevision(Approvable):

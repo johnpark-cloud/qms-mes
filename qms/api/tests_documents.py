@@ -33,7 +33,7 @@ class DocumentMatrixTest(TestCase):
         self.assertEqual([f['code'] for f in doc['inputs']], ['CSE-PQ-07-01'])
         self.assertEqual([f['code'] for f in doc['outputs']], ['CSE-PQ-07-02', 'CSE-PQ-07-03'])
         form_in, ledger, ship = doc['inputs'][0], *doc['outputs']
-        self.assertEqual(form_in['url'], f'/app/r/qms/documentform/{form_in["id"]}')  # 연결 없음 → 양식 기록 화면
+        self.assertEqual(form_in['url'], f'/app/documents/forms/{form_in["id"]}')  # 연결 없음 → 양식 기록 화면
         self.assertEqual(ledger['url'], '/app/ledger?type=INCOMING')
         self.assertEqual(ledger['target_display'], '수입검사 관리대장')
         self.assertEqual(ship['url'], '/app/r/core/shipment')

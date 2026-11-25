@@ -19,7 +19,7 @@ from core.relations import trace_url
 from core.rules import child_editable
 
 from .models import (AuditChecklist, AuditFinding, AuditItem, Capa, ChangeRequest, Characteristic, ControlPlan,
-                     ControlPlanLine, CustomerClaim, CustomerRule, Document, DocumentForm, DocumentRevision, Evidence, ExcelTemplate, Gauge,
+                     ControlPlanLine, CustomerClaim, CustomerRule, Document, DocumentForm, DocumentRevision, FormRecord, Evidence, ExcelTemplate, Gauge,
                      GaugeCalibration, MsaStudy,
                      Inspection, InspectionSpec, InternalAudit, ManagementReview, ManagementReviewAction, Measurement, Memo, MemoPhoto, PpapElement, PpapSubmission, Qualification, Scar)
 from .rules import NotApproved, make_specs_from_plan, new_spec_revision
@@ -585,6 +585,19 @@ class DocumentFormAdmin(BaseAdmin):
     search_fields = ['code', 'name', 'document__number', 'document__title']
     list_filter = ['direction', 'target']
     autocomplete_fields = ['document']
+
+
+@admin.register(FormRecord)
+class FormRecordAdmin(ApprovalAdminMixin, BaseAdmin):
+    list_display = ['form', 'written_on', 'author', 'is_approved']
+    search_fields = ['form__code', 'form__name']
+    autocomplete_fields = ['form']
+    readonly_fields = ['author']
+
+    def save_model(self, request, obj, form, change):
+        if not obj.author_id:
+            obj.author = request.user
+        super().save_model(request, obj, form, change)
 
 
 @admin.register(DocumentRevision)
