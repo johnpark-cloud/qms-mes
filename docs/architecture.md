@@ -67,7 +67,7 @@ docs/        구조·업무 규칙·테스트 문서, superpowers/ 설계·계�
 | `api/forms.py` | 양식 기록 대장 `/api/qms/forms/<id>/`(양식·항목·기록, 보기 `view_documentform`+`view_formrecord`), 항목 정의 `fields/` PUT(`change_documentform`), 새 기록 `records/` POST(`add_formrecord`, 작성자 = 요청자), 고침 `/api/qms/formrecords/<id>/` PATCH(`change_formrecord`). 항목 검사·승인 뒤 잠금은 모델이 막고, 승인은 기록 화면 |
 | `api/plans.py` | 관리계획서 API `/api/qms/plans/`(목록·`?export=xlsx`·생성), `<id>/`(조회·저장), `new-revision/`, `approve/`, `revision-log/`, `make-specs/`(검사기준 초안), `document/`. 고객사별 8D 기한 표는 `qms/api/views.py`의 `/api/qms/customer-rules/` |
 | `overview.py` | 공장 종합현황 카드 계산 (`/overview/` 화면과 API가 공유) |
-| `due.py` | 기한·대기 항목 계산 (내 할 일과 `notify`가 공유). 반복 부적합 묶음 `repeat_ncs`(부적합 기록 화면 안내 띠는 `core/api/records.py` `_notices`가 함수 안에서 불러 쓴다) |
+| `due.py` | 기한·대기 항목 계산 (내 할 일과 `notify`가 공유). 수입검사 샘플링 조정 제안 `sampling_suggestions`, MSA 부적합 계측기 `msa_rejects`, 반복 부적합 묶음 `repeat_ncs`(부적합 기록 화면 안내 띠는 `core/api/records.py` `_notices`가 함수 안에서 불러 쓴다) |
 | `widgets.py` | 대시보드 위젯 목록·역할별 기본 배치·격자 자리 잡기(`place`) |
 | `spc.py`, `kpi.py`, `similar.py`, `memo.py`, `review.py` | 관리도·Cpk, KPI 집계, 재발 방지 유사 사례, 메모 연결, 경영검토 입력 자동 요약 |
 | `management/commands/` | `collect`(CSV 측정값 자동 수집), `notify`(기한 알림 메일·Teams) |

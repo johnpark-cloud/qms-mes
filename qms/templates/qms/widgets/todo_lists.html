@@ -159,6 +159,26 @@
   </section>
   {% endif %}
 
+  {% if sampling %}
+  <section class="card" id="sampling">
+    <h2>샘플링 조정 제안 <span class="count">수입검사 · 5건 중 2건 불합격 강화 · 10건 연속 합격 완화</span></h2>
+    <table><tbody>
+      {% for r in sampling %}<tr><td><a href="/app/specs/{{ r.spec.pk }}">{{ r.spec.item.code }} · {{ r.supplier|default:"공급사 미기재" }}</a></td>
+        <td>{% if r.action == 'tighten' %}<span class="status status--critical">강화 검토</span>{% else %}<span class="status status--positive">완화 검토</span>{% endif %} {{ r.reason }}</td></tr>{% endfor %}
+    </tbody></table>
+  </section>
+  {% endif %}
+
+  {% if msa_rejects %}
+  <section class="card" id="msa-rejects">
+    <h2>MSA 부적합 계측기 <span class="count">최근 분석 부적합</span></h2>
+    <table><tbody>
+      {% for m in msa_rejects %}<tr><td><a href="/app/r/qms/msastudy/{{ m.pk }}">{{ m.gauge }}</a></td>
+        <td>{{ m.get_kind_display }} {{ m.performed_on|date:"Y-m-d" }} <span class="status status--negative">부적합</span></td></tr>{% endfor %}
+    </tbody></table>
+  </section>
+  {% endif %}
+
   {% if unread_docs %}
   <section class="card" id="unread-docs">
     <h2>문서 열람 확인 <span class="count">최근 30일 승인 · 안 읽음</span></h2>

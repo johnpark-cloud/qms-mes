@@ -2,7 +2,7 @@
 import datetime
 
 from django.contrib.contenttypes.models import ContentType
-from django.db.models import Exists, OuterRef
+from django.db.models import Exists, OuterRef, Subquery
 from django.utils import timezone
 
 from core.models import EditRequest, Equipment, Hold, Nonconformance, PartnerCertificate
@@ -10,7 +10,7 @@ from core.modules import active_set
 
 from . import spc
 from .models import (AuditFinding, Capa, ChangeRequest, Characteristic, ControlPlan, CustomerClaim, DocumentRead, DocumentRevision, Gauge,
-                     Inspection, InspectionSpec, InternalAudit, Memo, PpapSubmission, Qualification, Scar)
+                     Inspection, InspectionSpec, InternalAudit, Memo, MsaStudy, PpapSubmission, Qualification, Scar)
 
 
 # due_items 키 → 모듈. 꺼진 모듈의 묶음은 할 일·위젯·알림 메일에서 빈 목록이 된다(MOD-10). 나머지 키는 기본 플랫폼
@@ -19,10 +19,11 @@ DUE_MODULE = {
     'ppaps': 'qms_ppap', 'pending_ppaps': 'qms_ppap', 'gauges': 'qms_inspection', 'qualifications': 'qms_inspection', 'spc_alarms': 'qms_inspection',
     'pending_specs': 'qms_inspection', 'pending_plans': 'qms_inspection', 'first_articles': 'qms_change',
     'pending_changes': 'qms_change', 'pending_docs': 'qms_document', 'unread_docs': 'qms_document', 'repeat_ncs': 'qms_capa',
-    'equipment_pm': 'mes',
+    'equipment_pm': 'mes', 'sampling': 'qms_inspection', 'msa_rejects': 'qms_inspection',
 }
 UNREAD_DAYS = 30  # 문서 열람 확인: 승인 뒤 이 기간 안의 최신본만 할 일에 띄운다(오래된 문서까지 쌓이지 않게)
 REPEAT_COUNT, REPEAT_DAYS = 3, 90  # 같은 품번·같은 부적합 유형이 90일 안에 CAPA 없이 3건이면 CAPA를 제안한다
+TIGHTEN_OF, TIGHTEN_FAILS, REDUCE_RUN = 5, 2, 10  # 샘플링 전환(ISO 2859-1 참고): 최근 5 LOT 중 2건 불합격 → 강화, 10 LOT 연속 합격 → 완화
 
 
 
@@ -68,6 +69,8 @@ def due_items(approver=False, user=None):
                               .select_related('partner')),
         'qualifications': expiring_qualifications(today),
         'equipment_pm': equipment_pm(today),
+        'sampling': sampling_suggestions(now),
+        'msa_rejects': msa_rejects(),
         'unread_docs': unread_documents(user, now) if user is not None else [],
         'first_articles': list(ChangeRequest.objects.filter(approved_at__isnull=False, effective_at__lte=now).annotate(
             fa=Exists(Inspection.objects.filter(lot__item=OuterRef('item'), result=Inspection.PASS,
@@ -135,6 +138,39 @@ def unread_documents(user, now):
                 .exclude(Exists(newer)).exclude(Exists(mine)).select_related('document').order_by('-approved_at', '-pk'))
 
 
+def sampling_suggestions(now=None):
+    """수입검사 샘플링 수준 조정 제안 [{spec, supplier, action, reason, latest}] — 막지 않고 제안만 한다(2026-11-27 사용자 결정).
+    품목 기준서·공급사별로 지금 승인된 개정의 LOT 첫 판정만 센다(재검사 제외, 최근 1년). 기준서를 개정하면 처음부터 다시 센다."""
+    now = now or timezone.now()
+    newer = InspectionSpec.objects.filter(item=OuterRef('item'), inspection_type=OuterRef('inspection_type'),
+                                          approved_at__isnull=False, revision__gt=OuterRef('revision'))
+    current = InspectionSpec.objects.filter(inspection_type=InspectionSpec.INCOMING, approved_at__isnull=False).exclude(Exists(newer))
+    streams, seen = {}, set()
+    for i in (Inspection.objects.filter(spec__in=current, inspected_at__gte=now - datetime.timedelta(days=365)).exclude(result='')
+              .select_related('lot', 'spec__item').order_by('inspected_at', 'pk')):
+        if i.lot_id not in seen:
+            seen.add(i.lot_id)
+            streams.setdefault((i.spec_id, i.lot.supplier), []).append(i)
+    out = []
+    for (_, supplier), rows in streams.items():
+        last = rows[-TIGHTEN_OF:]
+        fails = sum(r.result == Inspection.FAIL for r in last)
+        if fails >= TIGHTEN_FAILS:
+            action, reason = 'tighten', f'최근 {len(last)}건 중 {fails}건 불합격'
+        elif len(rows) >= REDUCE_RUN and all(r.result == Inspection.PASS for r in rows[-REDUCE_RUN:]):
+            action, reason = 'reduce', f'최근 {REDUCE_RUN}건 연속 합격'
+        else:
+            continue
+        out.append({'spec': rows[-1].spec, 'supplier': supplier, 'action': action, 'reason': reason, 'latest': rows[-1]})
+    return out
+
+
+def msa_rejects():
+    """사용 중인 계측기 중 가장 최근 측정시스템 분석이 부적합인 것(그 분석 기록). 다시 분석해 적합이면 빠진다."""
+    latest = MsaStudy.objects.filter(gauge=OuterRef('gauge')).order_by('-performed_on', '-pk').values('pk')[:1]
+    return list(MsaStudy.objects.filter(gauge__active=True, pk=Subquery(latest), result=MsaStudy.REJECT).select_related('gauge'))
+
+
 def equipment_pm(today):
     """예방보전 기한이 지났거나 7일 안에 오는 설비(폐기 제외), 기한 순."""
     rows = [e for e in Equipment.objects.exclude(status=Equipment.SCRAPPED).filter(pm_interval_days__isnull=False)
@@ -151,6 +187,14 @@ def expiring_qualifications(today):
                 .select_related('user').order_by('valid_until', 'pk'))
 
 
+SAMPLING_ACTION = {'tighten': '샘플링 강화 검토', 'reduce': '샘플링 완화 검토'}
+
+
+def sampling_line(r):
+    return (f"{r['spec'].item.code} · {r['supplier'] or '공급사 미기재'} · {SAMPLING_ACTION[r['action']]} "
+            f"({r['reason']}, 지금: {r['spec'].sampling or '샘플링 미기재'})")
+
+
 def digest(d):
     """알림용 요약: [(제목, [줄...])]. 비어 있는 묶음은 뺀다."""
     def when(x):
@@ -164,6 +208,8 @@ def digest(d):
         ('공급자 인증 만료', [f'{c.partner} · {c.get_standard_display()} · {c.valid_until}' for c in d['partner_certs']]),
         ('검사원 자격 만료', [f'{q.user} · {q.get_inspection_type_display()} · {q.valid_until}' for q in d['qualifications']]),
         ('설비 예방보전', [f'{e} · 예방보전 기한 {e.next_pm}' for e in d['equipment_pm']]),
+        ('샘플링 수준 조정 제안', [sampling_line(r) for r in d['sampling']]),
+        ('MSA 부적합 계측기', [f'{m.gauge} · {m.get_kind_display()} {m.performed_on} 부적합 · 개선 후 다시 분석' for m in d['msa_rejects']]),
         ('4M 초품 미확인 (출하 차단 중)', [str(c) for c in d['first_articles']]),
         ('심사 예정', [str(a) for a in d['audits']]),
         ('CAPA 미연결 심사 발견사항', [str(f) for f in d['findings']]),
