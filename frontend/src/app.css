@@ -186,7 +186,7 @@ a.flow-box:hover { border-color: currentColor; }
 .form-chip-code { font-variant-numeric: tabular-nums; opacity: .75; }
 
 /* 조직도(사용자·조직도 「조직도」 보기): 위에서 아래로, 부서 상자를 선으로 잇는다 */
-.org-chart { overflow-x: auto; padding: 4px 0 16px; }
+.org-chart { overflow-x: auto; padding: 4px 0 16px; min-height: 240px; } /* 빈 곳에 부서를 놓아 최상위로 */
 .org-chart ul { display: flex; justify-content: center; position: relative; list-style: none; margin: 0; padding: 20px 0 0; }
 .org-chart > ul { padding-top: 0; width: max-content; min-width: 100%; } /* 넓으면 왼쪽이 잘리지 않고 스크롤 */
 .org-chart > ul > li { padding-top: 0; }
@@ -200,9 +200,12 @@ a.flow-box:hover { border-color: currentColor; }
 .org-chart li:last-child::before { border-right: 1px solid var(--app-label); }
 .org-chart ul ul::before { content: ''; position: absolute; top: 0; left: 50%; height: 20px; border-left: 1px solid var(--app-label); }
 .org-node { display: flex; flex-direction: column; min-width: 150px; border: 1px solid var(--app-border); border-radius: 8px; overflow: hidden; background: var(--ant-color-bg-container, #fff); }
-.org-node button { all: unset; cursor: pointer; padding: 4px 10px; font-size: 13px; text-align: left; }
-.org-node button:hover, .org-node button:focus-visible { background: var(--app-neutral-bg); }
+.org-node [role=button] { cursor: pointer; padding: 4px 10px; font-size: 13px; text-align: left; }
+.org-node [role=button]:hover, .org-node [role=button]:focus-visible { background: var(--app-neutral-bg); }
 .org-node .org-dept { display: flex; flex-direction: column; padding: 6px 10px; font-weight: 600; background: var(--app-neutral-bg); border-bottom: 1px solid var(--app-border); }
-.org-picked, .org-node button.org-picked { outline: 2px solid var(--ant-color-primary, #0a6ed1); outline-offset: -2px; }
+.org-picked, .org-node .org-picked { outline: 2px solid var(--ant-color-primary, #0a6ed1); outline-offset: -2px; }
 .org-off { opacity: 0.55; }
 .org-loose { display: inline-flex; margin-top: 24px; }
+.org-drop { outline: 2px dashed var(--ant-color-primary, #0a6ed1); outline-offset: 2px; }
+.org-chart.org-drop { outline-offset: -2px; border-radius: 8px; }
+.org-node [draggable=true] { cursor: grab; }

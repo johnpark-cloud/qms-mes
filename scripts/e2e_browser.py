@@ -985,12 +985,27 @@ try:
             page.wait_for_url(re.compile(r'/app/users/\d+$'))
             page.locator('.org-chart', has_text='김검사').wait_for(timeout=5000)
             page.get_by_text('계정 생성 (역할: 검사원)').wait_for(timeout=5000)
+            # 조직도에서 사람을 끌어 부서 상자에 놓으면 그 부서로 옮겨진다
+            page.goto('/app/users')
+            page.locator('.org-chart').wait_for(timeout=5000)
+            box = page.locator('.org-node', has_text='E2E 검사팀')
+            assert box.locator('.org-person', has_text='김검사').count() == 0
+            # 마우스로 끌기: Chromium은 놓을 곳 위에서 한 번 더 움직여야 dragover가 난다
+            page.locator('.org-person', has_text='김검사').hover()
+            page.mouse.down()
+            box.locator('.org-dept').hover()
+            box.locator('.org-dept').hover(position={'x': 12, 'y': 8})
+            page.mouse.up()
+            try:
+                box.locator('.org-person', has_text='김검사').wait_for(timeout=5000)
+            except Exception:
+                raise AssertionError('끌어 옮기기 실패: ' + ' '.join(page.locator('.ant-message').all_inner_texts()))
             ok, page_err = True, ''
         except Exception as e:
             ok, page_err = False, str(e)[:120]
         if os.environ.get('E2E_SHOTS'):
             page.screenshot(path=os.path.join(os.environ['E2E_SHOTS'], 'users.png'), full_page=True)
-        check('사용자·조직도: 새 부서·새 사용자 만들기(관리자 비밀번호 확인) → 조직도·변경 기록', ok, page.url if ok else page_err)
+        check('사용자·조직도: 새 부서·새 사용자 만들기(관리자 비밀번호 확인) → 조직도·변경 기록 → 끌어서 부서 옮기기', ok, page.url if ok else page_err)
 
         # P2: 출하 기록 → 출하 여정·검사 근거·투입 LOT과 「출하성적서」 주 버튼
         manage('shell', '-c', (

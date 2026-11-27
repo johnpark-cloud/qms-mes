@@ -4,7 +4,7 @@ import {
   Alert, Button, Card, Checkbox, Col, Drawer, Empty, Form, Input, InputNumber, Modal, Row, Segmented, Select, Space, Spin, Switch, Tag, Tree, Typography, message,
 } from 'antd'
 import type { TreeDataNode, TreeProps } from 'antd'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, type DragEvent, type KeyboardEvent } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { ApiError, api } from '../api/client'
 import SignModal from '../components/SignModal'
@@ -72,10 +72,13 @@ export default function Users() {
     if (key.startsWith('d')) return Number(key.slice(1))
     return d.users.find((u) => `u${u.id}` === key)?.dept ?? null
   }
-  const onDrop: TreeProps['onDrop'] = async (info) => {
+  const onDrop: TreeProps['onDrop'] = (info) => {
     const from = String(info.dragNode.key), to = String(info.node.key)
     // 형제 사이(틈)에 놓으면 그 노드의 상위 부서로, 부서 위에 놓으면 그 부서로
-    const target = info.dropToGap && to.startsWith('d') ? d.depts.find((x) => `d${x.id}` === to)?.parent ?? null : deptOf(to)
+    return move(from, info.dropToGap && to.startsWith('d') ? d.depts.find((x) => `d${x.id}` === to)?.parent ?? null : deptOf(to))
+  }
+  /** 사람(u…)이나 부서(d…)를 target 부서로 옮긴다. 순환은 서버(Department.clean)가 막는다 */
+  const move = async (from: string, target: number | null) => {
     try {
       if (from.startsWith('u')) await post({ action: 'move_user', id: Number(from.slice(1)), dept: target })
       else if (from.startsWith('d')) await post({ action: 'move_dept', id: Number(from.slice(1)), parent: target })
@@ -117,7 +120,10 @@ export default function Users() {
     <div>
       <h1 className="page-title">사용자·조직도</h1>
       {tools}
-      <OrgChart org={d} showOff={showOff} find={find} picked={user ? `u${user.id}` : dept ? `d${dept.id}` : ''} onPick={select} />
+      <Typography.Paragraph type="secondary" style={{ fontSize: 12, marginBottom: 8 }}>
+        사람이나 부서 이름을 끌어 다른 부서 상자에 놓으면 옮겨집니다. 부서를 빈 곳에 놓으면 최상위 부서가 됩니다.
+      </Typography.Paragraph>
+      <OrgChart org={d} showOff={showOff} find={find} picked={user ? `u${user.id}` : dept ? `d${dept.id}` : ''} onPick={select} onMove={move} />
       <Drawer open={!!panel} onClose={close} size="large" destroyOnHidden>{panel}</Drawer>
     </div>
   )
@@ -146,24 +152,52 @@ export default function Users() {
 }
 
 /** 위에서 아래로 내려가는 조직도: 부서 상자(부서장·인원 직위)를 선으로 잇는다. 누르면 오른쪽 창 */
-function OrgChart({ org, showOff, find, picked, onPick }: { org: Org; showOff: boolean; find: string; picked: string; onPick: (key: string) => void }) {
+function OrgChart({ org, showOff, find, picked, onPick, onMove }: {
+  org: Org; showOff: boolean; find: string; picked: string; onPick: (key: string) => void; onMove: (from: string, target: number | null) => void
+}) {
+  const [drag, setDrag] = useState('')  // 끌고 있는 u…/d…
+  const [over, setOver] = useState('')  // 놓일 곳(부서 상자 d…, 부서 없음 none, 빈 곳 root)
+  // Chromium은 <button>에서 끌기를 시작하지 않아 div role=button으로 둔다(Enter·Space로도 연다)
+  const grab = (key: string) => ({
+    role: 'button', tabIndex: 0, draggable: true,
+    onClick: () => onPick(key),
+    onKeyDown: (e: KeyboardEvent) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onPick(key) } },
+    onDragStart: (e: DragEvent) => { e.stopPropagation(); e.dataTransfer.setData('text/plain', key); e.dataTransfer.effectAllowed = 'move'; setDrag(key) },
+    onDragEnd: () => { setDrag(''); setOver('') },
+  })
+  // 사람은 부서 상자·부서 없음에, 부서는 다른 부서 상자·빈 곳(최상위)에 놓는다
+  const zone = (key: string, target: number | null) => {
+    const ok = () => !!drag && drag !== key && (drag.startsWith('u') ? key !== 'root' : key !== 'none')
+    return {
+      onDragOver: (e: DragEvent) => { if (!ok()) return; e.preventDefault(); e.stopPropagation(); setOver(key) },
+      onDrop: (e: DragEvent) => {
+        if (!ok()) return
+        e.preventDefault(); e.stopPropagation()
+        const from = drag
+        setDrag(''); setOver('')
+        const now = from.startsWith('u') ? org.users.find((u) => `u${u.id}` === from)?.dept : org.depts.find((x) => `d${x.id}` === from)?.parent
+        if ((now ?? null) !== target) onMove(from, target)
+      },
+    }
+  }
+  const hot = (key: string) => (drag && over === key ? ' org-drop' : '')
   const users = org.users.filter((u) => (showOff || u.active) && (!find || `${u.name}${u.username}${u.position}${u.title}`.includes(find)))
   const kids = (p: number | null) => org.depts.filter((x) => x.parent === p && (showOff || x.active))
   const cls = (base: string, key: string, on: boolean) => `${base}${picked === key ? ' org-picked' : ''}${on ? '' : ' org-off'}`
   const person = (u: User) => (
-    <button key={u.id} type="button" className={cls('org-person', `u${u.id}`, u.active)} onClick={() => onPick(`u${u.id}`)}>
+    <div key={u.id} className={cls('org-person', `u${u.id}`, u.active)} {...grab(`u${u.id}`)}>
       {u.name} <span className="flow-sub">{[u.position, u.title].filter(Boolean).join(' · ')}</span>
-    </button>
+    </div>
   )
   // 부서장 → 직책 있는 사람 → 나머지
   const people = (dept: number | null, head: number | null) => users.filter((u) => u.dept === dept)
     .sort((a, b) => Number(b.id === head) - Number(a.id === head) || Number(!!b.title) - Number(!!a.title))
   const node = (x: Dept) => (
     <li key={x.id}>
-      <div className={cls('org-node', `d${x.id}`, x.active)}>
-        <button type="button" className="org-dept" onClick={() => onPick(`d${x.id}`)}>
+      <div className={cls('org-node', `d${x.id}`, x.active) + hot(`d${x.id}`)} {...zone(`d${x.id}`, x.id)}>
+        <div className="org-dept" {...grab(`d${x.id}`)}>
           {x.name}{x.manager && <span className="flow-sub">부서장 {x.manager}</span>}
-        </button>
+        </div>
         {people(x.id, x.manager_id).map(person)}
       </div>
       {kids(x.id).length > 0 && <ul>{kids(x.id).map(node)}</ul>}
@@ -171,9 +205,11 @@ function OrgChart({ org, showOff, find, picked, onPick }: { org: Org; showOff: b
   )
   const loose = people(null, null)
   return (
-    <div className="org-chart" aria-label="조직도">
+    <div className={'org-chart' + hot('root')} aria-label="조직도" {...zone('root', null)}>
       {kids(null).length > 0 && <ul>{kids(null).map(node)}</ul>}
-      {loose.length > 0 && <div className="org-node org-loose"><span className="org-dept">부서 없음</span>{loose.map(person)}</div>}
+      {(loose.length > 0 || drag.startsWith('u')) && (
+        <div className={'org-node org-loose' + hot('none')} {...zone('none', null)}><span className="org-dept">부서 없음</span>{loose.map(person)}</div>
+      )}
     </div>
   )
 }
