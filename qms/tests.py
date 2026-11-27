@@ -785,6 +785,14 @@ class QmsTest(TestCase):
         payload = json.loads(urlopen.call_args[0][0].data)
         self.assertIn('MC-01', json.dumps(payload, ensure_ascii=False))
 
+    def test_inspector_reads_calibration_and_documents(self):
+        """검사원은 교정 이력과 문서(결재서·개정본·양식)를 볼 수 있다 — 고치지는 못한다 (사용자 결정 2026-11-27)."""
+        perms = set(Group.objects.get(name='검사원').permissions.values_list('codename', flat=True))
+        for code in ('view_gaugecalibration', 'view_document', 'view_documentrevision', 'view_documentform', 'view_documentread'):
+            self.assertIn(code, perms)
+        for code in ('change_gaugecalibration', 'change_document', 'change_documentrevision', 'add_documentrevision'):
+            self.assertNotIn(code, perms)
+
     # 검사원 입력 화면
     def test_inspector_screen_flow(self):
         clerk = User.objects.create_user('clerk', password='pw-clerk-123', is_staff=True)
