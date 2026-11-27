@@ -312,6 +312,7 @@ class AttachmentTest(TestCase):
         from qms.models import Memo
         root = User.objects.create_superuser('root', password='pw')
         p = Partner.objects.create(code='P1', name='가', is_supplier=True)
+        p.history.update(history_date=timezone.now() - datetime.timedelta(seconds=1))  # Windows 시계 해상도로 생성·첨부가 같은 시각이 되지 않게
         ct = ContentType.objects.get_for_model(Partner)
         self.client.force_login(root)
         self.client.post('/api/attachments/', {'ct': 'core.partner', 'id': p.pk, 'file': SimpleUploadedFile('인증서.pdf', b'x')})
