@@ -455,6 +455,23 @@ try:
             ok, why = False, str(e)[:80]
         check('메모: 크기 고정·사진 첨부 저장', ok, why)
 
+        try:  # 급여명세: 「항목⇥금액」 붙여넣기 → 공제 자동 분류·기본급 칸 이동 → 저장하면 표에 한 줄
+            page.goto('/app/me')
+            page.get_by_role('button', name='급여명세 등록').click()
+            drawer = page.locator('.ant-drawer')
+            drawer.get_by_label('급여월').fill('2026-03')
+            drawer.locator('input[aria-label="항목"]').first.click()
+            page.evaluate("t => { const dt = new DataTransfer(); dt.setData('text/plain', t);"
+                          " document.activeElement.dispatchEvent(new ClipboardEvent('paste', {clipboardData: dt, bubbles: true})) }",
+                          '기본급\t3000000\n식대\t200000\n국민연금\t135000')
+            drawer.get_by_text('실수령 3,065,000원').wait_for(timeout=5000)
+            drawer.get_by_role('button', name='저장').click()
+            page.get_by_role('button', name='2026-03').wait_for(timeout=5000)
+            ok, why = page.locator('td', has_text='3,065,000').count() >= 1, ''
+        except Exception as e:
+            ok, why = False, str(e)[:80]
+        check('급여명세: 붙여넣기 등록', ok, why)
+
         try:
             page.goto(f'/app/inspections/{insp_id}/print')
             page.locator('.doc-page').wait_for(timeout=5000)

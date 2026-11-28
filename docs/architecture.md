@@ -88,7 +88,7 @@ React 19·TypeScript·Vite·Ant Design 새 화면. 개발 PC에서 `npm run buil
 
 ### personal (`personal/`)
 
-`LeaveProfile`·`LeaveUse`(연차), `Payslip`·`PayLine`(급여). 화면은 `/app/me`(`frontend/src/pages/MyLeavePay.tsx`), API는 `personal/api.py`(`/api/personal/me/`, `/api/personal/leave/<id>/`, 언제나 요청 사용자 것만). 옛 `/me/`는 새 화면으로 넘긴다. 급여명세 등록·수정은 본인 것만 보이는 관리 화면(`OwnerAdmin`)을 쓴다. 명세서 파일은 `data/private/`(MEDIA_ROOT 밖)에 저장하며, 소유자 전용 뷰에서만 내려받을 수 있다.
+`LeaveProfile`·`LeaveUse`(연차), `Payslip`·`PayLine`(급여). 화면은 `/app/me`(`frontend/src/pages/MyLeavePay.tsx`), API는 `personal/api.py`(`/api/personal/me/`, `/api/personal/leave/<id>/`, `/api/personal/payslip/(<id>/)`, 언제나 요청 사용자 것만). 옛 `/me/`는 새 화면으로 넘긴다. 급여명세 등록·수정은 `PayslipDrawer.tsx`(multipart, 수당·공제 줄은 JSON)로 하며 관리 화면 등록은 없앴다. 명세서 파일은 `data/private/`(MEDIA_ROOT 밖)에 저장하며, 소유자 전용 뷰에서만 내려받을 수 있다.
 
 ## 의존 방향
 

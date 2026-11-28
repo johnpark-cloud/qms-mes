@@ -23,7 +23,7 @@ admin.site.site_header = admin.site.site_title = 'QMS+MES'
 admin.site.index_title = '메뉴'
 _app_list = admin.site.get_app_list
 # 사이드바에 따로 두지 않는 목록이 전체 메뉴에서 들어갈 묶음
-INDEX_EXTRA = {'통합 업무 홈': ['qms.memo', 'personal.leaveprofile', 'personal.leaveuse', 'personal.payslip'],
+INDEX_EXTRA = {'통합 업무 홈': ['qms.memo'],
                '품질관리 (QMS)': ['qms.gaugecalibration', 'qms.msastudy'],
                '품질보증 및 개선': ['qms.documentrevision', 'qms.formrecord', 'qms.audititem'],
                '분석 및 보고서': ['qms.managementreviewaction'],

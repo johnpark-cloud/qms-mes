@@ -14,6 +14,8 @@ urlpatterns = [
     path('admin/', admin.site.urls),
     path('api/personal/me/', personal_api.MeView.as_view()),
     path('api/personal/leave/<int:pk>/', personal_api.LeaveUseView.as_view()),
+    path('api/personal/payslip/', personal_api.PayslipView.as_view()),
+    path('api/personal/payslip/<int:pk>/', personal_api.PayslipView.as_view()),
     path('api/', include('core.api.urls')),
     path('app/', core_views.spa),
     path('app/audit', core_views.spa, name='app_audit'),

@@ -19,7 +19,7 @@ def ensure_roles(sender, **kwargs):
         'add_memo', 'view_memo', 'add_memophoto', 'view_memophoto', 'view_attachment', 'add_attachment',
         # 교정 이력·문서 최신본 열람(열람 확인 포함) — 사용자 결정 2026-11-27
         'view_gaugecalibration', 'view_document', 'view_documentrevision', 'view_documentform', 'view_documentread'])
-    mine = Permission.objects.filter(content_type__app_label='personal')  # 본인 것만 보이게 admin이 거른다
+    mine = Permission.objects.filter(content_type__app_label='personal')  # 본인 것만 다루는 건 personal/api.py가 강제한다
     # 부서·거래처·사용자 정의 칸 추가·수정은 품질팀장(과 시스템 관리자)만
     masters = [f'{a}_{m}' for m in TEAM_LEAD_ONLY for a in ('add', 'change')]
     eng_only = engineer.exclude(content_type__app_label='core', codename__in=masters)

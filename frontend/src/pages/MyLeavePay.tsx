@@ -2,10 +2,11 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Alert, Button, Card, Form, Input, Popconfirm, Select, Space, Spin, Table } from 'antd'
 import { useState } from 'react'
 import { ApiError, api } from '../api/client'
+import PayslipDrawer from './PayslipDrawer'
 
 // personal/api.py MeView 응답. 언제나 본인 것만 온다
 interface Use { id: number; used_on: string; days: string; reason: string }
-interface Slip { id: number; month: string; gross: string; deduction: string; net: string; file_url: string | null; edit_url: string }
+interface Slip { id: number; month: string; gross: string; deduction: string; net: string; file_url: string | null }
 interface Me {
   year: number
   hired_on: string | null
@@ -14,7 +15,7 @@ interface Me {
   days_choices: { value: string; label: string }[]
   slips: Slip[]
   total: { gross: string; deduction: string; net: string } | null
-  payslip_add_url: string
+  latest_id: number | null
 }
 
 const won = (v: string) => Number(v).toLocaleString('ko-KR')
@@ -27,6 +28,7 @@ export default function MyLeavePay() {
   const [hireForm] = Form.useForm()
   const [err, setErr] = useState('')
   const [busy, setBusy] = useState(false)
+  const [slip, setSlip] = useState<number | 'new' | null>(null) // 열린 급여명세
 
   // 저장 오류는 칸 아래에, 그 밖의 오류는 위 알림에 둔다
   const send = async (form: ReturnType<typeof Form.useForm>[0] | null, path: string, method: string, body?: object) => {
@@ -94,7 +96,7 @@ export default function MyLeavePay() {
           ]}
         />
       </Card>
-      <Card title={`${d.year}년 급여`} extra={<a href={d.payslip_add_url}>급여명세 등록</a>}>
+      <Card title={`${d.year}년 급여`} extra={<Button type="primary" onClick={() => setSlip('new')}>급여명세 등록</Button>}>
         <Table<Slip>
           size="small"
           rowKey="id"
@@ -102,7 +104,7 @@ export default function MyLeavePay() {
           dataSource={d.slips}
           locale={{ emptyText: '등록된 급여명세가 없습니다.' }}
           columns={[
-            { title: '월', dataIndex: 'month', render: (v: string, s) => <a href={s.edit_url}>{v}</a> },
+            { title: '월', dataIndex: 'month', render: (v: string, s) => <Button type="link" size="small" style={{ padding: 0 }} onClick={() => setSlip(s.id)}>{v}</Button> },
             { title: '지급 합계', dataIndex: 'gross', align: 'right', render: won },
             { title: '공제 합계', dataIndex: 'deduction', align: 'right', render: won },
             { title: '실수령', dataIndex: 'net', align: 'right', render: won },
@@ -124,6 +126,8 @@ export default function MyLeavePay() {
           <span className="help">이 화면의 내용은 본인만 볼 수 있습니다 (관리자 포함). 단, 서버 DB 백업에는 포함됩니다.</span>
         </Space>
       </Card>
+      <PayslipDrawer target={slip} latestId={d.latest_id} onClose={() => setSlip(null)}
+        onSaved={() => { setSlip(null); qc.invalidateQueries({ queryKey: KEY }) }} />
     </div>
   )
 }

@@ -98,10 +98,14 @@ class OwnerOnlyTests(TestCase):
         self.client.force_login(self.a)
 
     def test_owner_only(self):
-        for name, pk in (('payslip', self.slip.pk), ('leaveuse', self.use.pk)):
-            for action in ('change', 'delete', 'history'):
-                self.assertEqual(self.client.get(f'/admin/personal/{name}/{pk}/{action}/').status_code, 404, (name, action))
-        self.assertNotContains(self.client.get('/admin/personal/payslip/'), '2026-01')
+        for name, pk in (('payslip', self.slip.pk), ('leaveuse', self.use.pk)):  # 옛 관리 화면은 없다
+            self.assertEqual(self.client.get(f'/admin/personal/{name}/{pk}/change/').status_code, 404, name)
+        url = f'/api/personal/payslip/{self.slip.pk}/'
+        self.assertEqual(self.client.get(url).status_code, 404)
+        self.assertEqual(self.client.post(url, {'month': '2026-01-01', 'base_pay': '1', 'lines': '[]'}).status_code, 404)
+        self.assertEqual(self.client.delete(url).status_code, 404)
+        self.slip.refresh_from_db()
+        self.assertEqual(self.slip.base_pay, 7777777)
         r = self.client.get('/api/personal/me/')
         self.assertEqual(r.status_code, 200)
         self.assertNotContains(r, '7777777')
@@ -191,14 +195,42 @@ class OwnerOnlyTests(TestCase):
         self.client.logout()
         self.assertEqual(self.client.get('/api/personal/me/').status_code, 403)
 
-    def test_save_forces_owner(self):
-        r = self.client.post('/admin/personal/leaveuse/add/', {'used_on': '2026-02-02', 'days': '1.00', 'reason': ''})
-        self.assertEqual(r.status_code, 302)
-        self.assertEqual(LeaveUse.objects.get(used_on=date(2026, 2, 2)).owner, self.a)
+    def test_payslip_api_create_update_delete(self):
+        self.client.force_login(self.b)
+        lines = '[{"kind": "PLUS", "name": "식대", "amount": "200000"}, {"kind": "MINUS", "name": "소득세", "amount": "50000"}]'
+        r = self.client.post('/api/personal/payslip/', {'month': '2026-02-15', 'base_pay': '3000000', 'lines': lines,
+                                                         'owner': self.a.pk, 'file': SimpleUploadedFile('f.pdf', b'z')})
+        self.assertEqual(r.status_code, 201, r.content)
+        slip = Payslip.objects.get(pk=r.json()['id'])
+        self.assertEqual((slip.owner, slip.month, slip.net), (self.b, date(2026, 2, 1), Decimal(3150000)))
+        d = self.client.get(f'/api/personal/payslip/{slip.pk}/').json()
+        self.assertEqual((d['month'], d['base_pay'], len(d['lines']), d['file_name']), ('2026-02', '3000000', 2, 'f.pdf'))
+        me = self.client.get('/api/personal/me/').json()
+        self.assertEqual(me['latest_id'], slip.pk)  # 새 명세는 가장 최근 것을 복사해 시작한다
+        r = self.client.post(f'/api/personal/payslip/{slip.pk}/', {'month': '2026-02-01', 'base_pay': '3100000',
+                                                                     'lines': '[{"kind": "MINUS", "name": "국민연금", "amount": "1"}]'})
+        self.assertEqual(r.status_code, 200, r.content)
+        slip.refresh_from_db()
+        self.assertEqual((slip.net, slip.lines.count(), bool(slip.file)), (Decimal(3099999), 1, True))
+        r = self.client.post(f'/api/personal/payslip/{slip.pk}/', {'month': '2026-02-01', 'base_pay': '1', 'lines': '[]', 'file_clear': '1'})
+        self.assertEqual(r.status_code, 200, r.content)
+        slip.refresh_from_db()
+        self.assertFalse(slip.file)
+        self.assertEqual(self.client.delete(f'/api/personal/payslip/{slip.pk}/').status_code, 204)
+        self.assertFalse(Payslip.objects.filter(pk=slip.pk).exists())
+
+    def test_payslip_api_rejects_bad_lines(self):
+        self.client.force_login(self.b)
+        for lines in ('x', '[{"kind": "X", "name": "", "amount": "a"}]'):
+            r = self.client.post('/api/personal/payslip/', {'month': '2026-04-01', 'base_pay': '1', 'lines': lines})
+            self.assertEqual(r.status_code, 400, lines)
+            self.assertIn('lines', r.json()['fields'])
+        self.assertFalse(Payslip.objects.filter(owner=self.b, month=date(2026, 4, 1)).exists())
 
     def test_duplicate_month_form_error_and_normalize(self):
-        r = self.client.post('/admin/personal/payslip/add/', {'month': '2026-03-15', 'base_pay': '1', 'lines-TOTAL_FORMS': '0', 'lines-INITIAL_FORMS': '0'})
-        self.assertEqual(r.status_code, 302)
+        r = self.client.post('/api/personal/payslip/', {'month': '2026-03-15', 'base_pay': '1', 'lines': '[]'})
+        self.assertEqual(r.status_code, 201, r.content)
         self.assertEqual(Payslip.objects.get(owner=self.a).month, date(2026, 3, 1))
-        r = self.client.post('/admin/personal/payslip/add/', {'month': '2026-03-20', 'base_pay': '1', 'lines-TOTAL_FORMS': '0', 'lines-INITIAL_FORMS': '0'})
-        self.assertContains(r, '이미 등록된 급여월입니다.')
+        r = self.client.post('/api/personal/payslip/', {'month': '2026-03-20', 'base_pay': '1', 'lines': '[]'})
+        self.assertEqual(r.status_code, 400)
+        self.assertIn('이미 등록된 급여월입니다.', str(r.json()))
