@@ -15,7 +15,8 @@ interface User {
   id: number; username: string; name: string; last_name: string; first_name: string; email: string; active: boolean; admin: boolean
   groups: string[]; last_login: string | null; dept: number | null; employee_no: string; position: string; title: string; phone: string
 }
-interface Org { depts: Dept[]; users: User[]; groups: string[]; me: number; log?: { at: string; by: string; text: string }[] }
+interface Role { name: string; category: string; desc: string }
+interface Org { depts: Dept[]; users: User[]; groups: string[]; roles: Role[]; me: number; log?: { at: string; by: string; text: string }[] }
 
 const URL = '/api/core/org/'
 const NONE = 'none'  // 부서 없는 인원
@@ -336,7 +337,20 @@ function UserForm({ org, user, onDone }: { org: Org; user?: User; onDone: (id?: 
         </Typography.Paragraph>
         <h3 className="form-section">역할</h3>
         <Form.Item name="groups" extra="품질팀장 = 승인자. 역할·관리자 권한을 바꾸면 관리자 비밀번호를 다시 묻습니다.">
-          <Checkbox.Group options={org.groups} />
+          {/* 역할이 늘어도 한 칸: 이름·하는 일로 찾고 분야별로 묶어 고른다 */}
+          <Select mode="multiple" allowClear showSearch aria-label="역할" placeholder="역할 찾기 (이름·하는 일)"
+            optionFilterProp="search"
+            options={[...new Set(org.roles.map((r) => r.category))].map((c) => ({
+              label: c,
+              title: c,
+              options: org.roles.filter((r) => r.category === c).map((r) => ({ value: r.name, label: r.name, desc: r.desc, search: `${r.name} ${r.desc}` })),
+            }))}
+            optionRender={(o) => (
+              <div>
+                <div>{o.label}</div>
+                <Typography.Text type="secondary" style={{ fontSize: 12, whiteSpace: 'normal' }}>{(o.data as { desc?: string }).desc}</Typography.Text>
+              </div>
+            )} />
         </Form.Item>
         {err && <Alert type="error" showIcon style={{ marginBottom: 12 }} title={err} />}
         <Button type="primary" htmlType="submit" loading={busy}>{user ? '저장' : '만들기'}</Button>

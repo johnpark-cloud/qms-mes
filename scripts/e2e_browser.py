@@ -995,7 +995,10 @@ try:
             page.get_by_label('성', exact=True).fill('김')
             page.get_by_label('이름', exact=True).fill('검사')
             page.get_by_label('초기 비밀번호', exact=True).fill('Qms!2026long')
-            page.get_by_label('검사원').check()
+            page.get_by_label('역할', exact=True).click()  # 역할은 찾아 고르는 칸
+            page.keyboard.type('검사원')
+            page.locator('.ant-select-item-option', has_text='검사원').first.click()
+            page.get_by_label('아이디', exact=True).click()  # 목록 닫기(Esc는 오른쪽 창까지 닫는다)
             page.get_by_role('button', name='만들기').click()
             page.locator('.ant-modal input[type=password]').fill('e2e-pass-123')
             page.get_by_role('button', name='서명').click()

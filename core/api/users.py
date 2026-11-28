@@ -14,7 +14,13 @@ from rest_framework.views import APIView
 
 from core.models import Department, Member
 
-ROLE_GROUPS = ('품질팀장', '품질엔지니어', '검사원')  # qms/apps.py ensure_roles
+# 역할(이름, 분야, 하는 일). 권한은 qms/apps.py ensure_roles. 다른 부서 역할을 더할 때 분야로 묶여 고르기 칸에 나온다
+ROLES = (
+    ('품질팀장', '품질', '승인 서명(승인자), 부서·거래처·사용자 정의 칸 관리, 업무 기록 작성·수정(삭제 제외)'),
+    ('품질엔지니어', '품질', '업무 기록 작성·수정(삭제 제외). 부서·거래처·사용자 정의 칸은 보기만'),
+    ('검사원', '품질', '검사 입력, LOT·생산실적·출하 등록, 부적합 등록, 교정 이력·문서 열람'),
+)
+ROLE_GROUPS = tuple(r[0] for r in ROLES)
 MEMBER_FIELDS = ('employee_no', 'position', 'title', 'phone')
 
 
@@ -53,6 +59,7 @@ class OrgView(APIView):
                       for d in Department.objects.select_related('manager')],
             'users': [_user_row(u) for u in User.objects.select_related('member').prefetch_related('groups').order_by('username')],
             'groups': [g for g in ROLE_GROUPS if Group.objects.filter(name=g).exists()],
+            'roles': [{'name': n, 'category': c, 'desc': d} for n, c, d in ROLES if Group.objects.filter(name=n).exists()],
             'me': request.user.pk,
         }
         if uid := request.query_params.get('user'):  # 계정 변경 기록(생성·역할·권한·비밀번호·비활성)

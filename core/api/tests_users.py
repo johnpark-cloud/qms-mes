@@ -34,6 +34,9 @@ class OrgApiTest(TestCase):
         lead = next(u for u in d['users'] if u['username'] == 'lead')
         self.assertEqual((lead['dept'], lead['position'], lead['groups']), (self.qc.pk, '과장', ['품질팀장']))
         self.assertIn('검사원', d['groups'])
+        insp = next(r for r in d['roles'] if r['name'] == '검사원')  # 역할 고르기 칸: 분야별 묶음과 하는 일
+        self.assertEqual(insp['category'], '품질')
+        self.assertTrue(insp['desc'])
         self.assertNotIn('password', lead)
 
     def test_move_user_and_dept(self):
